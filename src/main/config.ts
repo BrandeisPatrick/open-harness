@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AppConfig, PermissionMode } from '../shared/types';
+import { applySettings, withoutSettings } from './settings';
 
 /** Bumped when stored values change meaning: v2 renamed the old "auto" (run everything) to "bypass" and "readonly" to "plan". */
 const SCHEMA_VERSION = 2;
@@ -83,7 +84,8 @@ export function migrateMode(raw: unknown, autoApprove: unknown, schemaVersion: n
   return (MODES as string[]).includes(mode) ? (mode as PermissionMode) : 'ask';
 }
 
-export function loadConfig(): AppConfig {
+/** config.json on its own, before any settings.json layer. */
+function storedConfig(): AppConfig {
   const d = defaultConfig();
   try {
     const raw = JSON.parse(fs.readFileSync(configPath(), 'utf8')) as Partial<AppConfig> & { schemaVersion?: number };
@@ -109,6 +111,15 @@ export function loadConfig(): AppConfig {
   }
 }
 
+/**
+ * config.json with ~/.openagent/settings.json and then the project's .openagent/settings.json
+ * applied over it. Fields a settings file owns are restored before writing, so the Settings
+ * panel can never bake an override into config.json.
+ */
+export function loadConfig(): AppConfig {
+  return normalizeConfig(applySettings(storedConfig()));
+}
+
 /** Keeps the legacy autoApprove flag consistent with permissionMode, and autoTitles a boolean (default on). */
 export function normalizeConfig(cfg: AppConfig): AppConfig {
   const mode: PermissionMode = (MODES as string[]).includes(cfg.permissionMode) ? cfg.permissionMode : 'ask';
@@ -116,6 +127,7 @@ export function normalizeConfig(cfg: AppConfig): AppConfig {
 }
 
 export function saveConfig(cfg: AppConfig): void {
+  const stored = withoutSettings(cfg);
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
-  fs.writeFileSync(configPath(), JSON.stringify({ ...cfg, schemaVersion: SCHEMA_VERSION }, null, 2));
+  fs.writeFileSync(configPath(), JSON.stringify({ ...stored, schemaVersion: SCHEMA_VERSION }, null, 2));
 }

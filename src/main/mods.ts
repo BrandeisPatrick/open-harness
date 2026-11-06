@@ -333,7 +333,7 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
       const parts: string[] = [];
       for (const rel of look.styles) {
         const css = readStyle(m, rel);
-        if (css !== null) parts.push(`/* ${m.id}/${rel} */\n${scopeCss(css, LOOK_ROOTS[target], { url: modUrlRewriter(m.origin, rel) })}`);
+        if (css !== null) parts.push(`/* ${m.id}/${rel} */\n${scopeCss(css, LOOK_ROOTS[target], { url: modUrlRewriter(m.origin, rel), prefix: m.id })}`);
       }
       out.push({ target, ref, mod: m.key, css: parts.join('\n') });
     }

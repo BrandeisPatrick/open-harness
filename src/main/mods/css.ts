@@ -1,6 +1,7 @@
 // Mod stylesheets on the app's own page: a small top-level splitter, and what the app does with a mod's CSS before
 // the window gets it. A look's CSS is wrapped in `@scope (<region root>) { … }` so its selectors reach only that
-// region; the at-rules that cannot live inside @scope (@keyframes, @font-face, …) are hoisted out of it; @import is
+// region; the at-rules that cannot live inside @scope (@keyframes, @font-face, …) are hoisted out of it into a cascade
+// layer (so the app's own names win a collision), and global registrations are kept only under the look's prefix; @import is
 // dropped (a stylesheet a mod adds may not pull in others); relative url()s point at the mod's own files.
 //
 // The splitter is not a CSS parser. It knows just enough to find where each top-level statement ends: strings,
@@ -25,6 +26,24 @@ export interface CssOptions {
   /** Rewrites the address in a url(…); null leaves it as it is */
   url?: (address: string) => string | null;
 }
+
+export interface ScopeOptions extends CssOptions {
+  /**
+   * The look's own name prefix (its mod id). A look may register a custom property (@property) or a font family
+   * (@font-face) only under it: `@property --<prefix>-glow`, `font-family: "<prefix> Display"`. Others are dropped,
+   * because both are global and would reach the whole app: an @property for --bg-100 changes how every surface of
+   * the app inherits its colour, and an @font-face for a family the app's stack names replaces that font
+   * everywhere. Without a prefix, every @property and @font-face is dropped.
+   */
+  prefix?: string;
+}
+
+/**
+ * The cascade layer that what a look hoists out of its @scope goes into. Names defined in a layer lose to the same
+ * names defined outside any layer, so a look's `@keyframes spin` never replaces the app's own `spin`, while the
+ * look's own names (that the app does not use) still work.
+ */
+export const LOOK_LAYER = 'mod-looks';
 
 /** At-rules that are invalid inside @scope (or mean nothing there) and are kept by moving them in front of it. */
 export const HOISTED_AT_RULES: readonly string[] = ['keyframes', '-webkit-keyframes', 'font-face', 'property', 'counter-style', 'font-feature-values', 'font-palette-values'];
@@ -183,17 +202,31 @@ function blockStart(text: string): number {
 }
 
 /** Separates what must sit outside @scope from what goes inside it; dropped at-rules go nowhere. */
-function partition(statements: CssStatement[], depth: number): { hoisted: string[]; scoped: string[] } {
+/** Whether a hoisted at-rule may stay: @property and @font-face only under the look's prefix. */
+function allowedGlobal(s: CssStatement, prefix: string | undefined): boolean {
+  if (s.name === 'property') {
+    const name = /^@property\s+(--[\w-]+)/i.exec(s.text)?.[1] ?? '';
+    return !!prefix && name.toLowerCase().startsWith(`--${prefix.toLowerCase()}-`);
+  }
+  if (s.name === 'font-face') {
+    const family = /(?:^|[;{\s])font-family\s*:\s*(?:"([^"]*)"|'([^']*)'|([^;}]*))/i.exec(s.body);
+    const value = (family?.[1] ?? family?.[2] ?? family?.[3] ?? '').trim().toLowerCase();
+    return !!prefix && value.startsWith(prefix.toLowerCase());
+  }
+  return true;
+}
+
+function partition(statements: CssStatement[], depth: number, opts: ScopeOptions = {}): { hoisted: string[]; scoped: string[] } {
   const hoisted: string[] = [];
   const scoped: string[] = [];
   for (const s of statements) {
     if (s.kind === 'at' && DROPPED_AT_RULES.includes(s.name)) continue;
     if (s.kind === 'at' && HOISTED_AT_RULES.includes(s.name)) {
-      hoisted.push(s.text);
+      if (allowedGlobal(s, opts.prefix)) hoisted.push(s.text);
       continue;
     }
     if (s.kind === 'at' && s.prelude && GROUPING_AT_RULES.includes(s.name) && depth < MAX_DEPTH) {
-      const inner = partition(splitCss(s.body), depth + 1);
+      const inner = partition(splitCss(s.body), depth + 1, opts);
       if (inner.hoisted.length) hoisted.push(`${s.prelude} {\n${inner.hoisted.join('\n')}\n}`);
       if (inner.scoped.length) scoped.push(`${s.prelude} {\n${inner.scoped.join('\n')}\n}`);
       continue;
@@ -204,12 +237,14 @@ function partition(statements: CssStatement[], depth: number): { hoisted: string
 }
 
 /**
- * A look's CSS for the window: everything inside `@scope (<root>) { … }`, the at-rules that cannot be inside it in
- * front, @import and the other dropped at-rules removed. Inside, `:scope` is the region's root element.
+ * A look's CSS for the window: everything inside `@scope (<root>) { … }`; the at-rules that cannot be inside it in
+ * front of it, in the cascade layer LOOK_LAYER (so the app's own names win a collision), @property and @font-face
+ * only under the look's prefix; @import and the other dropped at-rules removed. Inside, `:scope` is the region's root.
  */
-export function scopeCss(css: string, root: string, opts: CssOptions = {}): string {
-  const { hoisted, scoped } = partition(splitCss(css, opts), 0);
-  const parts = [...hoisted];
+export function scopeCss(css: string, root: string, opts: ScopeOptions = {}): string {
+  const { hoisted, scoped } = partition(splitCss(css, opts), 0, opts);
+  const parts: string[] = [];
+  if (hoisted.length) parts.push(`@layer ${LOOK_LAYER} {\n${hoisted.join('\n')}\n}`);
   if (scoped.length) parts.push(`@scope (${root}) {\n${scoped.join('\n')}\n}`);
   return parts.join('\n');
 }

@@ -130,3 +130,10 @@
 /* The rail scrolls as a whole without a permanent scrollbar eating into its sections (like an overlay scrollbar). */
 .mod-rail-sections { scrollbar-width: none; }
 .mod-rail-sections::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ---------- Looks ---------- */
+/* While a conversation look is active, nothing it draws can leave the transcript: paint containment clips it to
+   #messages and makes #messages the box a fixed-position element is placed in (the transcript already clips by
+   overflow, and nothing inside it is fixed: popovers, tooltips, menus and the image viewer live on <body> or in
+   dialogs). The chat bar gets no containment: the bar's own focus ring and drop glow sit just outside #chatbar. */
+#messages[data-look] { contain: paint; }

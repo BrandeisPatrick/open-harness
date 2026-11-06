@@ -4,7 +4,7 @@
 const path = require('node:path');
 const projectDir = process.argv[2] || path.join(__dirname, '..');
 const { check, done } = require('./support/check.js');
-const { splitCss, scopeCss, cleanCss, modUrlRewriter, LOOK_ROOTS } = require(path.join(projectDir, 'dist', 'main', 'mods', 'css.js'));
+const { splitCss, scopeCss, cleanCss, modUrlRewriter, LOOK_ROOTS, LOOK_LAYER } = require(path.join(projectDir, 'dist', 'main', 'mods', 'css.js'));
 
 const texts = (css, opts) => splitCss(css, opts).map((s) => s.text);
 /** Whether the text before a "(" ends with the identifier url (escapes resolved, as CSS reads it) */
@@ -67,9 +67,10 @@ check('an unclosed url( is closed', texts('a { b: url(x')[0] === 'a { b: url(x)}
   check('everything goes inside @scope (root)', /^@scope \(#messages\) \{\na \{ color: red \}\n:scope \{ --x: 1 \}\n\}$/.test(out), out);
 }
 {
-  const out = scopeCss('@keyframes k { from { opacity: 0 } } @font-face { font-family: X; src: url(x.woff2) } @property --p { syntax: "<number>"; inherits: false; initial-value: 0 } @counter-style c { system: cyclic; symbols: "*" } a { animation: k 1s }', '#messages');
+  const out = scopeCss('@keyframes k { from { opacity: 0 } } @font-face { font-family: "Holo Face"; src: url(x.woff2) } @property --holo-p { syntax: "<number>"; inherits: false; initial-value: 0 } @counter-style c { system: cyclic; symbols: "*" } a { animation: k 1s }', '#messages', { prefix: 'holo' });
   const scopeAt = out.indexOf('@scope');
-  check('@keyframes, @font-face, @property and @counter-style are hoisted in front of the scope', ['@keyframes k', '@font-face', '@property --p', '@counter-style c'].every((s) => out.indexOf(s) >= 0 && out.indexOf(s) < scopeAt), out);
+  check('@keyframes, @font-face, @property and @counter-style are hoisted in front of the scope', ['@keyframes k', '@font-face', '@property --holo-p', '@counter-style c'].every((s) => out.indexOf(s) >= 0 && out.indexOf(s) < scopeAt), out);
+  check('… inside the looks cascade layer, so the app\'s own names win a collision', out.startsWith(`@layer ${LOOK_LAYER} {\n@keyframes k`) && out.lastIndexOf('}', scopeAt) > out.indexOf('@counter-style c') && LOOK_LAYER === 'mod-looks', out);
   check('… and the rules stay inside it', out.slice(scopeAt).includes('a { animation: k 1s }'));
 }
 {
@@ -78,7 +79,20 @@ check('an unclosed url( is closed', texts('a { b: url(x')[0] === 'a { b: url(x)}
 }
 {
   const out = scopeCss('@media (prefers-reduced-motion: no-preference) { @keyframes k { to { opacity: 1 } } a { animation: k 1s } }', '#messages');
-  check('a @keyframes inside @media is hoisted inside the same condition', /^@media \(prefers-reduced-motion: no-preference\) \{\n@keyframes k/.test(out) && /@scope \(#messages\) \{\n@media \(prefers-reduced-motion: no-preference\) \{\na \{ animation: k 1s \}/.test(out), out);
+  check('a @keyframes inside @media is hoisted inside the same condition', /^@layer mod-looks \{\n@media \(prefers-reduced-motion: no-preference\) \{\n@keyframes k/.test(out) && /@scope \(#messages\) \{\n@media \(prefers-reduced-motion: no-preference\) \{\na \{ animation: k 1s \}/.test(out), out);
+}
+{
+  // Global registrations: only under the look's prefix (its mod id)
+  const bad = scopeCss("@property --bg-100 { syntax: '<color>'; inherits: false; initial-value: red; } @property --holo-glow { syntax: '<color>'; inherits: true; initial-value: blue; } @font-face { font-family: \"SF Pro Text\"; src: local(Courier); } @font-face { font-family: -apple-system; src: local(Courier) } @font-face { font-family: 'holo display'; src: url(f.woff2) } a{}", '#messages', { prefix: 'holo' });
+  check('@property for an app token is dropped', !bad.includes('--bg-100'), bad);
+  check('@property under the look\'s prefix is kept', bad.includes('@property --holo-glow'));
+  check('@font-face for a family the app uses is dropped', !/SF Pro Text|apple-system/.test(bad), bad);
+  check('@font-face under the prefix is kept (any case, quoted or not)', bad.includes("'holo display'"));
+  const none = scopeCss('@property --holo-x { syntax: "*"; inherits: false } @font-face { font-family: holo; src: url(a.woff) } a{}', '#messages');
+  check('without a prefix, no @property or @font-face survives', !/@property|@font-face/.test(none), none);
+  check('@property inside @media is checked too', !scopeCss('@media (x) { @property --bg-100 { syntax: "*"; inherits: false } }', '#messages', { prefix: 'holo' }).includes('--bg-100'));
+  check('a look\'s @keyframes spin stays a layered rule (the app\'s unlayered spin wins)', /^@layer mod-looks \{\n@keyframes spin/.test(scopeCss('@keyframes spin { to { opacity: 0 } }', '#messages')));
+  check('themes keep @property and @font-face', cleanCss('@property --bg-100 { syntax: "<color>"; inherits: true; initial-value: red } @font-face { font-family: X; src: local(Y) }').includes('@property --bg-100') );
 }
 check('a sheet of only hoisted rules has no empty scope', !scopeCss('@keyframes k {}', '#messages').includes('@scope'));
 check('an empty sheet is empty', scopeCss('/* nothing */', '#messages') === '');

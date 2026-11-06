@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://brandeispatrick.github.io/open-harness/settings.schema.json",
-  "title": "Open Harness settings.json",
-  "description": "Settings for Open Harness: ~/.open-harness/settings.json (yours) and <project>/.open-harness/settings.json (a project's, applied once you trust it). See https://github.com/BrandeisPatrick/open-harness/blob/main/docs/configure.md",
+  "$id": "https://brandeispatrick.github.io/silo-harness/settings.schema.json",
+  "title": "Silo Harness settings.json",
+  "description": "Settings for Silo Harness: ~/.silo-harness/settings.json (yours) and <project>/.silo-harness/settings.json (a project's, applied once you trust it). See https://github.com/BrandeisPatrick/silo-harness/blob/main/docs/configure.md",
   "type": "object",
   "additionalProperties": false,
   "properties": {

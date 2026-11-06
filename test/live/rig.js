@@ -24,7 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const mockUrls = new Set();
 
 /** The model live checks use unless a test asks for another one: the cheapest that handles tools well. */
-const LIVE_MODEL = process.env.OPEN_HARNESS_LIVE_MODEL || 'claude-haiku-5-5';
+const LIVE_MODEL = process.env.SILO_HARNESS_LIVE_MODEL || 'claude-haiku-5-5';
 
 async function freePort() {
   const net = require('node:net');
@@ -51,7 +51,7 @@ async function freePort() {
  *   env         extra environment variables for the app
  *   size        { width, height } of the page for screenshots (default 1440 x 900)
  *   scale       device pixels per CSS pixel for screenshots (default 2; 1 gives native-size PNGs)
- *   binary      the executable of a packaged app to drive instead of `electron <root>` (also: OPEN_HARNESS_LIVE_APP),
+ *   binary      the executable of a packaged app to drive instead of `electron <root>` (also: SILO_HARNESS_LIVE_APP),
  *               e.g. release/mac-arm64/Open Harness.app/Contents/MacOS/Open Harness
  *   ownsProfile whether close() removes the profile (default: only when the rig made it)
  *
@@ -107,15 +107,15 @@ async function launch(opts = {}) {
   const electron = require(path.join(root, 'node_modules', 'electron'));
   const env = {
     ...process.env,
-    OPEN_HARNESS_LIVE_TEST: '1',
+    SILO_HARNESS_LIVE_TEST: '1',
     // The app's own config directory (settings.json, skills, mods) is redirected too, so a test never reads yours.
-    OPEN_HARNESS_CONFIG_DIR: home,
+    SILO_HARNESS_CONFIG_DIR: home,
     PORTKEY_API_KEY: key || 'mock-key',
     ...(opts.env || {}),
   };
   delete env.ELECTRON_RUN_AS_NODE;
   // A packaged app is its own executable; in development Electron is given the repository to run.
-  const binary = opts.binary || process.env.OPEN_HARNESS_LIVE_APP;
+  const binary = opts.binary || process.env.SILO_HARNESS_LIVE_APP;
   const flags = [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...(opts.args || [])];
   const child = binary ? spawn(binary, flags, { env, stdio: ['ignore', 'pipe', 'pipe'] }) : spawn(electron, [root, ...flags], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   const logs = [];

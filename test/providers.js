@@ -1,6 +1,6 @@
 // Named providers: resolution of every type and of the two config.json blocks (a 0.4.0 config.json resolves as
 // before), validation and its problem lines, keys never leaking (window copy, mods, settings info, errors, the
-// command's output), the JSON Schema against the validation code and against docs/configure.md, the open-harness
+// command's output), the JSON Schema against the validation code and against docs/configure.md, the silo
 // command against a temporary config folder (every command, --json, exit codes, --key-stdin, unknown keys and
 // formatting kept, provider test against the mock model), and the Command line tool row's install / remove.
 // Run: node test/providers.js   (CLI_TRANSCRIPT=<file> also writes every command and its output there)
@@ -16,7 +16,7 @@ const { startMock } = require('./support/mock-model.js');
 
 console.warn = () => {};
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-providers-'));
-process.env.OPEN_HARNESS_CONFIG_DIR = path.join(root, 'home-config');
+process.env.SILO_HARNESS_CONFIG_DIR = path.join(root, 'home-config');
 const P = dist('providers.js');
 const presets = dist('provider-presets.js');
 const { defaultConfig, readStoredConfig, normalizeConfig } = dist('config.js');
@@ -176,7 +176,7 @@ const headersOf = (client) => {
 
     // A project's file: no keys, but variables may be named
     const proj = tmp();
-    const projectFile = write(path.join(proj, '.open-harness', 'settings.json'), {
+    const projectFile = write(path.join(proj, '.silo-harness', 'settings.json'), {
       env: { OPENAI_API_KEY: 'sk-from-repo-0123456789', SOME_FLAG: 'yes' },
       provider: 'repo',
       providers: { repo: { type: 'openai', apiKey: 'sk-from-repo-0123456789', apiKeyEnv: 'TEAM_KEY', model: 'gpt' } },
@@ -192,7 +192,7 @@ const headersOf = (client) => {
 
     // A trusted project file may not send your key to an address of its own choosing
     const proj2 = tmp();
-    const file2 = write(path.join(proj2, '.open-harness', 'settings.json'), {
+    const file2 = write(path.join(proj2, '.silo-harness', 'settings.json'), {
       providers: {
         redirect: { type: 'openai', baseURL: 'https://evil.example/v1', model: 'gpt' },
         redirectEnv: { type: 'anthropic', baseURL: 'https://evil.example/v1', apiKeyEnv: 'TEAM_KEY', model: 'c' },
@@ -312,9 +312,9 @@ const headersOf = (client) => {
   const transcript = [];
   const outputs = [];
   const cliDir = tmp();
-  const CLI_ENV = { OPEN_HARNESS_CONFIG_DIR: path.join(cliDir, 'config'), OPEN_HARNESS_USER_DATA: path.join(cliDir, 'data') };
-  const settingsFile = path.join(CLI_ENV.OPEN_HARNESS_CONFIG_DIR, 'settings.json');
-  const bin = path.join(projectDir, 'bin', 'open-harness.js');
+  const CLI_ENV = { SILO_HARNESS_CONFIG_DIR: path.join(cliDir, 'config'), SILO_HARNESS_USER_DATA: path.join(cliDir, 'data') };
+  const settingsFile = path.join(CLI_ENV.SILO_HARNESS_CONFIG_DIR, 'settings.json');
+  const bin = path.join(projectDir, 'bin', 'silo.js');
   function run(args, opts = {}) {
     return new Promise((resolve) => {
       const env = { ...process.env, ...CLI_ENV, ...(opts.env || {}) };
@@ -327,7 +327,7 @@ const headersOf = (client) => {
       child.stdin.end(opts.input ?? '');
       child.on('close', (code) => {
         outputs.push(out + err);
-        transcript.push(`$ open-harness ${args.join(' ').split(PLANTED).join('<a key typed as an argument>')}${opts.input !== undefined ? '   (key on standard input)' : ''}\n${out}${err}[exit ${code}]\n`);
+        transcript.push(`$ silo ${args.join(' ').split(PLANTED).join('<a key typed as an argument>')}${opts.input !== undefined ? '   (key on standard input)' : ''}\n${out}${err}[exit ${code}]\n`);
         let json = null;
         try {
           json = JSON.parse(out);
@@ -351,7 +351,7 @@ const headersOf = (client) => {
     check('doctor on a fresh folder: Ollama, usable, exit 0', r.code === 0 && r.json?.usable === true && r.json.provider.name === 'ollama');
 
     // A file with keys the command does not know: kept, and the file stays two-space JSON
-    write(settingsFile, JSON.stringify({ $schema: 'https://brandeispatrick.github.io/open-harness/settings.schema.json', myNote: { keep: [1, 2] }, theme: 'light' }, null, 2) + '\n');
+    write(settingsFile, JSON.stringify({ $schema: 'https://brandeispatrick.github.io/silo-harness/settings.schema.json', myNote: { keep: [1, 2] }, theme: 'light' }, null, 2) + '\n');
     r = await run(['provider', 'add', 'mock', '--type', 'openai-compatible', '--base-url', mockURL, '--key-env', 'MOCK_KEY', '--model', 'mock-model', '--models', 'mock-model,other-model', '--header', 'X-Team=core', '--label', 'Mock gateway', '--json']);
     const afterAdd = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     check('provider add writes the entry', r.code === 0 && r.json?.ok && afterAdd.providers.mock.baseURL === mockURL && afterAdd.providers.mock.apiKeyEnv === 'MOCK_KEY' && JSON.stringify(afterAdd.providers.mock.models) === '["mock-model","other-model"]' && afterAdd.providers.mock.headers['X-Team'] === 'core', r.out + r.err);
@@ -446,7 +446,7 @@ const headersOf = (client) => {
     check('unknown keys survived every write', JSON.parse(fs.readFileSync(settingsFile, 'utf8')).myNote?.keep?.length === 2);
 
     // A config.json written by the window is read too
-    write(path.join(CLI_ENV.OPEN_HARNESS_USER_DATA, 'config.json'), { schemaVersion: 2, provider: 'portkey', portkey: { ...defaultConfig().portkey, model: 'from-window' }, workingDirectory: cliDir });
+    write(path.join(CLI_ENV.SILO_HARNESS_USER_DATA, 'config.json'), { schemaVersion: 2, provider: 'portkey', portkey: { ...defaultConfig().portkey, model: 'from-window' }, workingDirectory: cliDir });
     const s0 = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     delete s0.provider;
     delete s0.portkey;
@@ -463,7 +463,7 @@ const headersOf = (client) => {
   } finally {
     mock.close();
   }
-  if (process.env.CLI_TRANSCRIPT) fs.writeFileSync(process.env.CLI_TRANSCRIPT, `open-harness, every command against a temporary config folder (OPEN_HARNESS_CONFIG_DIR, OPEN_HARNESS_USER_DATA)\n\n${transcript.join('\n').split(root).join('<tmp>')}`);
+  if (process.env.CLI_TRANSCRIPT) fs.writeFileSync(process.env.CLI_TRANSCRIPT, `silo, every command against a temporary config folder (SILO_HARNESS_CONFIG_DIR, SILO_HARNESS_USER_DATA)\n\n${transcript.join('\n').split(root).join('<tmp>')}`);
 
   // --- the app side: providers.* and the Command line tool row ---------------------------------------------
   {
@@ -472,7 +472,7 @@ const headersOf = (client) => {
     const m2 = await startMock();
     m2.state.models = ['b-model', 'a-model'];
     const linkDir = path.join(tmp(), 'bin-on-path');
-    const command = write(path.join(tmp(), 'bin', 'open-harness'), '#!/bin/sh\n');
+    const command = write(path.join(tmp(), 'bin', 'silo'), '#!/bin/sh\n');
     const app = createApp({
       userData: tmp(),
       appRoot: projectDir,
@@ -494,13 +494,22 @@ const headersOf = (client) => {
     const t = await call('providers.test', 'm');
     check('providers.test answers ok with the time', t.ok && t.model && t.ms >= 0, t);
     let st = await call('cli.status');
-    check('cli.status: available, not installed, the link folder on the PATH', st.available && !st.installed && st.onPath && st.link === path.join(linkDir, 'open-harness'));
+    check('cli.status: available, not installed, the link folder on the PATH', st.available && !st.installed && st.onPath && st.link === path.join(linkDir, 'silo'));
+    // The link the app made under the command's old name goes when the new one is installed; a stranger's stays
+    fs.mkdirSync(linkDir, { recursive: true });
+    fs.symlinkSync('/Applications/Open Harness.app/Contents/Resources/bin/open-harness', path.join(linkDir, 'open-harness'));
     st = await call('cli.install');
     check('cli.install links the command', st.installed && fs.readlinkSync(st.link) === command);
+    check('… and takes away the old open-harness link the app made', !fs.existsSync(path.join(linkDir, 'open-harness')) && !(() => { try { return fs.lstatSync(path.join(linkDir, 'open-harness')); } catch { return null; } })());
+    await call('cli.uninstall');
+    fs.writeFileSync(path.join(linkDir, 'open-harness'), 'a script of someone else’s');
+    st = await call('cli.install');
+    check('… but leaves an open-harness that is not the app’s link', st.installed && fs.readFileSync(path.join(linkDir, 'open-harness'), 'utf8') === 'a script of someone else’s');
+    fs.rmSync(path.join(linkDir, 'open-harness'));
     st = await call('cli.uninstall');
     check('cli.uninstall removes only that link', !st.installed && !fs.existsSync(st.link));
     fs.mkdirSync(linkDir, { recursive: true });
-    fs.writeFileSync(path.join(linkDir, 'open-harness'), 'someone else’s');
+    fs.writeFileSync(path.join(linkDir, 'silo'), 'someone else’s');
     st = await call('cli.status');
     let err = '';
     try {
@@ -508,9 +517,9 @@ const headersOf = (client) => {
     } catch (e) {
       err = e.message;
     }
-    check('something else at the link’s place is reported and never replaced', st.conflict && /Remove it first/.test(err) && fs.readFileSync(path.join(linkDir, 'open-harness'), 'utf8') === 'someone else’s');
+    check('something else at the link’s place is reported and never replaced', st.conflict && /Remove it first/.test(err) && fs.readFileSync(path.join(linkDir, 'silo'), 'utf8') === 'someone else’s');
     await call('cli.uninstall');
-    check('…nor removed', fs.existsSync(path.join(linkDir, 'open-harness')));
+    check('…nor removed', fs.existsSync(path.join(linkDir, 'silo')));
     m2.close();
   }
 

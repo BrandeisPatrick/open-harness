@@ -38,7 +38,7 @@ async function waitFor(fn, ms = 8000, what = 'condition') {
   const mock = await startMock();
   const { state } = mock;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-names-'));
-  process.env.OPEN_HARNESS_CONFIG_DIR = path.join(tmp, 'home-config');
+  process.env.SILO_HARNESS_CONFIG_DIR = path.join(tmp, 'home-config');
   const dir = path.join(tmp, 'project');
   const other = path.join(tmp, 'other');
   fs.mkdirSync(dir);

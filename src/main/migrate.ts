@@ -46,6 +46,7 @@ function isEmptyDir(p: string): boolean {
  * `rename` is the step itself, replaceable so a test can make it fail.
  */
 export function moveFolder(from: string, to: string, log: Log = console.log, rename: (a: string, b: string) => void = fs.renameSync): MoveResult {
+  if (path.resolve(from) === path.resolve(to)) return 'exists';
   const next = lstat(to);
   if (next && !(next.isDirectory() && isEmptyDir(to))) return 'exists';
   const old = lstat(from);

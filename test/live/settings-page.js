@@ -15,14 +15,14 @@ const now = Date.now();
 const MOCK = {
   info: {
     files: [
-      { scope: 'user', path: '/Users/me/.open-harness/settings.json', exists: true, applied: true, trusted: true, keys: ['maxTurns', 'portkey.model', 'env.GITHUB_TOKEN'], invalid: [{ key: 'theme', message: 'expected "system", "light" or "dark"' }] },
-      { scope: 'project', path: '/Users/me/project/.open-harness/settings.json', exists: true, applied: false, trusted: false, keys: ['permissionMode'], invalid: [] },
+      { scope: 'user', path: '/Users/me/.silo-harness/settings.json', exists: true, applied: true, trusted: true, keys: ['maxTurns', 'portkey.model', 'env.GITHUB_TOKEN'], invalid: [{ key: 'theme', message: 'expected "system", "light" or "dark"' }] },
+      { scope: 'project', path: '/Users/me/project/.silo-harness/settings.json', exists: true, applied: false, trusted: false, keys: ['permissionMode'], invalid: [] },
     ],
     owned: { maxTurns: 'user', 'portkey.model': 'user' },
   },
-  app: { name: 'Open Harness', version: '0.1.0', electron: '45.0.0', chrome: '142.0.0.0', node: '22.20.0', platform: 'darwin', arch: 'arm64', userData: '/Users/me/Library/Application Support/Open Harness', configDir: '/Users/me/.open-harness' },
+  app: { name: 'Silo Harness', version: '0.1.0', electron: '45.0.0', chrome: '142.0.0.0', node: '22.20.0', platform: 'darwin', arch: 'arm64', userData: '/Users/me/Library/Application Support/Silo Harness', configDir: '/Users/me/.open-harness' },
   history: {
-    stats: { sessions: 42, bytes: 18234567, trash: 2, trashBytes: 129000, dir: '/Users/me/Library/Application Support/Open Harness/history' },
+    stats: { sessions: 42, bytes: 18234567, trash: 2, trashBytes: 129000, dir: '/Users/me/Library/Application Support/Silo Harness/history' },
     trash: [
       { id: 't1', title: 'Fix the flaky login test', deletedAt: now - 2 * 86400000, purgeAt: now + 28 * 86400000, messageCount: 14, bytes: 120000 },
       { id: 't2', title: 'Explore the build', deletedAt: now - 3600000, purgeAt: now + 30 * 86400000, messageCount: 3, bytes: 9000 },
@@ -38,8 +38,8 @@ const js = (v) => JSON.stringify(v);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-settings-profile-'));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-settings-project-'));
   // A schedule and a skill so those sections have rows to look at.
-  fs.mkdirSync(path.join(project, '.open-harness', 'skills', 'release-notes'), { recursive: true });
-  fs.writeFileSync(path.join(project, '.open-harness', 'skills', 'release-notes', 'SKILL.md'), '---\nname: release-notes\ndescription: Write release notes from the merged pull requests since the last tag.\n---\nSteps…\n');
+  fs.mkdirSync(path.join(project, '.silo-harness', 'skills', 'release-notes'), { recursive: true });
+  fs.writeFileSync(path.join(project, '.silo-harness', 'skills', 'release-notes', 'SKILL.md'), '---\nname: release-notes\ndescription: Write release notes from the merged pull requests since the last tag.\n---\nSteps…\n');
 
   const open = async (app, section) => {
     await app.evaluate(`(() => { if (!document.querySelector('#settings').open) document.querySelector('#settings-btn').click(); document.querySelector('#sp-nav-${section}')?.click(); })()`);

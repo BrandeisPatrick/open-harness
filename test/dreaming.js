@@ -36,7 +36,7 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   const { state } = mock;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oh-dreaming-'));
   const home = path.join(tmp, 'home-config');
-  process.env.OPEN_HARNESS_CONFIG_DIR = home;
+  process.env.SILO_HARNESS_CONFIG_DIR = home;
   const proj = path.join(tmp, 'shop');
   const other = path.join(tmp, 'blog');
   for (const d of [home, proj, other]) fs.mkdirSync(d, { recursive: true });
@@ -113,8 +113,8 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   let d = svc.digest(proj);
   check('2: the digest covers both sessions of the project, oldest first', d.covered.sessions === 2 && d.covered.turns === 2 && d.sessionIds[0] === A && d.sessionIds[1] === B, d.covered);
   check('2: it names ids, titles and what was said', d.text.includes(`id ${A}`) && d.text.includes('Release chore again') && d.text.includes('Failed: read_file (missing.txt)'));
-  check('2: it starts with the dream frame', d.text.startsWith('[Dream] Open Harness put this message together'));
-  check('2: it lists what exists: skills, mods, instructions', /## What already exists/.test(d.text) && /Skills \(/.test(d.text) && /Mods:/.test(d.text) && /OPENHARNESS\.md \(project\): none yet/.test(d.text), d.text.slice(0, 1500));
+  check('2: it starts with the dream frame', d.text.startsWith('[Dream] Silo Harness put this message together'));
+  check('2: it lists what exists: skills, mods, instructions', /## What already exists/.test(d.text) && /Skills \(/.test(d.text) && /Mods:/.test(d.text) && /SILOHARNESS\.md \(project\): none yet/.test(d.text), d.text.slice(0, 1500));
   check('2: other projects, dream sessions and empty sessions are left out', !d.text.includes(C) && !d.text.includes(empty));
   // Clipping and the budget, on made-up turns
   const long = 'x'.repeat(5000);
@@ -174,8 +174,8 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   check('4: its system prompt is the dream section, no shell or browser', /## Dreaming/.test(sys) && /only these tools/.test(sys) && !/a shell \(bash\)/.test(sys) && !/## Sub-sessions/.test(sys) && !/## Schedules/.test(sys), sys.slice(0, 600));
   const toolResults = rt.get(D).messages.filter((m) => m.role === 'tool').map((m) => m.content);
   check('4: a shell or edit call in a dream is refused as unknown', toolResults.some((c) => /^Error: unknown tool "bash"/.test(c)) && toolResults.some((c) => /^Error: unknown tool "write_file"/.test(c)) && !fs.existsSync(path.join(proj, 'evil.txt')));
-  const skillFile = path.join(proj, '.open-harness/skills/release-chore/SKILL.md');
-  const memFile = path.join(proj, 'OPENHARNESS.md');
+  const skillFile = path.join(proj, '.silo-harness/skills/release-chore/SKILL.md');
+  const memFile = path.join(proj, 'SILOHARNESS.md');
   const modDir = path.join(home, 'mods/release-status');
   check('4: nothing was written before Apply', !fs.existsSync(skillFile) && !fs.existsSync(memFile) && !fs.existsSync(modDir));
   check('4: the cursor moved to the last covered turn', svc.data.cursors[proj] === dream.covered.to && dream.covered.to > 0);
@@ -228,7 +228,7 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   fs.mkdirSync(path.dirname(skillFile), { recursive: true });
   fs.writeFileSync(skillFile, '---\nname: release-chore\ndescription: old\n---\n\nOld steps\n');
   check('5: an existing skill name without the change flag is refused', /^Error: a skill named "release-chore" exists already/.test(await run('propose_skill', skillArgs)));
-  check('5: removing a line the file does not have is refused', /^Error: "nope" is not a line of OPENHARNESS\.md/.test(await run('propose_memory', { scope: 'project', remove: ['nope'], why: 'w', sessions: [B] })));
+  check('5: removing a line the file does not have is refused', /^Error: "nope" is not a line of SILOHARNESS\.md/.test(await run('propose_memory', { scope: 'project', remove: ['nope'], why: 'w', sessions: [B] })));
   check('5: a bundled mod id without the change flag is refused', /exists already \(a built-in one\)/.test(await run('propose_mod', { ...modArgs, id: 'context', files: [{ ...modFiles[0], content: modFiles[0].content.replace(/release-status/g, 'context') }, modFiles[1]] })));
   check('5: a skill named like an app command is refused', /^Error: \/dream is a command of the app/.test(await run('propose_skill', { ...skillArgs, name: 'dream' })));
   check('5: proposals only in a dream', /^Error: proposals can only be made in a dream/.test(await tool('propose_skill').run(skillArgs, { sessionId: A, cwd: proj, app }).then((r) => r.content)));
@@ -279,11 +279,11 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   clock += 1000;
   await send(other, 'Another post please, and remember I write in British English [sC2]', [{ content: 'Done.' }]);
   dreamReply({ toolCalls: [call('propose_memory', { scope: 'project', add: ['Write in British English'], why: 'said "remember I write in British English"', sessions: [C] })] });
-  dreamReply({ content: 'Applied: added "Write in British English" to OPENHARNESS.md.' });
+  dreamReply({ content: 'Applied: added "Write in British English" to SILOHARNESS.md.' });
   svc.start('manual', other);
   await idle();
   dream = svc.state().dreams[0];
-  check('6: auto: applied at once', dream.mode === 'auto' && dream.proposals.length === 1 && dream.proposals[0].state === 'applied' && read(path.join(other, 'OPENHARNESS.md')).includes('- Write in British English'), dream.proposals);
+  check('6: auto: applied at once', dream.mode === 'auto' && dream.proposals.length === 1 && dream.proposals[0].state === 'applied' && read(path.join(other, 'SILOHARNESS.md')).includes('- Write in British English'), dream.proposals);
   check('6: the reply lists what it did', /Applied:/.test(rt.get(dream.sessionId).messages.at(-1).content));
   check('6: nothing waits', rt.meta(dream.sessionId).dream.waiting === 0);
 
@@ -307,7 +307,7 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   rt.respondPlan(P, plan.id, 'build-ask');
   await sleep(200);
   dream = svc.state().dreams[0];
-  check('7: approving the plan applies them all', dream.proposals.every((p) => p.state === 'applied') && fs.existsSync(skillFile) && read(path.join(home, 'OPENHARNESS.md')).includes('- Use pnpm'), dream.proposals.map((p) => [p.state, p.error]));
+  check('7: approving the plan applies them all', dream.proposals.every((p) => p.state === 'applied') && fs.existsSync(skillFile) && read(path.join(home, 'SILOHARNESS.md')).includes('- Use pnpm'), dream.proposals.map((p) => [p.state, p.error]));
   check('7: without a model call or a mode switch', state.requests.length === reqs && !rt.isRunning(P) && app.config().permissionMode === mode);
   check('7: the plan is approved and no longer waits', rt.get(P).plans[plan.id].status === 'approved' && !rt.status(P).attention && rt.meta(P).dream.waiting === 0);
   for (const p of dream.proposals) svc.revert(p.id);
@@ -430,18 +430,29 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
     fs.mkdirSync(path.join(elsewhere, 'victim'), { recursive: true });
     fs.writeFileSync(path.join(elsewhere, 'rc'), 'export A=1\n');
     const linked = path.join(tmp, 'linked-project');
-    fs.mkdirSync(path.join(linked, '.open-harness'), { recursive: true });
-    fs.symlinkSync(elsewhere, path.join(linked, '.open-harness', 'mods'));
+    fs.mkdirSync(path.join(linked, '.silo-harness'), { recursive: true });
+    fs.symlinkSync(elsewhere, path.join(linked, '.silo-harness', 'mods'));
     fs.symlinkSync(path.join(elsewhere, 'rc'), path.join(linked, 'AGENTS.md'));
     fs.mkdirSync(path.join(linked, 'docs'));
     fs.writeFileSync(path.join(linked, 'docs', 'CLAUDE.md'), '- a line\n');
     fs.symlinkSync(path.join(linked, 'docs', 'CLAUDE.md'), path.join(linked, 'CLAUDE.md'));
     const roots = { cwd: linked, configDir: home, appRoot: projectDir };
-    check('12: a mod folder that is a link out of the project is refused', !allowedTarget(path.join(linked, '.open-harness', 'mods', 'victim'), roots) && !allowedTarget(path.join(linked, '.open-harness', 'mods', 'new-mod', 'mod.json'), roots));
+    check('12: a mod folder that is a link out of the project is refused', !allowedTarget(path.join(linked, '.silo-harness', 'mods', 'victim'), roots) && !allowedTarget(path.join(linked, '.silo-harness', 'mods', 'new-mod', 'mod.json'), roots));
     check('12: an instructions file that is a link out of the project is refused', !allowedTarget(path.join(linked, 'AGENTS.md'), roots));
     check('12: a link that stays inside the project is fine', allowedTarget(path.join(linked, 'CLAUDE.md'), roots));
-    check('12: ordinary targets are allowed, existing or not', allowedTarget(path.join(linked, '.open-harness', 'skills', 'new-skill', 'SKILL.md'), roots) && allowedTarget(path.join(home, 'skills', 'x', 'SKILL.md'), roots) && allowedTarget(path.join(linked, 'OPENHARNESS.md'), roots));
-    check('12: anything else is refused', !allowedTarget(path.join(linked, 'src', 'index.js'), roots) && !allowedTarget(path.join(home, 'settings.json'), roots) && !allowedTarget(path.join(linked, '.open-harness', 'mods'), roots));
+    check('12: ordinary targets are allowed, existing or not', allowedTarget(path.join(linked, '.silo-harness', 'skills', 'new-skill', 'SKILL.md'), roots) && allowedTarget(path.join(home, 'skills', 'x', 'SKILL.md'), roots) && allowedTarget(path.join(linked, 'SILOHARNESS.md'), roots));
+    check('12: anything else is refused', !allowedTarget(path.join(linked, 'src', 'index.js'), roots) && !allowedTarget(path.join(home, 'settings.json'), roots) && !allowedTarget(path.join(linked, '.silo-harness', 'mods'), roots));
+    check('12: the names from before the rename are allowed too', allowedTarget(path.join(linked, '.open-harness', 'skills', 'old', 'SKILL.md'), roots) && allowedTarget(path.join(linked, '.open-harness', 'mods', 'old', 'mod.json'), roots) && allowedTarget(path.join(linked, 'OPENHARNESS.md'), roots) && allowedTarget(path.join(home, 'OPENHARNESS.md'), roots) && allowedTarget(path.join(home, 'SILOHARNESS.md'), roots));
+    const { instructionsFile, skillsDir } = require(path.join(projectDir, 'dist/main/dreaming/apply.js'));
+    const oldProject = path.join(tmp, 'old-project');
+    fs.mkdirSync(path.join(oldProject, '.open-harness', 'skills'), { recursive: true });
+    const oldHome = path.join(tmp, 'old-home');
+    fs.mkdirSync(oldHome);
+    fs.writeFileSync(path.join(oldHome, 'OPENHARNESS.md'), '- old\n');
+    const oldRoots = { cwd: oldProject, configDir: oldHome, appRoot: projectDir };
+    check('12: a project with only .open-harness gets its skills written there', skillsDir('project', oldRoots) === path.join(oldProject, '.open-harness', 'skills'));
+    check('12: a config folder with only OPENHARNESS.md gets its memory written there', instructionsFile('user', oldRoots).path === path.join(oldHome, 'OPENHARNESS.md'));
+    check('12: … and a new one gets SILOHARNESS.md', instructionsFile('user', roots).path === path.join(home, 'SILOHARNESS.md') || fs.existsSync(path.join(home, 'OPENHARNESS.md')));
   }
   svc.dispose();
   done();

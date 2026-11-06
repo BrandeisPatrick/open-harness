@@ -26,7 +26,7 @@ const KEY = 'mock-live-key-0123456789';
   /** The command, as an agent runs it: the app's config folder and data folder, the variables given. */
   const cli = (args, env = {}, input) =>
     new Promise((resolve) => {
-      const e = { ...process.env, OPEN_HARNESS_CONFIG_DIR: home, OPEN_HARNESS_USER_DATA: profile, ...env };
+      const e = { ...process.env, SILO_HARNESS_CONFIG_DIR: home, SILO_HARNESS_USER_DATA: profile, ...env };
       const child = spawn(process.execPath, [path.join(ROOT, 'bin', 'open-harness.js'), ...args], { env: e });
       let out = '';
       let err = '';
@@ -46,7 +46,7 @@ const KEY = 'mock-live-key-0123456789';
 
   let app;
   try {
-    app = await launch({ profile, mock: true, scale: 1, env: { MOCK_PROVIDER_KEY: KEY, OPEN_HARNESS_CLI_LINK_DIR: linkDir } });
+    app = await launch({ profile, mock: true, scale: 1, env: { MOCK_PROVIDER_KEY: KEY, SILO_HARNESS_CLI_LINK_DIR: linkDir } });
     const mock = app.mock;
     const mockURL = `http://127.0.0.1:${mock.port}/v1`;
     const cfg = () => app.evaluate('window.oc.getConfig()');
@@ -176,7 +176,7 @@ const KEY = 'mock-live-key-0123456789';
     await until(async () => /Linked|not on your PATH/.test((await app.text('#sp-row-cli .sp-row-desc')) || ''));
     await app.screenshot(path.join(shots, 'settings-general-command-line-tool.png'));
     const viaLink = await new Promise((resolve) => {
-      const child = spawn(path.join(linkDir, 'open-harness'), ['provider', 'list', '--json'], { env: { ...process.env, OPEN_HARNESS_CONFIG_DIR: home, OPEN_HARNESS_USER_DATA: profile } });
+      const child = spawn(path.join(linkDir, 'open-harness'), ['provider', 'list', '--json'], { env: { ...process.env, SILO_HARNESS_CONFIG_DIR: home, SILO_HARNESS_USER_DATA: profile } });
       let out = '';
       child.stdout.on('data', (x) => (out += x));
       child.on('close', (code) => resolve({ code, out }));

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Harness: an open-source agent harness for macOS</title>
+<meta name="description" content="An open-source agent harness for macOS, in the style of Claude Code. Local models through Ollama, any provider through an OpenAI-compatible endpoint, sessions side by side, and everything beside the chat is a mod you can change.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#181818" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Open Harness">
+<meta property="og:description" content="An open-source agent harness for macOS, in the style of Claude Code. Local models, sessions side by side, and mods for everything beside the chat.">
+<meta property="og:url" content="https://brandeispatrick.github.io/open-harness/">
+<meta property="og:image" content="https://brandeispatrick.github.io/open-harness/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Open Harness: an open-source agent harness for macOS">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="site/icon.svg" type="image/svg+xml">
+<link rel="icon" href="site/icon.png" type="image/png" sizes="1024x1024">
+<link rel="apple-touch-icon" href="site/icon.png">
+<script>
+  // The theme chosen in the top bar, set before the first paint (site/site.js does the rest)
+  document.documentElement.classList.add('js');
+  try { var t = localStorage.getItem('site-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+<link rel="stylesheet" href="site/site.css">
+<script src="site/site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="top">
+  <div class="top-inner">
+    <a class="brand" href="./" aria-label="Open Harness, home"><img src="site/icon.svg" width="24" height="24" alt="">Open Harness</a>
+    <nav class="top-nav" aria-label="Site">
+      <a href="https://github.com/BrandeisPatrick/open-harness/blob/main/docs/reference.md">Docs</a>
+      <a href="https://github.com/BrandeisPatrick/open-harness">GitHub</a>
+      <div class="theme" role="group" aria-label="Colour theme" hidden>
+        <button type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg><span class="sr">Light</span></button>
+        <button type="button" data-theme-choice="system" aria-pressed="true" title="Match the system"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 13.75h5M8 11.25v2.5"/></svg><span class="sr">Match the system</span></button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg><span class="sr">Dark</span></button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="title">
+    <p class="badge"><span class="dot" aria-hidden="true"></span>Open source · macOS</p>
+    <h1 id="title">Open Harness</h1>
+    <p class="lede">An agent harness for your Mac, in the style of Claude Code.</p>
+    <p class="intro">Run a local model through Ollama, or any provider through an OpenAI-compatible endpoint. Several sessions work side by side in one calm window, and everything beside the chat is a mod you can change.</p>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/BrandeisPatrick/open-harness/releases/latest">Download for macOS</a>
+      <a class="button quiet" href="https://github.com/BrandeisPatrick/open-harness">View on GitHub</a>
+    </div>
+    <p class="fine">For Apple silicon. MIT licence.</p>
+  </section>
+
+  <div class="window"><div class="frame">
+    <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+    <img data-src="screenshots/hero.png" data-src-dark="screenshots/hero-dark.png" width="1280" height="800" decoding="async" alt="The Open Harness window: the sidebar with today's sessions, a conversation about adding rate limiting to ~/code/atlas-api with its tool activity folded into one line and a task list, and the rail with the environment, the context in use and the tasks.">
+    <noscript><picture>
+      <source media="(prefers-color-scheme: dark)" srcset="screenshots/hero-dark.png" width="1280" height="800" data-dark>
+      <img src="screenshots/hero.png" width="1280" height="800" decoding="async" alt="The Open Harness window: the sidebar with today's sessions, a conversation about adding rate limiting to ~/code/atlas-api with its tool activity folded into one line and a task list, and the rail with the environment, the context in use and the tasks.">
+    </picture></noscript>
+  </div></div>
+
+  <section class="features" aria-labelledby="features">
+    <h2 id="features">What it does</h2>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3>Made for reading</h3>
+        <p>One calm column of text on a measured type scale, and a chat bar that is a single bar. A turn that reads six files, edits two and runs the tests is one quiet line that says what happened, with the lines added and removed and anything that failed. Click it to see every row.</p>
+      </div>
+      <img data-src="screenshots/tool-activity.png" data-src-dark="screenshots/tool-activity-dark.png" width="796" height="663" decoding="async" loading="lazy" alt="A turn in the conversation: the line &quot;Read 3 files, edited 2 files, ran 2 commands, +4 −2, 1 failed&quot; opened to its rows, one edit showing its diff, and a second run folded to &quot;Ran a search, listed a directory&quot;.">
+      <noscript><picture>
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/tool-activity-dark.png" width="796" height="663" data-dark>
+        <img src="screenshots/tool-activity.png" width="796" height="663" decoding="async" loading="lazy" alt="A turn in the conversation: the line &quot;Read 3 files, edited 2 files, ran 2 commands, +4 −2, 1 failed&quot; opened to its rows, one edit showing its diff, and a second run folded to &quot;Ran a search, listed a directory&quot;.">
+      </picture></noscript>
+    </article>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3>Sessions side by side</h3>
+        <p>Several sessions run at once and keep running off screen. The agent starts sub-sessions for parts of a job and merges them back; forks and sub-sessions nest under the session they came from, and any session can find another by its name.</p>
+      </div>
+      <img data-src="screenshots/sidebar.png" data-src-dark="screenshots/sidebar-dark.png" width="596" height="710" decoding="async" loading="lazy" alt="The sidebar: sessions grouped by day, a merged sub-session and a running one nested under the session that started them, a fork under its original, an unread session marked with a dot and a scheduled one with a clock.">
+      <noscript><picture>
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/sidebar-dark.png" width="596" height="710" data-dark>
+        <img src="screenshots/sidebar.png" width="596" height="710" decoding="async" loading="lazy" alt="The sidebar: sessions grouped by day, a merged sub-session and a running one nested under the session that started them, a fork under its original, an unread session marked with a dot and a scheduled one with a clock.">
+      </picture></noscript>
+    </article>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3>Everything beside the chat is a mod</h3>
+        <p>The rail, the tabs, the look of the conversation and the background are mods: sandboxed folders of web files with a documented protocol, reloaded when a file is saved. Ask the agent for one, and a card in the chat offers to turn it on.</p>
+      </div>
+      <img class="tall" data-src="screenshots/mods.png" data-src-dark="screenshots/mods-dark.png" width="786" height="980" decoding="async" loading="lazy" alt="The rail with the Environment, Context and Tasks mods, beside the Scheduled tab listing three scheduled tasks with their rhythm and a Run now button.">
+      <noscript><picture>
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/mods-dark.png" width="786" height="980" data-dark>
+        <img class="tall" src="screenshots/mods.png" width="786" height="980" decoding="async" loading="lazy" alt="The rail with the Environment, Context and Tasks mods, beside the Scheduled tab listing three scheduled tasks with their rhythm and a Run now button.">
+      </picture></noscript>
+    </article>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3>Dreaming</h3>
+        <p>Once a day, or when you ask, a dream reads your recent sessions and suggests skills, memory lines and mods from what you keep asking for. Each suggestion quotes your own words and links the sessions it came from; you apply or dismiss it, and anything applied can be reverted.</p>
+      </div>
+      <img data-src="screenshots/dreaming.png" data-src-dark="screenshots/dreaming-dark.png" width="1020" height="752" decoding="async" loading="lazy" alt="Settings, Dreaming: a dream of atlas-api waiting with three suggestions; the first, a release skill, quotes two past requests, links the sessions they came from and has Dismiss and Apply.">
+      <noscript><picture>
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/dreaming-dark.png" width="1020" height="752" data-dark>
+        <img src="screenshots/dreaming.png" width="1020" height="752" decoding="async" loading="lazy" alt="Settings, Dreaming: a dream of atlas-api waiting with three suggestions; the first, a release skill, quotes two past requests, links the sessions they came from and has Dismiss and Apply.">
+      </picture></noscript>
+    </article>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3>You decide what runs</h3>
+        <p>Permission modes, approval cards, plan mode and rewind, as in Claude Code. Enter allows, <kbd>a</kbd> allows for the session, <kbd>p</kbd> for the project. Auto mode pauses only on risky actions.</p>
+      </div>
+      <img data-src="screenshots/approval.png" data-src-dark="screenshots/approval-dark.png" width="614" height="401" decoding="async" loading="lazy" alt="An approval card: Auto mode paused before git push -u origin feat/rate-limit, with Allow for this session, Always allow for this project, Deny and Allow.">
+      <noscript><picture>
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/approval-dark.png" width="614" height="401" data-dark>
+        <img src="screenshots/approval.png" width="614" height="401" decoding="async" loading="lazy" alt="An approval card: Auto mode paused before git push -u origin feat/rate-limit, with Allow for this session, Always allow for this project, Deny and Allow.">
+      </picture></noscript>
+    </article>
+
+    <article class="feature">
+      <div class="feature-text">
+        <h3>Looks</h3>
+        <p>A mod can restyle just the conversation or just the chat bar, and bring a background; Settings → Appearance picks each one, or a whole set. Hyperspace, a bundled set, jumps to lightspeed while the agent works.</p>
+      </div>
+      <img src="screenshots/hyperspace.png" width="1440" height="900" decoding="async" loading="lazy" alt="The window in the Hyperspace look: a starfield stretched into streaks behind a holographic conversation and a cockpit-style chat bar, while a run is going.">
+    </article>
+
+    <h2 class="also-title" id="also">Also</h2>
+    <ul class="also" aria-labelledby="also">
+      <li><h3>Local first</h3><p>Runs on <code>qwen3:8b</code> through Ollama, and nothing leaves your Mac. Built for small context windows: compaction, a context breakdown and a tool set sized to the model.</p></li>
+      <li><h3>Nothing is lost</h3><p>An append-only history log survives crashes, rewinds and compactions. Deleted sessions go to a trash for 30 days.</p></li>
+      <li><h3>Images in replies</h3><p>The model shows a screenshot or a chart inline, and tool rows carry thumbnails.</p></li>
+      <li><h3>Remote control</h3><p>Follow a session and answer its approval cards from your phone. Off until you turn it on.</p></li>
+      <li><h3>Settings</h3><p>One control per row, applied as you change it, and searchable.</p></li>
+      <li><h3>Standard extensions</h3><p>MCP servers, skills (<code>SKILL.md</code>), project instructions (<code>AGENTS.md</code>, <code>CLAUDE.md</code>) and <code>settings.json</code>.</p></li>
+    </ul>
+  </section>
+
+  <section class="start" aria-labelledby="start">
+    <h2 id="start">Get started</h2>
+    <ol class="steps">
+      <li>
+        <h3>Download the app</h3>
+        <p>From the <a href="https://github.com/BrandeisPatrick/open-harness/releases/latest">latest release</a>. It isn't notarized yet: on first launch, open it once, then allow it in System Settings → Privacy &amp; Security → Open Anyway.</p>
+      </li>
+      <li>
+        <h3>Give it a local model</h3>
+        <div class="code">
+          <div class="code-head"><span>Terminal</span><button type="button" class="copy" data-copy="code-model" hidden>Copy</button></div>
+          <pre id="code-model"><code>brew install ollama &amp;&amp; ollama serve &amp;
+ollama pull qwen3:8b</code></pre>
+        </div>
+        <p>Or a hosted one: Settings → Model → Gateway takes any OpenAI-compatible endpoint, such as Anthropic's or Portkey's, with your key.</p>
+      </li>
+      <li>
+        <h3>Or run it from source</h3>
+        <div class="code">
+          <div class="code-head"><span>Terminal</span><button type="button" class="copy" data-copy="code-source" hidden>Copy</button></div>
+          <pre id="code-source"><code>git clone https://github.com/BrandeisPatrick/open-harness.git &amp;&amp; cd open-harness
+npm install &amp;&amp; npm start</code></pre>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="mod" aria-labelledby="mod">
+    <h2 id="mod">Make it yours</h2>
+    <p>A mod is a folder of web files. This one counts the words the assistant writes, in two files.</p>
+    <div class="code">
+      <div class="code-head"><span>mod.json</span><button type="button" class="copy" data-copy="code-json" hidden>Copy</button></div>
+      <pre id="code-json"><code>{ "protocol": 1, "id": "word-count", "name": "Word count", "version": "0.1.0",
+  "permissions": ["session:read"],
+  "contributes": { "views": [{ "id": "main", "title": "Word count",
+                               "entry": "panel.html", "seat": "rail" }] } }</code></pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span>panel.html</span><button type="button" class="copy" data-copy="code-panel" hidden>Copy</button></div>
+      <pre id="code-panel"><code>&lt;link rel="stylesheet" href="/@harness/harness.css"&gt;
+&lt;div class="h-row"&gt;
+  &lt;span class="h-label"&gt;Assistant words&lt;/span&gt;&lt;span class="h-value" id="n"&gt;0&lt;/span&gt;
+&lt;/div&gt;
+&lt;script src="/@harness/harness.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  let words = 0;
+  harness.on('message.assistant', (m) =&gt; {
+    words += (m.text.match(/\S+/g) || []).length;
+    document.getElementById('n').textContent = words;
+  });
+&lt;/script&gt;</code></pre>
+    </div>
+    <p>Put them in <code>~/.open-harness/mods/word-count/</code>, turn the mod on, and the panel is in the rail. Or ask the agent: “make a mod that shows …”.</p>
+  </section>
+
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">Read more</h2>
+    <ul class="links">
+      <li><a href="https://github.com/BrandeisPatrick/open-harness/blob/main/docs/mods.md">The mod protocol</a></li>
+      <li><a href="https://github.com/BrandeisPatrick/open-harness/blob/main/docs/reference.md">Reference</a></li>
+      <li><a href="https://github.com/BrandeisPatrick/open-harness/blob/main/CHANGELOG.md">Changelog</a></li>
+      <li><a href="https://github.com/BrandeisPatrick/open-harness/releases">Releases</a></li>
+      <li><a href="https://github.com/BrandeisPatrick/open-harness">Repository</a></li>
+    </ul>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Open Harness is open source under the MIT licence · <a href="https://github.com/BrandeisPatrick/open-harness">github.com/BrandeisPatrick/open-harness</a></p>
+</footer>
+<p class="sr" id="announce" aria-live="polite"></p>
+</body>
+</html>

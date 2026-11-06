@@ -6,6 +6,7 @@
   <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20silicon-lightgrey.svg">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-45-47848F.svg">
 </p>
+<p align="center"><a href="https://brandeispatrick.github.io/open-harness/">Website</a> · <a href="https://github.com/BrandeisPatrick/open-harness/releases/latest">Download</a></p>
 <p align="center"><img src="docs/screenshots/hero.png" width="820" alt="Open Harness"></p>
 
 ## Why
@@ -38,6 +39,7 @@ Hosted models: Settings → Model → Gateway. For Portkey, add your Portkey key
 
 | | |
 | --- | --- |
+| <img src="docs/screenshots/tool-activity.png" width="400"> | **Tool activity in one line.** Each run of tool calls folds into a quiet line that says what happened ("Read 3 files, edited 2 files, ran 2 commands"), with the lines added and removed and anything that failed or was denied; click it to see every row. |
 | <img src="docs/screenshots/mods.png" width="400"> | **Mods.** Environment, Context, Tasks, Plan, Outputs, Sub-sessions and Skills in the rail; Side chat and Scheduled as tabs. All written against the protocol in [docs/mods.md](docs/mods.md). |
 | <img src="docs/screenshots/hyperspace.png" width="400"> | **Looks.** A mod can restyle just the conversation or just the chat bar, and bring a background; Settings → Appearance picks each one, or a whole set. Hyperspace, a bundled set, jumps to lightspeed while the agent works. |
 | <img src="docs/screenshots/sidebar.png" width="400"> | **Sessions.** Several at once, grouped by day, forks and sub-sessions nested under where they came from, search inside conversations. |
@@ -45,6 +47,7 @@ Hosted models: Settings → Model → Gateway. For Portkey, add your Portkey key
 | <img src="docs/screenshots/settings.png" width="400"> | **Settings.** One control per row, applied as you change it, searchable; a Mods section with permissions in plain words. |
 | <img src="docs/screenshots/remote.png" width="220"> | **Remote control.** Follow a session and answer its approval cards from your phone. Off until you turn it on. |
 | <img src="docs/screenshots/approval.png" width="400"> | **Approvals.** Enter allows, `a` for the session, `p` for the project. Auto mode pauses only on risky actions. |
+| <img src="docs/screenshots/dreaming.png" width="400"> | **Dreaming.** Once a day, or when you ask, a dream reads your recent sessions and suggests skills, memory lines and mods, each quoting your words and linking the sessions it came from. You apply or dismiss each one, and can revert what you applied. |
 
 Also: scheduled tasks, plan mode, rewind, artifacts, skills, MCP servers, compaction, a history log with a trash, vision models, macOS notifications, keep-awake. Details, keys and tools: [docs/reference.md](docs/reference.md). What changed: [CHANGELOG.md](CHANGELOG.md).
 

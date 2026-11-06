@@ -420,7 +420,7 @@ export interface ModsRpc {
   /** Copies a bundled mod into the user folder so it can be edited; returns the new list */
   'mods.customise': (key: string) => ModInfo[];
   /** Writes a starter mod into the user folder (or the project's) and returns it: a view in `seat`, or a look for `look` */
-  'mods.create': (input: { id: string; name: string; seat?: ModSeat; look?: ModLookTarget; scope: 'user' | 'project' }) => ModInfo;
+  'mods.create': (input: { id: string; name: string; seat?: ModSeat; look?: ModLookTarget; theme?: boolean; scope: 'user' | 'project' }) => ModInfo;
   /** Installs from a folder (copied) or a Git URL (cloned) into the user folder */
   'mods.install': (source: string) => ModInfo;
   /** Moves a user mod's folder to the Trash */

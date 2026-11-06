@@ -343,7 +343,7 @@ async function waitFor(fn, ms = 8000, what = 'condition') {
   c = await cmd('merge');
   check('8: /merge with several and no argument lists them with ids', /2 sessions can be merged/.test(c.notice) && c.notice.includes(s2) && c.notice.includes(s3), c);
   c = await cmd('merge', 'TWIN');
-  check('8: /merge with an ambiguous title', /2 sessions here are titled/.test(c.error) && c.error.includes(s2), c);
+  check('8: /merge with an ambiguous title lists both with ids', /"TWIN" fits 2 sessions/.test(c.error) && c.error.includes(s2) && c.error.includes(s3), c);
   c = await cmd('merge', 'nothing like it');
   check('8: /merge with no match', /No sub-session or fork of this session matches/.test(c.error), c);
   c = await cmd('merge', s3);
@@ -357,7 +357,7 @@ async function waitFor(fn, ms = 8000, what = 'condition') {
   c = await cmd('send', 'no colon here');
   check('8: /send without a colon: usage', /Usage: \/send/.test(c.error), c);
   c = await cmd('send', 'nobody: hi');
-  check('8: /send to an unknown session', /No session with the id or title "nobody"/.test(c.error), c);
+  check('8: /send to an unknown session', /^No session matches "nobody"\. Closest names:/.test(c.error), c);
   const colon = rt.create({ cwd: dir, title: 'Plan: v2' }).id;
   reply('[CO]', { content: 'co' });
   rt.send(colon, 'colon [CO]');

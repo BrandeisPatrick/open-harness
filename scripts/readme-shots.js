@@ -972,6 +972,8 @@ async function main() {
     await ev(`(() => { if (!document.querySelector('#settings').open) document.querySelector('#settings-btn').click(); })()`);
     await app.waitFor(`document.querySelector('#settings').open && Boolean(document.querySelector('#sp-nav-mods'))`, 10_000, 'Settings');
     await app.click('#sp-nav-mods');
+    // The Mods tab (the general mods), where a rail panel of yours is listed
+    await app.click('#sp-modtab-mods');
     await app.waitFor(`Boolean(document.querySelector('#sp-row-mod-word-count .sp-mod-expand'))`, 10_000, 'the Word count row');
     await app.click('#sp-row-mod-word-count .sp-mod-expand');
     await sleep(500);

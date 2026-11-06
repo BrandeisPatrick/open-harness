@@ -506,7 +506,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
         await app.click('#settings-btn');
         await sleep(900);
         await shot(app, `theme-settings-${scheme}`);
-        await app.evaluate(`window.__oc_debug.settings?.open?.('mods')`).catch(() => {});
+        await app.evaluate(`window.__oc_debug.settings.open('mods', { tab: 'themes' })`).catch(() => {});
         await sleep(500);
         await shot(app, `theme-settings-mods-${scheme}`);
         await app.click('#settings-close');

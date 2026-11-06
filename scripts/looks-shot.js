@@ -1,8 +1,8 @@
 // Makes the README's screenshot of a look set: Hyperspace, in dark, while a run is going (the stars are streaks).
 //
 // Like scripts/readme-shots.js, whose project, sessions and scripted replies it uses: the built app runs hidden on a
-// throwaway profile against the scripted model, plays the hero turn, turns the bundled Hyperspace mod on, picks its
-// conversation look, chat bar look and background, starts a run that does not end, and takes the picture.
+// throwaway profile against the scripted model, plays the hero turn, turns the bundled Hyperspace mod on, uses the
+// whole set from its card in Settings → Mods (its conversation look, chat bar look and background), starts a run that does not end, and takes the picture.
 //
 //   npm run build   (once; dist/ must be current)
 //   node scripts/looks-shot.js [out-file]      default: docs/screenshots/hyperspace.png
@@ -60,10 +60,14 @@ async function main() {
     await app.waitFor(`document.querySelector('#status-line').hidden`, 60_000, 'the hero run to end');
     await sleep(1200);
 
-    // The set: both looks and the background from the one mod
+    // The set: both looks and the background from the one mod, with "Use the whole set" on its card in Settings → Mods
     await ev(`window.oc.rpc('mods.setEnabled', 'hyperspace', true)`);
     await sleep(600);
-    await ev(`window.oc.rpc('mods.setLayout', ${js({ looks: { conversation: 'hyperspace/holo', composer: 'hyperspace/cockpit' }, background: 'hyperspace/starfield' })})`);
+    await ev(`window.__oc_debug.settings.open('mods', { tab: 'backgrounds' })`);
+    await app.waitFor(`Boolean(document.querySelector('#sp-row-mod-hyperspace .sp-mod-set button'))`, 10_000, "Hyperspace's card");
+    await app.click('#sp-row-mod-hyperspace .sp-mod-set button');
+    await sleep(400);
+    await ev(`document.querySelector('#settings').close()`);
     await app.waitFor(`window.__oc_debug.mods.views().some((v) => v.key === 'hyperspace/starfield' && v.hello)`, 20_000, 'the starfield');
 
     // A run that does not end by itself: the stars stretch into streaks about two seconds in

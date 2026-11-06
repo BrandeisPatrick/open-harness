@@ -1,5 +1,5 @@
-// Live checks of looks in the real window: the bundled Hyperspace set turned on in Settings → Mods and picked in
-// Settings → Appearance → Looks; each look measured with computed styles (the conversation look changes the
+// Live checks of looks in the real window: the bundled Hyperspace set turned on in Settings → Mods and picked on
+// its tabs (Conversation, Chat bar, and "Use the whole set" on its card); each look measured with computed styles (the conversation look changes the
 // transcript and not the sidebar or the chat bar, and the other way round); a hostile look that tries to leave its
 // scope; the state attributes following a run, the theme and a setting; the background hearing `pointer`; and
 // Default putting everything back.
@@ -75,10 +75,22 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     await ev(`document.querySelector('#settings').open && document.querySelector('#settings-close').click()`);
     await sleep(300);
   };
+  const TAB_OF = { 'look-conversation': 'conversation', 'look-composer': 'chat-bar', background: 'backgrounds' };
   const choose = async (row, value) => {
+    await ev(`window.__oc_debug.settings.open('mods', { tab: ${js(TAB_OF[row])} })`);
+    await sleep(200);
     await app.fill(`#sp-row-${row} select`, value);
     await sleep(900);
   };
+  /** "Use the whole set" (or "Stop using the set") on Hyperspace's card */
+  const useSet = async (on) => {
+    await ev(`window.__oc_debug.settings.open('mods', { tab: 'backgrounds' })`);
+    await sleep(200);
+    const label = await app.text('#sp-row-mod-hyperspace .sp-mod-set button');
+    if (on === /Use the whole set/.test(label || '')) await app.click('#sp-row-mod-hyperspace .sp-mod-set button');
+    await sleep(900);
+  };
+  const setLine = () => app.text('#sp-row-mod-hyperspace .sp-mod-set');
   const lookStyles = () => ev(`[...document.querySelectorAll('style[data-look]')].map((s) => s.dataset.look + '=' + s.dataset.ref)`);
 
   try {
@@ -98,6 +110,8 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
 
     // ---------- Turn the set on in Settings → Mods ----------
     await openSettings('mods');
+    await app.click('#sp-modtab-backgrounds');
+    await sleep(200);
     check('Hyperspace is listed and off', /Off/.test((await app.text('#sp-row-mod-hyperspace')) || ''));
     await app.click('#sp-row-mod-hyperspace .sp-mod-expand');
     await sleep(200);
@@ -107,13 +121,15 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     const onNow = await probe();
     check('turning it on changes nothing until a look is picked', (await lookStyles()).length === 0 && same(onNow, before), Object.keys(before).filter((k) => !same(before[k], onNow[k])).map((k) => [k, before[k], onNow[k]]));
 
-    // ---------- Appearance → Looks ----------
-    await openSettings('appearance');
+    // ---------- Settings → Mods: the Conversation and Chat bar tabs, and the set on the card ----------
     const options = (row) => ev(`[...document.querySelectorAll('#sp-row-${row} option')].map((o) => o.value + ':' + o.textContent)`);
-    check('the Looks group has Set, Conversation, Chat bar and Background', (await ev(`['look-set', 'look-conversation', 'look-composer', 'background'].every((r) => document.querySelector('#sp-row-' + r))`)) && /Looks/.test(await ev(`document.querySelector('#sp-row-look-set').closest('.sp-group').querySelector('.sp-group-title')?.textContent || ''`)));
-    check('Set offers Hyperspace', (await options('look-set')).includes('hyperspace:Hyperspace'), await options('look-set'));
+    const tabOf = (row) => ev(`document.querySelector('#sp-row-${row}').closest('[data-subtab]')?.dataset.subtab`);
+    check('the pickers are on their tabs: Conversation, Chat bar, Backgrounds', (await tabOf('look-conversation')) === 'conversation' && (await tabOf('look-composer')) === 'chat-bar' && (await tabOf('background')) === 'backgrounds');
+    check("Hyperspace's card offers the whole set", /Use the whole set/.test((await setLine()) || ''), await setLine());
     check('Conversation offers Holo terminal, Chat bar offers Cockpit', (await options('look-conversation')).includes('hyperspace/holo:Hyperspace: Holo terminal') && (await options('look-composer')).includes('hyperspace/cockpit:Hyperspace: Cockpit'));
-    await app.screenshotOf(path.join(SHOTS, 'settings-looks.png'), '#sp-row-look-set', 0).catch(() => {});
+    await ev(`window.__oc_debug.settings.open('mods', { tab: 'conversation' })`);
+    await sleep(200);
+    await app.screenshotOf(path.join(SHOTS, 'settings-looks.png'), '#sp-row-look-conversation', 0).catch(() => {});
 
     // The conversation look alone
     await choose('look-conversation', 'hyperspace/holo');
@@ -123,7 +139,7 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     check('… keeps the quiet tool lines as they are (size, line height, colour, height)', same(conv.toolLine, before.toolLine) && same(conv.verb, before.verb), { before: before.toolLine, now: conv.toolLine });
     check('… keeps the reading size and line height', same(conv.reply['font-size'], before.reply['font-size']) && same(conv.reply['line-height'], before.reply['line-height']) && same(conv.bubble['font-size'], before.bubble['font-size']));
     check('… and does not touch the sidebar, the top bar, the chat bar or the page tokens', same(conv.sidebar, before.sidebar) && same(conv.sessionItem, before.sessionItem) && same(conv.topbar, before.topbar) && same(conv.composer, before.composer) && same(conv.send, before.send) && conv.rootAccent === before.rootAccent, { s: conv.sidebar, c: conv.composer });
-    check('Set shows Custom with only the conversation look', (await ev(`document.querySelector('#sp-row-look-set select').value`)) === 'custom');
+    check('with only the conversation look the card still offers the whole set', /Use the whole set/.test((await setLine()) || ''));
 
     // The chat bar look alone
     await choose('look-conversation', '');
@@ -136,11 +152,11 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     check('… and does not touch the transcript or the sidebar', same(bar.bubble, before.bubble) && same(bar.reply, before.reply) && same(bar.sidebar, before.sidebar) && !bar.holo && !('data-look' in (await attrs(app, '#messages'))));
 
     // The whole set in one choice
-    await choose('look-set', 'hyperspace');
+    await useSet(true);
     await app.waitFor(`window.__oc_debug.mods.views().some((v) => v.key === 'hyperspace/starfield' && v.hello)`, 15_000, 'the Hyperspace background');
     const cfg = await ev('window.oc.getConfig()');
-    check('Set applies the conversation look, the chat bar look and the background', cfg.mods.layout.looks.conversation === 'hyperspace/holo' && cfg.mods.layout.looks.composer === 'hyperspace/cockpit' && cfg.mods.layout.background === 'hyperspace/starfield', cfg.mods.layout);
-    check('… and the rows show them', (await ev(`[...document.querySelectorAll('#sp-row-look-set select, #sp-row-look-conversation select, #sp-row-look-composer select, #sp-row-background select')].map((s) => s.value).join()`)) === 'hyperspace,hyperspace/holo,hyperspace/cockpit,hyperspace/starfield');
+    check('"Use the whole set" applies the conversation look, the chat bar look and the background', cfg.mods.layout.looks.conversation === 'hyperspace/holo' && cfg.mods.layout.looks.composer === 'hyperspace/cockpit' && cfg.mods.layout.background === 'hyperspace/starfield', cfg.mods.layout);
+    check('… and the pickers and the card show them', (await ev(`['look-conversation', 'look-composer', 'background'].map((r) => document.querySelector('#sp-row-' + r + ' select').value).join()`)) === 'hyperspace/holo,hyperspace/cockpit,hyperspace/starfield' && /Whole set in use/.test((await setLine()) || ''));
     await closeSettings();
     const set = await probe();
     check('with the set: the sidebar keeps its own style (only its translucency over the background changes)', same({ ...set.sidebar, 'background-color': '' }, { ...before.sidebar, 'background-color': '' }) && same(set.sessionItem, before.sessionItem));
@@ -206,9 +222,8 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     check('turning its mod off removes the look and the attributes', !(await lookStyles()).some((s) => s.startsWith('conversation')) && !('data-running' in (await attrs(app, '#messages'))));
 
     // ---------- Default restores everything ----------
-    await openSettings('appearance');
-    await choose('look-set', 'hyperspace');
-    await choose('look-set', '');
+    await useSet(true);
+    await useSet(false);
     await closeSettings();
     await sleep(500);
     const after = await probe();

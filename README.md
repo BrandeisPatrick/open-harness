@@ -11,9 +11,10 @@
 ## Why
 
 - **Local first.** Runs on `qwen3:8b` through Ollama; nothing leaves your Mac. Built for small context windows: compaction that clears old tool output before it summarises, a context breakdown, and a tool set sized to the model.
+- **Made for reading.** One calm column of text on a measured type scale, a chat bar that is a single bar, tool activity folded into one line that opens to the rows. Few boxes, nothing competing with the words.
 - **The Claude Code workflow.** Permission modes, approval cards, plan mode, rewind, a task list in the chat, queued messages, `@` file mentions, `#` memory.
-- **Sessions side by side.** Several run at once. The agent starts sub-sessions and merges them back; forks and sub-sessions nest in the sidebar; scheduled tasks run on a rhythm; your phone can follow along.
-- **Mods.** The rail, the tabs, the chat bar's look and the background are mods: sandboxed folders of web files with a documented protocol, reloaded when a file is saved. Ask the agent for one and turn it on.
+- **Sessions side by side.** Several run at once. The agent starts sub-sessions and merges them back; forks and sub-sessions nest in the sidebar; any session finds another by its name; scheduled tasks run on a rhythm; your phone can follow along.
+- **Mods.** The rail, the tabs, the look of the conversation and of the chat bar, and the background are mods: sandboxed folders of web files with a documented protocol, reloaded when a file is saved. Ask the agent for one and turn it on.
 - **Nothing is lost.** An append-only history log survives crashes, rewinds and compactions; deleted sessions go to a trash.
 - **See everything.** Tool rows with diffs, images inline in replies, a Diff pane with revert, a real Terminal pane, a built-in browser the agent drives, artifacts beside the chat.
 - **Standard extensions.** MCP servers (`.mcp.json`), skills (`SKILL.md`), project instructions (`AGENTS.md` / `CLAUDE.md`), `settings.json`.

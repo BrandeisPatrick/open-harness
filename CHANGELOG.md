@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
+
+The window is rebuilt around reading: a measured type scale, one calm column, a chat bar that is a single bar, and tool activity that folds into a line. Mods can now restyle the conversation and the chat bar as looks, with a space-opera set to try, and any session can find another by its name.
 
 ### A calmer window to read in
 

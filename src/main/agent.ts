@@ -820,7 +820,7 @@ export class Agent {
     const before = this.contextInfo().tokens;
     const pruned = cfg.pruneToolResults !== false ? this.prune(PRUNE_NORMAL, true) : 0;
     const tail = limit * TAIL_FRACTION;
-    let cut = findCut(s.messages, tail);
+    let cut = this.cutFor(tail, limit);
     let insideTurn = false;
     if (!cut && reason === 'auto' && over()) {
       // The last turn alone is too big to keep: fold the start of it as well, with the request kept verbatim.
@@ -853,13 +853,13 @@ export class Agent {
     } else if (!cut) error = 'Nothing to compact yet.';
     if (!over()) return pruned > 0 ? { ok: true } : { ok: false, error: error ?? 'Nothing to compact yet.' };
     // Never leave the session over the limit: shorten every old tool result, then drop the oldest messages.
-    const why = error ? `The summary could not be produced (${error.replace(/\.$/, '')})` : 'No summary could be made';
+    const why = error ? `The summary could not be produced (${error.replace(/\.$/, '')})` : this.autoCompactFailed ? 'A summary could not be produced earlier in this run' : 'No summary could be made';
     const hard = cfg.pruneToolResults !== false ? this.prune(PRUNE_HARD, false) : 0;
     if (hard > 0 && !over()) {
       this.emit({ type: 'error', kind: 'notice', message: `${why}, so old tool output was shortened further instead (${formatTokens(hard)} tokens cleared).` });
       return { ok: true };
     }
-    let dropAt = findCut(s.messages, tail);
+    let dropAt = this.cutFor(tail, limit);
     let dropInside = false;
     if (!dropAt) {
       dropAt = findCut(s.messages, tail, { insideTurn: true });
@@ -880,6 +880,18 @@ export class Agent {
     const info = this.fold(dropAt, note, `${count} earlier message${count === 1 ? ' was' : 's were'} dropped because a summary could not be produced.`, { reason, before, pruned: pruned + hard, stage: 'dropped' });
     this.emit({ type: 'error', kind: 'notice', message: `${why}, so the ${count} oldest message${count === 1 ? ' was' : 's were'} dropped to stay inside the context window.` });
     return { ok: true, info };
+  }
+
+  /**
+   * The cut for a tail of about `tail` tokens; when that leaves too little before it to be worth a brief (a long
+   * answer just before the last request fills the tail), keep only the last request onward instead.
+   */
+  private cutFor(tail: number, limit: number): number {
+    const msgs = this.session.messages;
+    const cut = findCut(msgs, tail);
+    const least = findCut(msgs, 0);
+    if (least > cut && estimateTokens(msgs.slice(0, cut)) < limit * 0.1) return least;
+    return cut;
   }
 
   /** The text of the last request the user sent within `messages` (kept verbatim when the turn itself is folded). */

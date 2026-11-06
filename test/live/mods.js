@@ -171,7 +171,7 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
       await sleep(1000);
       const log = await dbg(app, 'log()');
       const evs = new Set(log.filter((e) => e.kind === 'event').map((e) => e.method));
-      check('run events reached subscribed views', evs.has('run.started') && evs.has('run.ended') && (!app.live || (evs.has('tool.started') && evs.has('tool.ended'))), [...evs]);
+      check('run events reached subscribed views', evs.has('run.started') && evs.has('run.ended') && (!app.live || (evs.has('tasks.changed') && evs.has('outputs.changed'))), [...evs]);
       if (app.live) check('tasks.changed reached the Tasks view', log.some((e) => e.kind === 'event' && e.method === 'tasks.changed' && e.view === 'tasks/main'));
       check('no bridge call refused or failed (after a run)', (await errors(app)).length === 0, await errors(app));
       await shot(app, 'window-after-run-light');
@@ -292,6 +292,7 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
       const tv = await view(app, 'tabby/main');
       check('tab mod: fills the pane and says hello', tv.hello && (await app.evaluate(`(() => { const f = document.querySelector('.mod-tab-panel:not([hidden]) iframe'); const p = document.querySelector('#side-pane').getBoundingClientRect(); return f && f.getBoundingClientRect().height > p.height - 60; })()`)));
       await checkHidden(app, 'a mod tab in front');
+      await sleep(700);
       await shot(app, 'seat-tab-light');
       const tabFrame = tv.frameId;
       await app.click('#pane-tab-browser');
@@ -417,6 +418,11 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
         check('agent: no refused or failed calls from its page', errs.length === 0, errs);
         const list = (await dbg(app, 'list()')).find((m) => m.key === key);
         check('agent: no problems listed', list && !list.problems.length, list && list.problems);
+        if (av) {
+          await app.evaluate(`window.__oc_debug.mods.open(${JSON.stringify(av.key)})`);
+          await sleep(500);
+          await app.screenshotOf(path.join(SHOTS, 'agent-mod-section-light.png'), `.rail-section[data-view="${av.key}"]`, 0);
+        }
         await shot(app, 'agent-mod-light');
       }
     } else if (want('agent')) console.log('skip agent: no API key (mock model)');

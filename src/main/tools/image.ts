@@ -8,13 +8,9 @@ import type { App } from '../app';
 import { describeImage, resolveUserPath, SHOWN_PREFIX, storeImage } from '../images/store';
 import type { Tool } from './types';
 
-/**
- * Hands an event to the session's agent so it travels like the agent's own (LiveState, app.events, the window).
- * The App has no public emit for a session; the agent's emitter is the runtime's dispatch for that session.
- */
+/** Puts the event on the session's stream, so the window, the remote and the history log all see the image. */
 function emitFor(app: App, sessionId: string, ev: AgentEvent): void {
-  const agent = app.runtime.agentFor(sessionId) as unknown as { emit?: (ev: AgentEvent) => void };
-  if (typeof agent.emit === 'function') agent.emit(ev);
+  app.runtime.emit(sessionId, ev);
 }
 
 export function showImageTool(app: App): Tool {

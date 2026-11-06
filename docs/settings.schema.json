@@ -271,7 +271,7 @@
           "apiKeyEnv": {
             "type": "string",
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-            "description": "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY. A project's settings.json may name one only for a type with its own documented address."
+            "description": "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY. Ignored in a project's settings.json, which may not choose whose key is sent."
           },
           "model": {
             "type": "string",

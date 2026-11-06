@@ -64,7 +64,7 @@ export const ENTRY_FIELDS: Record<keyof NamedProviderConfig, Field> = {
   label: { check: describe(nonEmpty, "How the window names it (default: the type's name).") },
   baseURL: { check: describe(httpUrl, "The OpenAI-compatible endpoint; overrides the type's. Required for openai-compatible. In a project's settings.json only for services that take no key (ollama, lmstudio, or openai-compatible without a key).") },
   apiKey: { check: describe(nonEmpty, "The key itself. Only in your own settings.json or config.json, never in a project's file; prefer apiKeyEnv.") },
-  apiKeyEnv: { check: describe(envName, "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY. A project's settings.json may name one only for a type with its own documented address.") },
+  apiKeyEnv: { check: describe(envName, "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY. Ignored in a project's settings.json, which may not choose whose key is sent.") },
   model: { check: describe(nonEmpty, 'The model to run, as the service names it.') },
   models: { check: describe(stringList, 'Models to offer in the model picker.') },
   headers: { check: describe(headerMap, "Extra request headers; ${VAR} is expanded in the values (not in a project's settings.json).") },
@@ -129,9 +129,10 @@ export function validateProviderEntry(name: string, raw: unknown, opts: EntryOpt
       problems.push({ key, message: "a project's settings.json may not hold a key; name the variable with apiKeyEnv instead" });
       continue;
     }
-    // An openai-compatible entry always has an address of its own: from a project it may not take a key at all.
-    if (field === 'apiKeyEnv' && opts.scope === 'project' && type === 'openai-compatible') {
-      problems.push({ key, message: "a project's settings.json may not give a key to an address of its own; define this provider in your own settings.json and select it here with \"provider\"" });
+    // A project may not choose whose key is sent: the type's usual variable is used, and an openai-compatible entry
+    // (an address of its own) takes no key at all from a project.
+    if (field === 'apiKeyEnv' && opts.scope === 'project') {
+      problems.push({ key, message: "a project's settings.json may not choose the variable that holds a key; the type's usual variable is used. For another variable, define this provider in your own settings.json and select it here with \"provider\"" });
       continue;
     }
     let rawValue = value;

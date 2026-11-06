@@ -209,11 +209,11 @@ What the model can do (images, tools) is detected for Ollama; for the other serv
 - A key in the `env` block is in the app's environment, so the commands the agent runs see it too. A key stored as `apiKey` (what `--key-stdin` does) is not.
 - A project's settings.json (applied only once you trust it) can define providers and choose one, but a repository must not carry, override or redirect a secret. In a project's file:
   - a key is never accepted: `apiKey`, `portkey.apiKey`, `portkey.providerApiKey`, and `env` variables whose names end in `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are ignored with a problem line;
-  - a service that takes a key (any type but `ollama`, `lmstudio` and `openai-compatible`, or any entry that names `apiKeyEnv`) keeps its documented address: an entry that sets its own `baseURL` is skipped whole. Define such a provider in your own settings.json and select it from the project with `"provider"`;
-  - an `openai-compatible` entry may not name `apiKeyEnv` (its address is always its own); it applies without a key;
+  - the variable that holds the key is never chosen there: `apiKeyEnv` is ignored with a problem line and the type's usual variable is used (`OPENAI_API_KEY` for `openai`, …); an `openai-compatible` entry applies without a key;
+  - a service that takes a key (any type but `ollama`, `lmstudio` and `openai-compatible`) keeps its documented address: an entry that sets its own `baseURL` is skipped whole;
   - a header value may not contain a `${VAR}` reference;
   - the built-in gateway block's `portkey.baseURL` is ignored (the gateway key would follow it); `portkey.model`, `virtualKey`, `provider` and `configId` still apply, since they go to the address you chose;
-  - `apiKeyEnv` for a type at its documented address, and a `baseURL` for `ollama` or `lmstudio` (no key), are fine.
+  - a `baseURL` for `ollama` or `lmstudio` (no key) is fine. For a provider with another variable or address, define it in your own settings.json and select it from the project with `"provider"`.
 
 ### The other settings
 

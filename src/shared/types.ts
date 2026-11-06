@@ -1,5 +1,8 @@
 // Types shared by the main process, preload and renderer.
 
+import type { ModsConfig } from './mods';
+import type { ImageInfo } from './images';
+
 export type ProviderKind = 'ollama' | 'portkey';
 
 /**
@@ -156,6 +159,20 @@ export interface AppConfig {
   allowRules: Record<string, StoredRules>;
   /** Working directories used before, most recent first (at most 8); the welcome screen offers them */
   recentDirs: string[];
+  /** Keep the Mac awake: never, while a session is running, or whenever the app is open */
+  keepAwake: 'off' | 'running' | 'always';
+  /** Fraction of the context window at which a run compacts on its own (0.5 to 0.95) */
+  compactThreshold: number;
+  /** Before summarising, shorten old tool results the model no longer needs word for word */
+  pruneToolResults: boolean;
+  /** Days a deleted session stays in the trash before it is removed for good (0: at once) */
+  historyTrashDays: number;
+  /** Mods: which are on, their settings, and how the rail and background are arranged */
+  mods: ModsConfig;
+  /** Remote control: whether it is on, who can reach it (this Mac or the local network) and the port (0: any free one) */
+  remote: { enabled: boolean; bind: 'localhost' | 'lan'; port: number };
+  /** Project settings.json files the user agreed to apply, by working directory: the SHA-256 of the content that was approved */
+  settingsTrusted: Record<string, string>;
 }
 
 /** What an approval card's "always" answer covers: the rest of this session, or this working directory from now on */
@@ -279,7 +296,15 @@ export type AgentEvent =
   /** kind 'notice' is informational (shown as a note, not an error), e.g. a model that runs without tools */
   | { type: 'error'; message: string; kind?: 'error' | 'notice' }
   | { type: 'session_changed'; session: SessionMeta }
-  | { type: 'run_end'; reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan' };
+  /** A user-role message entered the conversation (typed, queued, or delivered by a schedule, another session, the remote or a mod) */
+  | { type: 'user_message'; text: string; images: number; origin: MessageOrigin; turn?: number; from?: string }
+  /** The assistant finished one message: its full text (tool calls follow as tool_start events) */
+  | { type: 'assistant_message'; text: string; toolCalls: number }
+  | { type: 'approval_resolved'; id: string; ok: boolean; scope: 'once' | 'session' | 'project' }
+  /** The model showed an image with show_image; it appears inline in the reply */
+  | { type: 'image'; image: ImageInfo }
+  /** `text` is the last assistant text of the run */
+  | { type: 'run_end'; reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan'; text?: string };
 
 export interface BrowserState {
   url: string;
@@ -529,6 +554,14 @@ export interface SessionMeta {
   compactions?: number;
   /** The agent's current task list, if it keeps one */
   tasks?: TaskItem[];
+  /** The folder this session works in */
+  cwd?: string;
+  /** The session this one was spawned from (a sub-session) */
+  parentId?: string;
+  origin?: SessionOrigin;
+  status?: SessionStatus;
+  /** Set once the session was merged into another (its id) */
+  mergedInto?: string;
 }
 
 export interface SkillInfo {
@@ -551,7 +584,9 @@ export type TranscriptItem =
   /** A create_artifact call is shown as an artifact card instead of a tool row */
   | { role: 'artifact'; artifact: ArtifactInfo }
   /** A divider: everything above it was folded into the summary */
-  | { role: 'compaction'; compaction: CompactionInfo };
+  | { role: 'compaction'; compaction: CompactionInfo }
+  /** A show_image call is shown as the image itself instead of a tool row */
+  | { role: 'image'; image: ImageInfo };
 
 export interface SessionsApi {
   list(): Promise<SessionMeta[]>;
@@ -571,4 +606,51 @@ export interface SessionsApi {
 
 export interface SkillsApi {
   list(): Promise<SkillInfo[]>;
+}
+
+/** Where a user-role message came from. */
+export type MessageOrigin = 'user' | 'queue' | 'schedule' | 'session' | 'remote' | 'mod' | 'command';
+
+/** How a session came to be: started by the user, forked from another, spawned by an agent as a sub-session, or started by a schedule. */
+export type SessionOrigin = 'user' | 'fork' | 'spawn' | 'schedule';
+
+/** Run-time state of a session (only `unread` is stored). */
+export interface SessionStatus {
+  running: boolean;
+  /** The run is waiting for the user: an approval card or a proposed plan */
+  attention?: 'approval' | 'plan';
+  /** A run ended while the session was not on screen and it has not been opened since */
+  unread?: boolean;
+}
+
+/** What is in flight in a running session, so a window that switches to it can show what one that watched from the start would. */
+export interface LiveState {
+  running: boolean;
+  startedAt?: number;
+  /** Text of the assistant message being streamed (not yet in the transcript) */
+  text: string;
+  thinking: string;
+  /** Tool calls that have started and not finished */
+  tools: { id: string; name: string; args: unknown }[];
+  /** Approval cards waiting for an answer */
+  approvals: Extract<AgentEvent, { type: 'approval_request' }>[];
+  queue: QueuedMessage[];
+}
+
+export interface CommandInfo {
+  name: string;
+  description: string;
+  source: 'app' | 'mod';
+  /** Shown after the name in the menu, e.g. "<task>" */
+  argsHint?: string;
+}
+
+/** What running a slash command asks the window to do. */
+export interface CommandResult {
+  notice?: string;
+  error?: string;
+  /** Send this text as the user's message */
+  send?: string;
+  /** Put this text into the composer */
+  insert?: string;
 }

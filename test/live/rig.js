@@ -50,6 +50,7 @@ async function freePort() {
  *   seed        false leaves the profile without a config.json, to see what the app makes of the folder it finds
  *   env         extra environment variables for the app
  *   size        { width, height } of the page for screenshots (default 1440 x 900)
+ *   scale       device pixels per CSS pixel for screenshots (default 2; 1 gives native-size PNGs)
  *   binary      the executable of a packaged app to drive instead of `electron <root>` (also: OPEN_HARNESS_LIVE_APP),
  *               e.g. release/mac-arm64/Open Harness.app/Contents/MacOS/Open Harness
  *   ownsProfile whether close() removes the profile (default: only when the rig made it)
@@ -174,7 +175,7 @@ async function launch(opts = {}) {
   await cdp('Runtime.enable');
   await cdp('Page.enable');
   const size = opts.size || { width: 1440, height: 900 };
-  await cdp('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false });
+  await cdp('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: opts.scale || 2, mobile: false });
 
   /** Runs an expression in the page (promises are awaited) and returns its JSON value. */
   async function evaluate(expression) {
@@ -209,7 +210,7 @@ async function launch(opts = {}) {
     cdp,
     evaluate,
     waitFor,
-    /** PNG of the window's page (2x). `clip` is { x, y, width, height } in CSS pixels. */
+    /** PNG of the window's page (2x, or the launch's `scale`). `clip` is { x, y, width, height } in CSS pixels. */
     async screenshot(file, clip) {
       const r = await cdp('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
       fs.mkdirSync(path.dirname(file), { recursive: true });

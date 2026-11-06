@@ -286,6 +286,15 @@ export function needsStylesApproval(m: ModManifest | null): boolean {
   return !!m && (!!m.contributes?.styles?.length || !!m.contributes?.views?.some((v) => v.seat === 'background'));
 }
 
+/**
+ * A bundled mod that restyles the app itself (a theme, the compact chat bar) starts off: it changes how everything
+ * looks, so it is on only once the user turned it on (recorded in `enabled`, like a user mod). Other bundled mods are
+ * on unless the user turned them off (`disabledBundled`).
+ */
+export function bundledStartsOff(m: ModManifest | null): boolean {
+  return !!m?.contributes?.styles?.length;
+}
+
 /** Whether `value` fits a setting field (type, options, range). */
 export function settingFits(field: ModSettingField, value: unknown): boolean {
   switch (field.type) {

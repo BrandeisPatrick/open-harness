@@ -12,7 +12,7 @@ import type { AppConfig } from '../shared/types';
 import { configDir, projectConfigDir } from './paths';
 import { loadSkills } from './skills';
 import { ModRegistry } from './mods/registry';
-import { needsStylesApproval, settingFits } from './mods/manifest';
+import { bundledStartsOff, needsStylesApproval, settingFits } from './mods/manifest';
 import { BACKGROUND_LABEL, MOD_SCHEME, MOD_SCHEME_PRIVILEGES, resolveModUrl, type ServeContext } from './mods/serve';
 import { ModStorage } from './mods/storage';
 import { SkillUsageTracker } from './mods/skill-usage';
@@ -168,7 +168,10 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
       change((c) => {
         if (m.scope === 'bundled') {
           c.disabledBundled = c.disabledBundled.filter((id) => id !== m.id);
-          if (!on) c.disabledBundled.push(m.id);
+          if (bundledStartsOff(m.manifest)) {
+            if (on) c.enabled[m.key] = { permissions: [...(m.manifest?.permissions ?? [])], styles: true, at: Date.now() };
+            else delete c.enabled[m.key];
+          } else if (!on) c.disabledBundled.push(m.id);
         } else if (on) {
           // Turning on grants exactly what the manifest asks for now (which also resumes a paused mod).
           c.enabled[m.key] = { permissions: [...(m.manifest!.permissions ?? [])], styles: needsStylesApproval(m.manifest), at: Date.now() };

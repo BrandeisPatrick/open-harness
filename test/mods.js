@@ -305,6 +305,17 @@ const resetHome = () => {
     check('a bundled mod turned off is listed in disabledBundled', byId('alpha').state === 'off' && f.app.config().mods.disabledBundled.includes('alpha'));
     rpc(f, 'mods.setEnabled', 'alpha', true);
     check('and back on', byId('alpha').state === 'on' && !f.app.config().mods.disabledBundled.includes('alpha'));
+
+    // A bundled mod with styles (a theme, the compact chat bar) restyles the whole app, so it starts off
+    writeMod(f.roots.bundled, 'tinted', man('tinted', { contributes: { styles: ['theme.css'] } }), { 'theme.css': ':root{--accent:blue}' });
+    rpc(f, 'mods.reload');
+    check('a bundled styles mod starts off, and its styles are not served', byId('tinted').state === 'off' && !rpc(f, 'mods.styles').some((s) => s.key === 'tinted'));
+    rpc(f, 'mods.setEnabled', 'tinted', true);
+    check('turned on, it is on with its styles recorded, and its styles are served', byId('tinted').state === 'on' && f.app.config().mods.enabled.tinted.styles === true && rpc(f, 'mods.styles').some((s) => s.key === 'tinted' && /--accent:blue/.test(s.css)));
+    rpc(f, 'mods.setEnabled', 'tinted', false);
+    check('turned off again, it is off and forgotten (not in disabledBundled)', byId('tinted').state === 'off' && !f.app.config().mods.enabled.tinted && !f.app.config().mods.disabledBundled.includes('tinted'));
+    fs.rmSync(path.join(f.roots.bundled, 'tinted'), { recursive: true, force: true });
+    rpc(f, 'mods.reload');
   }
   {
     // Last good manifest

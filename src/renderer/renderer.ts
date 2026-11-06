@@ -2004,6 +2004,16 @@ function autosize(): void {
   updateSendButton();
 }
 
+// The bar is as tall as its text: a change of width (a pane opened or closed, the window resized) can rewrap it.
+{
+  let width = 0;
+  new ResizeObserver(() => {
+    if (inputEl.clientWidth === width) return;
+    width = inputEl.clientWidth;
+    autosize();
+  }).observe(inputEl);
+}
+
 /** ⌘↑ / ⌘↓: the messages sent in this session (the user bubbles on screen), newest first, then back to the draft */
 const composerHistory = createComposerHistory({
   input: inputEl,

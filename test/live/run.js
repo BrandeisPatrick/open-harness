@@ -36,6 +36,7 @@ const SCRIPTS = [
   { name: 'tool-rows' },
   { name: 'mods', shots: 'env' },
   { name: 'mods-look', shots: 'env' },
+  { name: 'type-scale' },
   { name: 'mods-protocol', shots: 'none' },
   { name: 'remote-page', electron: true },
 ];

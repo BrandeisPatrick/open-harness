@@ -363,8 +363,8 @@
   function applyPane() {
     var main = document.querySelector('.pg-main');
     if (!main || SHOT) return;
-    var rail = main.classList.contains('no-rail') ? '0' : '300px';
-    main.style.gridTemplateColumns = state.pane ? 'minmax(320px, 1fr) ' + rail + ' ' + state.pane + 'px' : '';
+    var rail = main.classList.contains('no-rail') ? ' ' : ' 300px ';
+    main.style.gridTemplateColumns = state.pane ? 'minmax(320px, 1fr)' + rail + state.pane + 'px' : '';
   }
 
   // ---------- side panels ----------

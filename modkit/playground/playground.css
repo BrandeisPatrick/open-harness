@@ -65,7 +65,7 @@ body.has-bg .pg-side, body.has-bg .pg-chat, body.has-bg .pg-rail, body.has-bg .p
 /* ---------- rail ---------- */
 .pg-rail { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; background: var(--bg-100); border-left: 1px solid var(--border-subtle); }
 /* A mod with no rail views gives the rail's room to the side pane */
-.pg-main.no-rail { grid-template-columns: minmax(320px, 1fr) 0 minmax(380px, 640px); }
+.pg-main.no-rail { grid-template-columns: minmax(320px, 1fr) minmax(380px, 640px); }
 .pg-main.no-rail .pg-rail { display: none; }
 .pg-rail:empty::before { content: 'No rail views in this mod.'; padding: 16px 12px; color: var(--text-400); font-size: 12px; }
 .pg-section { flex: none; border-bottom: 1px solid var(--border-subtle); }

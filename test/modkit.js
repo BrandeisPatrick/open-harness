@@ -536,6 +536,7 @@ async function readyPage(hello = HELLO) {
     'sub-sessions': { order: 45, permissions: ['session:read', 'session:control'] },
     skills: { order: 50, permissions: ['skills:read'] },
     'side-chat': { seat: 'tab', permissions: ['model', 'session:read', 'session:send'] },
+    scheduled: { seat: 'tab', permissions: ['schedules', 'session:control'] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
   check('mods/ holds the bundled mods', same(mods.map((m) => m.folder).sort(), Object.keys(EXPECTED).sort()), mods.map((m) => m.folder));
@@ -599,6 +600,24 @@ async function readyPage(hello = HELLO) {
     check('side-chat: keeps the conversation per session', /harness\.storage\.session\.(get|set)\('chat'/.test(html));
     check('side-chat: follows session.switched and puts answers in the composer', /harness\.on\('session\.switched'/.test(html) && /harness\.composer\.insert\(/.test(html));
     check('side-chat: Enter sends unless Shift is held or an IME is composing', /e\.key === 'Enter' && !e\.shiftKey && !e\.isComposing/.test(html));
+  }
+
+  // --- Scheduled ----------------------------------------------------------------------------------------------
+  {
+    const man = JSON.parse(fs.readFileSync(path.join(ROOT, 'mods/scheduled/mod.json'), 'utf8'));
+    const html = fs.readFileSync(path.join(ROOT, 'mods/scheduled/panel.html'), 'utf8');
+    check('scheduled: icon is clock', man.icon === 'clock');
+    for (const call of ['list', 'create', 'update', 'remove', 'runNow']) check(`scheduled: uses schedules.${call}`, html.includes(`harness.schedules.${call}(`));
+    check('scheduled: follows schedules.changed', /harness\.on\('schedules\.changed'/.test(html));
+    check('scheduled: opens a run\'s session with sessions.open', /harness\.sessions\.open\(/.test(html));
+    check('scheduled: Esc closes the delete confirmation', /e\.key !== 'Escape'/.test(html) && /confirming = null/.test(html));
+    check('scheduled: catches a past time, under five minutes and an empty prompt before sending', /has passed/.test(html) && /every 5 minutes/.test(html) && /errors\.prompt/.test(html));
+    // The page's own date handling: a local date and time become ISO with this machine's offset
+    const iso = /function isoLocal[\s\S]*?\n  \}/.exec(html);
+    const pad = (n) => String(n).padStart(2, '0');
+    const isoLocal = iso && new Function('pad', iso[0] + '; return isoLocal;')(pad);
+    const at = isoLocal && isoLocal('2026-11-06', '09:00');
+    check('scheduled: a local time becomes ISO with an offset that means the same moment', at && /^2026-11-06T09:00:00[+-]\d\d:\d\d$/.test(at) && new Date(Date.parse(at)).getHours() === 9, at);
   }
 
   // --- the manifest rules themselves -----------------------------------------------------------------------

@@ -1524,6 +1524,8 @@ function setRunning(v: boolean, startedAt = Date.now()): void {
   syncBusyUi();
   syncSpin();
   if (currentSessionId) statuses.set(currentSessionId, { ...statusOf(currentSessionId), running: v });
+  // The last run of calls is live while a run goes on (a session brought on screen mid-run, too)
+  updateGroup([...messagesEl.querySelectorAll(':scope > .tool-group')].pop() ?? null);
   if (v) {
     runStartedAt = startedAt;
     setStatus('run', baseVerb());

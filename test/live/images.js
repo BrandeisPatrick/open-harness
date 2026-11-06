@@ -115,6 +115,11 @@ function logoPng(size = 240) {
       await app.send('Open https://example.com in the browser, take a screenshot, and include the screenshot in your answer with show_image. One sentence is enough.');
       await app.waitIdle(240_000);
       await imagesLoaded(app);
+      // The browser calls fold into one line (Tool activity: Summary), which carries the screenshot's thumbnail;
+      // opened, it shows the screenshot's own row
+      const folded = await app.evaluate(`(() => { const g = document.querySelector('.tool[data-tool="browser_screenshot"]')?.closest('.tool-group'); if (!g) return null; const t = g.querySelector(':scope > summary .group-thumbs img.tool-thumb'); return { open: g.open, thumb: Boolean(t), thumbH: t ? t.getBoundingClientRect().height : 0 }; })()`);
+      check('(c) the folded line shows the screenshot as a 20 px thumbnail', !folded || (!folded.open && folded.thumb && Math.round(folded.thumbH) === 20), folded);
+      await app.evaluate(`document.querySelector('.tool[data-tool="browser_screenshot"]')?.closest('.tool-group')?.setAttribute('open', '')`);
       const shot = await app.evaluate(`(() => { const f = [...document.querySelectorAll('.reply-image')].pop(); const thumb = document.querySelector('.tool[data-tool="browser_screenshot"] > summary img.tool-thumb'); return { fig: f && f.querySelector('img').getAttribute('src'), thumb: Boolean(thumb), thumbH: thumb ? thumb.getBoundingClientRect().height : 0 }; })()`);
       check('(c) the screenshot is in the reply', shot.fig && /images\/img-3\.png$/.test(shot.fig), shot);
       check('(c) its tool row has a 20 px thumbnail', shot.thumb && Math.round(shot.thumbH) === 20, shot);

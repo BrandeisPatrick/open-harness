@@ -60,6 +60,9 @@ const allowed = (e) => e.tag === 'kbd' || /xterm/.test(e.cls);
       const d = window.__oc_debug;
       d.user('Make the retry backoff configurable and fix the flaky login test.');
       const e = d.emit;
+      // Thinking, then two calls: the calls fold into one line (Tool activity: Summary), so there are two lines in a row
+      e({ type: 'thinking_delta', text: 'The retry waits a fixed delay; the options should carry it.' });
+      e({ type: 'thinking_done' });
       e({ type: 'tool_start', id: 't1', name: 'read_file', args: { path: 'src/auth/login.ts' } });
       e({ type: 'tool_end', id: 't1', name: 'read_file', result: 'line\\nline\\nline', ok: true, durationMs: 4 });
       e({ type: 'tool_start', id: 't2', name: 'bash', args: { command: 'npm test' } });
@@ -85,7 +88,7 @@ const allowed = (e) => e.tag === 'kbd' || /xterm/.test(e.cls);
       const code = reply.querySelector('p code');
       const h2 = reply.querySelector('h2');
       const lis = [...reply.querySelectorAll('li')];
-      const tools = [...document.querySelectorAll('#messages > .tool')];
+      const tools = [...document.querySelectorAll('#messages > :is(.thinking, .tool, .tool-group)')];
       const bubble = q('#messages > .msg.user .bubble');
       const task = q('#task-list');
       const rows = [...document.querySelectorAll('.session-item')].filter((e) => e.offsetParent);
@@ -106,7 +109,7 @@ const allowed = (e) => e.tag === 'kbd' || /xterm/.test(e.cls);
         code: { fs: cs(code).fontSize, h: codeRect.height, pad: cs(code).paddingLeft, radius: cs(code).borderTopLeftRadius, border: cs(code).borderTopStyle },
         pre: { fs: cs(reply.querySelector('pre')).fontSize, lh: cs(reply.querySelector('pre')).lineHeight },
         liGap: lis.length > 1 ? Math.round(box(lis[1]).y - box(lis[0]).b) : null,
-        tool: { fs: cs(tools[0].querySelector('summary')).fontSize, h: box(tools[0].querySelector('summary')).h, color: cs(tools[0].querySelector('summary')).color, muted: cs(document.documentElement).getPropertyValue('--text-400').trim(), border: cs(tools[0]).borderTopStyle, pitch: Math.round(box(tools[1]).y - box(tools[0]).y), gapAfter: Math.round(box(reply).y - box(tools[1]).b) },
+        tool: { lines: tools.map((t) => t.className.split(' ')[0]).join(','), fs: cs(tools[1].querySelector('summary')).fontSize, h: box(tools[1].querySelector('summary')).h, color: cs(tools[1].querySelector('summary')).color, muted: cs(document.documentElement).getPropertyValue('--text-400').trim(), border: cs(tools[1]).borderTopStyle, pitch: Math.round(box(tools[1]).y - box(tools[0]).y), gapAfter: Math.round(box(reply).y - box(tools[1]).b) },
         bubble: { fs: cs(bubble).fontSize, pad: cs(bubble).padding, radius: cs(bubble).borderTopLeftRadius },
         task: { w: box(task).w, radius: cs(task).borderTopLeftRadius, pad: cs(task).paddingTop, row: box(task.querySelector('.task-row')).h, fs: cs(task.querySelector('.task-row')).fontSize },
         topbar: box(q('.topbar')).h, titleFs: cs(q('#session-title')).fontSize, titleFw: cs(q('#session-title')).fontWeight,
@@ -130,7 +133,7 @@ const allowed = (e) => e.tag === 'kbd' || /xterm/.test(e.cls);
     check('inline code: 0.9em mono (13.5 px), an 18 px chip, 4.5 px side padding, 4 px radius, no border', m.code.fs === '13.5px' && near(m.code.h, 18, 1) && m.code.pad === '4.5px' && m.code.radius === '4px' && m.code.border === 'none', m.code);
     check('code blocks 13/20 mono', m.pre.fs === '13px' && m.pre.lh === '20px', m.pre);
     check('list items about 4 px apart', m.liGap !== null && m.liGap >= 3 && m.liGap <= 5, m.liGap);
-    check('tool lines: 15 px, muted, a 24 px row, no box; 8 px between two, 16 px before the text', m.tool.fs === '15px' && m.tool.h === 24 && m.tool.border === 'none' && m.tool.pitch === 32 && m.tool.gapAfter === 16, m.tool);
+    check('tool lines: 15 px, muted, a 24 px row, no box; 8 px between two, 16 px before the text', m.tool.lines === 'thinking,tool-group' && m.tool.fs === '15px' && m.tool.h === 24 && m.tool.border === 'none' && m.tool.pitch === 32 && m.tool.gapAfter === 16, m.tool);
     check('the user bubble: 15 px, 12/16 padding, 12 px radius', m.bubble.fs === '15px' && m.bubble.pad === '12px 16px' && m.bubble.radius === '12px', m.bubble);
     check('the task card: the column width, 10 px radius, 12 px padding, 28 px rows at 14 px', m.task.w <= 736.5 && m.task.radius === '10px' && m.task.pad === '12px' && near(m.task.row, 28) && m.task.fs === '14px', m.task);
     check('top bar 44 px plus its hairline; the title 14 px regular', m.topbar === 45 && m.titleFs === '14px' && m.titleFw === '400', { h: m.topbar, fs: m.titleFs, fw: m.titleFw });

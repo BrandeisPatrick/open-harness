@@ -52,7 +52,7 @@ async function freePort() {
  *   size        { width, height } of the page for screenshots (default 1440 x 900)
  *   scale       device pixels per CSS pixel for screenshots (default 2; 1 gives native-size PNGs)
  *   binary      the executable of a packaged app to drive instead of `electron <root>` (also: SILO_HARNESS_LIVE_APP),
- *               e.g. release/mac-arm64/Open Harness.app/Contents/MacOS/Open Harness
+ *               e.g. release/mac-arm64/Silo Harness.app/Contents/MacOS/Silo Harness
  *   ownsProfile whether close() removes the profile (default: only when the rig made it)
  *
  * For crash tests: kill() ends the app with SIGKILL (nothing runs on the way out) and keeps the profile and the
@@ -66,7 +66,9 @@ async function launch(opts = {}) {
   const profile = opts.profile || fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-profile-'));
   const project = opts.project || fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-project-'));
   const home = path.join(profile, 'home-config');
-  fs.mkdirSync(home, { recursive: true });
+  // Not made when the test names the config folder itself (an empty value: the app's own, in a home the test made)
+  const ownConfigDir = !(opts.env && 'SILO_HARNESS_CONFIG_DIR' in opts.env);
+  if (ownConfigDir) fs.mkdirSync(home, { recursive: true });
 
   const key = opts.mock ? '' : process.env.ANTHROPIC_API_KEY || '';
   let mock = null;

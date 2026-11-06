@@ -1,6 +1,6 @@
-# Configure Open Harness from a file or the command line
+# Configure Silo Harness from a file or the command line
 
-Open Harness works with any service that speaks the OpenAI chat-completions API: OpenRouter, Portkey, OpenAI, Anthropic, Groq, DeepSeek, Together, Ollama, LM Studio, or a gateway of your own. You can set all of it in Settings, or in a plain file, `~/.open-harness/settings.json`, or with the `open-harness` command. The file and the command are made so that a coding agent (Claude Code, Codex, …) can do the setup for you: ask it to "set Open Harness up for OpenRouter" and point it at [For coding agents](#for-coding-agents).
+Silo Harness works with any service that speaks the OpenAI chat-completions API: OpenRouter, Portkey, OpenAI, Anthropic, Groq, DeepSeek, Together, Ollama, LM Studio, or a gateway of your own. You can set all of it in Settings, or in a plain file, `~/.silo-harness/settings.json`, or with the `silo` command. The file and the command are made so that a coding agent (Claude Code, Codex, …) can do the setup for you: ask it to "set Silo Harness up for OpenRouter" and point it at [For coding agents](#for-coding-agents).
 
 The running app reads the file again within a second of a change; nothing needs a restart.
 
@@ -11,13 +11,13 @@ The running app reads the file again within a second of a change; nothing needs 
 
 ## Shortest working examples
 
-Each block is a whole `~/.open-harness/settings.json`. `provider` chooses the provider in use; `providers` names as many as you like. The key comes from an environment variable (`apiKeyEnv`, or the type's usual one); the `env` block of the same file counts, which is the reliable place for it, because the app started from the Dock or Finder does not see what your shell profile exports.
+Each block is a whole `~/.silo-harness/settings.json`. `provider` chooses the provider in use; `providers` names as many as you like. The key comes from an environment variable (`apiKeyEnv`, or the type's usual one); the `env` block of the same file counts, which is the reliable place for it, because the app started from the Dock or Finder does not see what your shell profile exports.
 
 ### OpenRouter
 
 ```json
 {
-  "$schema": "https://brandeispatrick.github.io/open-harness/settings.schema.json",
+  "$schema": "https://brandeispatrick.github.io/silo-harness/settings.schema.json",
   "env": { "OPENROUTER_API_KEY": "sk-or-…" },
   "provider": "openrouter",
   "providers": {
@@ -123,12 +123,12 @@ Ollama on this Mac needs nothing: it is the default. For another machine, or a s
 
 ## The command line
 
-`open-harness` is inside the app: `/Applications/Open Harness.app/Contents/Resources/bin/open-harness`. It runs with the app's own Electron, so nothing else has to be installed, and it does not need the app to be running. Settings → General → Command line tool → Install links it as `~/.local/bin/open-harness` (no administrator password). From a checkout: `node bin/open-harness.js` (after `npm run build`).
+`silo` is inside the app: `/Applications/Silo Harness.app/Contents/Resources/bin/silo`. It runs with the app's own Electron, so nothing else has to be installed, and it does not need the app to be running. Settings → General → Command line tool → Install links it as `~/.local/bin/silo` (no administrator password). Before the app was renamed the command was `open-harness`; Install takes away the old link the app made. From a checkout: `node bin/silo.js` (after `npm run build`).
 
 ```bash
-open-harness provider add openrouter --type openrouter --model anthropic/claude-sonnet-4.5
-open-harness provider use openrouter
-open-harness provider test
+silo provider add openrouter --type openrouter --model anthropic/claude-sonnet-4.5
+silo provider use openrouter
+silo provider test
 ```
 
 | Command | What it does |
@@ -147,9 +147,9 @@ open-harness provider test
 
 Every command takes `--json` (`{"ok": true, …}` or `{"ok": false, "error": "…"}`) and `--help`. The exit code is 0 on success, 1 when something is wrong, 2 for a mistake in the command itself, with a one-line reason.
 
-A key is never taken from a command-line argument, which would stay in your shell history: `--key-env VAR` names the variable that holds it, and `--key-stdin` reads it from standard input (`pbpaste | open-harness provider add openrouter --type openrouter --key-stdin`, or type it at the prompt, where it is not shown) and stores it as `apiKey` in your settings.json.
+A key is never taken from a command-line argument, which would stay in your shell history: `--key-env VAR` names the variable that holds it, and `--key-stdin` reads it from standard input (`pbpaste | silo provider add openrouter --type openrouter --key-stdin`, or type it at the prompt, where it is not shown) and stores it as `apiKey` in your settings.json.
 
-The command writes only your settings.json, atomically, keeping every key it does not know about, in two-space JSON. `OPEN_HARNESS_CONFIG_DIR` moves the folder it uses, as it does for the app; `OPEN_HARNESS_USER_DATA` tells it where the app's data folder (with config.json) is, if not in the usual place.
+The command writes only your settings.json, atomically, keeping every key it does not know about, in two-space JSON. `SILO_HARNESS_CONFIG_DIR` moves the folder it uses, as it does for the app; `SILO_HARNESS_USER_DATA` tells it where the app's data folder (with config.json) is, if not in the usual place.
 
 ## Reference
 
@@ -157,11 +157,11 @@ The command writes only your settings.json, atomically, keeping every key it doe
 
 | File | What it is |
 | --- | --- |
-| `~/.open-harness/settings.json` | Yours. Always applied. The command line writes here. |
-| `<project>/.open-harness/settings.json` | A project's. Applied only once you trust it in Settings → Configuration files; an edit withdraws the approval. Wins over yours. |
-| `~/Library/Application Support/Open Harness/config.json` | What the window's Settings write. |
+| `~/.silo-harness/settings.json` | Yours. Always applied. The command line writes here. |
+| `<project>/.silo-harness/settings.json` | A project's. Applied only once you trust it in Settings → Configuration files; an edit withdraws the approval. Wins over yours. |
+| `~/Library/Application Support/Silo Harness/config.json` | What the window's Settings write. |
 
-Precedence: defaults < config.json < your settings.json < the project's. A field a file sets is read-only in Settings and is never written into config.json. A value of the wrong type, or an unknown key, is skipped and reported (in Settings → Configuration files, in `open-harness doctor`); the rest of the file still applies. `${VAR}` and `${VAR:-default}` are expanded in every string. The schema, for editors and agents: [settings.schema.json](https://brandeispatrick.github.io/open-harness/settings.schema.json) (put it in `"$schema"`).
+Precedence: defaults < config.json < your settings.json < the project's. A field a file sets is read-only in Settings and is never written into config.json. A value of the wrong type, or an unknown key, is skipped and reported (in Settings → Configuration files, in `silo doctor`); the rest of the file still applies. `${VAR}` and `${VAR:-default}` are expanded in every string. The schema, for editors and agents: [settings.schema.json](https://brandeispatrick.github.io/silo-harness/settings.schema.json) (put it in `"$schema"`).
 
 ### Providers
 
@@ -199,7 +199,7 @@ Fields of an entry (only `type` is required):
 | `virtualKey`, `config`, `provider` | `portkey` | `x-portkey-virtual-key`, `x-portkey-config`, `x-portkey-provider`. With `provider`, put the upstream key in `headers` as `"Authorization": "Bearer ${UPSTREAM_KEY}"`. |
 | `numCtx`, `think` | `ollama` | `num_ctx` (also the context window) and the thinking mode, as in the `ollama` block. An `ollama` entry uses Ollama's native API, like the block. |
 
-A bad field is skipped and reported; an entry without a usable `type`, or an `openai-compatible` one without `baseURL`, is skipped whole. A missing key is an error that names the variable to set, shown in Settings, under the chat bar and by `open-harness doctor`.
+A bad field is skipped and reported; an entry without a usable `type`, or an `openai-compatible` one without `baseURL`, is skipped whole. A missing key is an error that names the variable to set, shown in Settings, under the chat bar and by `silo doctor`.
 
 What the model can do (images, tools) is detected for Ollama; for the other services it is unknown, so the app does not refuse an image it cannot be sure about.
 
@@ -221,19 +221,19 @@ What the model can do (images, tools) is detected for Ollama; for the other serv
 
 ## For coding agents
 
-You are setting up Open Harness for the person you work with. Do it with the `open-harness` command; edit `~/.open-harness/settings.json` by hand only if the command is not available, and then keep every key that is already in the file.
+You are setting up Silo Harness for the person you work with. Do it with the `silo` command; edit `~/.silo-harness/settings.json` by hand only if the command is not available, and then keep every key that is already in the file.
 
-1. Find the command. In order: `open-harness` on the PATH; `/Applications/Open Harness.app/Contents/Resources/bin/open-harness`; in a checkout of the repository, `node bin/open-harness.js` after `npm run build`. Check it with `open-harness --help`.
-2. See what is there: `open-harness doctor --json` and `open-harness provider list --json`.
+1. Find the command. In order: `silo` on the PATH; `/Applications/Silo Harness.app/Contents/Resources/bin/silo`; in a checkout of the repository, `node bin/silo.js` after `npm run build`. Check it with `silo --help`.
+2. See what is there: `silo doctor --json` and `silo provider list --json`.
 3. Add the provider the person asked for, with the type from the table in [Providers](#providers) (use `openai-compatible` with `--base-url` for anything else) and the model they want:
-   `open-harness provider add openrouter --type openrouter --model anthropic/claude-sonnet-4.5 --use --json`
-4. The key. Ask the person; never invent one. If it is already in an environment variable the app can see, name it with `--key-env VAR`. Otherwise have them store it without showing it to you: they run `open-harness provider add … --key-stdin --replace` themselves and paste the key at the prompt, or put it in the `env` block of `~/.open-harness/settings.json`. Remember that the app opened from the Dock does not see variables exported in a shell profile.
-5. Check it: `open-harness provider test --json`. `"ok": true` with the model and the time means the app can use it. Otherwise the `error` says what the service answered (a refused key, an unknown model, an unreachable address); fix that and test again.
+   `silo provider add openrouter --type openrouter --model anthropic/claude-sonnet-4.5 --use --json`
+4. The key. Ask the person; never invent one. If it is already in an environment variable the app can see, name it with `--key-env VAR`. Otherwise have them store it without showing it to you: they run `silo provider add … --key-stdin --replace` themselves and paste the key at the prompt, or put it in the `env` block of `~/.silo-harness/settings.json`. Remember that the app opened from the Dock does not see variables exported in a shell profile.
+5. Check it: `silo provider test --json`. `"ok": true` with the model and the time means the app can use it. Otherwise the `error` says what the service answered (a refused key, an unknown model, an unreachable address); fix that and test again.
 6. Tell the person what you set: the provider name, the model, and that the app has picked it up already (it re-reads the file within a second).
 
 Never:
 
-- put a key in a project's `.open-harness/settings.json`, in a repository, in a commit, or in any file other than the person's own `~/.open-harness/settings.json`;
-- pass a key as a command-line argument, or print, echo or log one (no `cat ~/.open-harness/settings.json` when it holds keys: use `open-harness config get` and `doctor`, which never show them);
+- put a key in a project's `.silo-harness/settings.json`, in a repository, in a commit, or in any file other than the person's own `~/.silo-harness/settings.json`;
+- pass a key as a command-line argument, or print, echo or log one (no `cat ~/.silo-harness/settings.json` when it holds keys: use `silo config get` and `doctor`, which never show them);
 - invent a base URL for a service: use the type, or the URL the person or the service's documentation gives;
 - edit `config.json` while the app is running (the window owns it), or remove keys you did not add.

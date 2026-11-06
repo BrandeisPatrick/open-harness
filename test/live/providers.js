@@ -1,4 +1,4 @@
-// Live check of named providers in the real app, driven by the open-harness command as a coding agent would:
+// Live check of named providers in the real app, driven by the silo command as a coding agent would:
 //   - the app runs on a throwaway profile and config folder; the command adds an OpenRouter-style provider that
 //     points at the mock model and selects it; the window's label and Settings follow without a restart
 //   - a message is answered through it (with the key as bearer), a broken key gives the plain error, the window
@@ -27,7 +27,7 @@ const KEY = 'mock-live-key-0123456789';
   const cli = (args, env = {}, input) =>
     new Promise((resolve) => {
       const e = { ...process.env, SILO_HARNESS_CONFIG_DIR: home, SILO_HARNESS_USER_DATA: profile, ...env };
-      const child = spawn(process.execPath, [path.join(ROOT, 'bin', 'open-harness.js'), ...args], { env: e });
+      const child = spawn(process.execPath, [path.join(ROOT, 'bin', 'silo.js'), ...args], { env: e });
       let out = '';
       let err = '';
       child.stdout.on('data', (c) => (out += c));
@@ -70,11 +70,11 @@ const KEY = 'mock-live-key-0123456789';
 
     // --- The command adds a provider and selects it; the window follows without a restart ---
     let r = await cli(['provider', 'add', 'openrouter', '--type', 'openrouter', '--base-url', mockURL, '--key-env', 'MOCK_PROVIDER_KEY', '--model', 'anthropic/claude-sonnet-4.5', '--models', 'anthropic/claude-sonnet-4.5,openai/gpt-5-mini,google/gemini-3-pro', '--json']);
-    check('open-harness provider add: ok', r.code === 0 && r.json?.ok, r.out + r.err);
+    check('silo provider add: ok', r.code === 0 && r.json?.ok, r.out + r.err);
     await cli(['provider', 'add', 'groq', '--type', 'groq', '--model', 'llama-3.3-70b-versatile']);
     await cli(['provider', 'add', 'lmstudio', '--type', 'lmstudio', '--model', 'qwen2.5-coder-14b-instruct', '--context-window', '32768']);
     r = await cli(['provider', 'use', 'openrouter', '--json']);
-    check('open-harness provider use: ok', r.code === 0 && r.json?.provider?.name === 'openrouter', r.out + r.err);
+    check('silo provider use: ok', r.code === 0 && r.json?.provider?.name === 'openrouter', r.out + r.err);
     const followed = await until(async () => (await cfg()).providerView?.active?.name === 'openrouter');
     check('the running app picked the change up from settings.json', Boolean(followed));
     const btn = await until(async () => {
@@ -93,7 +93,7 @@ const KEY = 'mock-live-key-0123456789';
     const reply = await app.lastReply();
     const req = mock.state.requests.filter((q) => q.url === '/v1/chat/completions').pop();
     check('a message is answered through it', /Hello from the OpenRouter-style provider/.test(reply), reply);
-    check('… with the key as bearer, the model, and OpenRouter’s attribution headers', req?.headers.authorization === `Bearer ${KEY}` && req.payload.model === 'anthropic/claude-sonnet-4.5' && req.headers['x-openrouter-title'] === 'Open Harness', req && { auth: Boolean(req.headers.authorization), model: req.payload.model });
+    check('… with the key as bearer, the model, and OpenRouter’s attribution headers', req?.headers.authorization === `Bearer ${KEY}` && req.payload.model === 'anthropic/claude-sonnet-4.5' && req.headers['x-openrouter-title'] === 'Silo Harness' && req.headers['http-referer'] === 'https://github.com/BrandeisPatrick/silo-harness', req && { auth: Boolean(req.headers.authorization), model: req.payload.model });
     await app.screenshot(path.join(shots, 'chat-model-button-openrouter.png'));
     await app.screenshotOf(path.join(shots, 'chat-model-button-openrouter-detail.png'), '#model-btn', 24);
 
@@ -169,21 +169,21 @@ const KEY = 'mock-live-key-0123456789';
     // --- The Command line tool row ---
     await open('general');
     const cliDesc = await app.text('#sp-row-cli .sp-row-desc');
-    check('the Command line tool row shows the command’s full path', /bin\/open-harness/.test(cliDesc || ''), cliDesc);
+    check('the Command line tool row shows the command’s full path', /bin\/silo/.test(cliDesc || ''), cliDesc);
     await app.evaluate(`[...document.querySelectorAll('#sp-row-cli button')].find((b) => /Install/.test(b.innerText)).click()`);
-    const linked = await until(() => fs.existsSync(path.join(linkDir, 'open-harness')));
-    check('Install links it in the link folder', Boolean(linked) && fs.readlinkSync(path.join(linkDir, 'open-harness')).endsWith(path.join('bin', 'open-harness')));
+    const linked = await until(() => fs.existsSync(path.join(linkDir, 'silo')));
+    check('Install links it in the link folder', Boolean(linked) && fs.readlinkSync(path.join(linkDir, 'silo')).endsWith(path.join('bin', 'silo')));
     await until(async () => /Linked|not on your PATH/.test((await app.text('#sp-row-cli .sp-row-desc')) || ''));
     await app.screenshot(path.join(shots, 'settings-general-command-line-tool.png'));
     const viaLink = await new Promise((resolve) => {
-      const child = spawn(path.join(linkDir, 'open-harness'), ['provider', 'list', '--json'], { env: { ...process.env, SILO_HARNESS_CONFIG_DIR: home, SILO_HARNESS_USER_DATA: profile } });
+      const child = spawn(path.join(linkDir, 'silo'), ['provider', 'list', '--json'], { env: { ...process.env, SILO_HARNESS_CONFIG_DIR: home, SILO_HARNESS_USER_DATA: profile } });
       let out = '';
       child.stdout.on('data', (x) => (out += x));
       child.on('close', (code) => resolve({ code, out }));
     });
     check('the linked command runs', viaLink.code === 0 && /"active": "openrouter"/.test(viaLink.out), viaLink.out.slice(0, 200));
     await app.evaluate(`[...document.querySelectorAll('#sp-row-cli button')].find((b) => /Remove/.test(b.innerText)).click()`);
-    check('Remove takes the link away', Boolean(await until(() => !fs.existsSync(path.join(linkDir, 'open-harness')))));
+    check('Remove takes the link away', Boolean(await until(() => !fs.existsSync(path.join(linkDir, 'silo')))));
     await closeSettings();
     check('no key in settings.json for a provider that reads a variable', !fs.readFileSync(userFile, 'utf8').includes(KEY));
     check('no entry from settings.json was written into config.json', !JSON.parse(fs.readFileSync(path.join(profile, 'config.json'), 'utf8')).providers?.openrouter);
@@ -196,7 +196,7 @@ const KEY = 'mock-live-key-0123456789';
       r = await cli(['provider', 'add', 'claude', '--type', 'anthropic', '--key-env', 'ANTHROPIC_API_KEY', '--model', LIVE_MODEL, '--context-window', '200000', '--use', '--json']);
       check('anthropic provider added with apiKeyEnv', r.code === 0 && r.json?.provider?.key === 'set' && r.json.provider.baseURL === 'https://api.anthropic.com/v1', r.json?.provider);
       r = await cli(['provider', 'test', 'claude']);
-      check('open-harness provider test claude: ok with the model and the time', r.code === 0 && /^ok {2}Anthropic · claude-/.test(r.out), r.out + r.err);
+      check('silo provider test claude: ok with the model and the time', r.code === 0 && /^ok {2}Anthropic · claude-/.test(r.out), r.out + r.err);
       check('… and printed no key', !(r.out + r.err).includes(realKey));
       await until(async () => (await cfg()).providerView?.active?.name === 'claude');
       c = await cfg();

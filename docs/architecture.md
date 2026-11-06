@@ -33,7 +33,7 @@ providers resolved in `providerView`), used by `config:get`/`config:set`/`config
 real keys back on the way in and ignores `providers` (changed by the files, the command and `providers.setModel`).
 `scrubSecrets` takes every resolved key out of a message; the agent's errors and `plainError` go through it.
 
-`bin/open-harness.js` (the command, shipped as Contents/Resources/bin/open-harness and run by the app's Electron in
+`bin/silo.js` (the command, shipped as Contents/Resources/bin/silo and run by the app's Electron in
 Node mode) loads dist/main/settings.js, config.js, provider-presets.js and providers.js, none of which load Electron
 (config.ts requires it lazily in `configPath()`), and writes only the user's settings.json.
 

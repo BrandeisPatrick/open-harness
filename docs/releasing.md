@@ -29,9 +29,9 @@ Development happens on `next`; `main` is what was released.
 
 1. On `next`, rename `## Unreleased` in CHANGELOG.md to `## X.Y.Z` and set the version: `npm version X.Y.Z --no-git-tag-version`. If the window changed, redo the screenshots (`npm run build && node scripts/readme-shots.js && node scripts/readme-shots.js --dark && node scripts/looks-shot.js && node scripts/tool-activity-shot.js && node scripts/dreaming-shot.js`) and look at them: the README uses the light ones, the website both. The website is `docs/index.html`, served by GitHub Pages from the `/docs` folder of `main`, so it changes when a release is merged.
 2. Check the code: `npm run typecheck`, `npm test`, and `npm run test:live` with `ANTHROPIC_API_KEY` set, so the live scripts run against a real model.
-3. Build what will ship: `npm run dist` (a DMG and a zip in `release/`). Unpack the zip and run the live scripts against that app (`OPEN_HARNESS_LIVE_APP=<path to the binary inside the .app> npm run test:live`), and at least `smoke` against the copy in the mounted DMG.
+3. Build what will ship: `npm run dist` (a DMG and a zip in `release/`). Unpack the zip and run the live scripts against that app (`SILO_HARNESS_LIVE_APP=<path to the binary inside the .app> npm run test:live`), and at least `smoke` against the copy in the mounted DMG.
 4. Push `next` and open the pull request into `main`.
-5. Draft the release from the commit the files were built from: `node scripts/release-notes.js X.Y.Z notes.md`, then `gh release create vX.Y.Z --draft --target <commit> --title "Open Harness X.Y.Z" --notes-file notes.md release/Open-Harness-X.Y.Z-arm64.dmg release/Open-Harness-X.Y.Z-arm64.zip`.
+5. Draft the release from the commit the files were built from: `node scripts/release-notes.js X.Y.Z notes.md`, then `gh release create vX.Y.Z --draft --target <commit> --title "Silo Harness X.Y.Z" --notes-file notes.md release/Silo-Harness-X.Y.Z-arm64.dmg release/Silo-Harness-X.Y.Z-arm64.zip`.
 6. Merge the pull request with a merge commit, so the tagged commit is part of `main`, and publish the draft; publishing creates the tag. Check the release page and both downloads signed out, and that the checksums GitHub shows are the ones in the notes.
 
 The build is ad-hoc signed and not notarized, so the notes carry the "Open Anyway" instruction until that changes.

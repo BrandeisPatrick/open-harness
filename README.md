@@ -1,13 +1,13 @@
 <p align="center"><img src="build/icon.png" width="84" alt=""></p>
-<h1 align="center">Open Harness</h1>
+<h1 align="center">Silo Harness</h1>
 <p align="center">An open-source agent harness for macOS, in the style of Claude Code. Local models via Ollama, any provider through an OpenAI-compatible endpoint. Everything beside the chat is a mod you can change.</p>
 <p align="center">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20silicon-lightgrey.svg">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-45-47848F.svg">
 </p>
-<p align="center"><a href="https://brandeispatrick.github.io/open-harness/">Website</a> · <a href="https://github.com/BrandeisPatrick/open-harness/releases/latest">Download</a></p>
-<p align="center"><img src="docs/screenshots/hero.png" width="820" alt="Open Harness"></p>
+<p align="center"><a href="https://brandeispatrick.github.io/silo-harness/">Website</a> · <a href="https://github.com/BrandeisPatrick/silo-harness/releases/latest">Download</a></p>
+<p align="center"><img src="docs/screenshots/hero.png" width="820" alt="Silo Harness"></p>
 
 ## Why
 
@@ -27,15 +27,15 @@
 ```bash
 brew install ollama && ollama serve &
 ollama pull qwen3:8b
-git clone https://github.com/BrandeisPatrick/open-harness.git && cd open-harness
+git clone https://github.com/BrandeisPatrick/silo-harness.git && cd silo-harness
 npm install && npm start
 ```
 
-Or download the app from [Releases](https://github.com/BrandeisPatrick/open-harness/releases). It isn't notarized yet: on first launch, open it once, then allow it in System Settings → Privacy & Security → Open Anyway.
+Or download the app from [Releases](https://github.com/BrandeisPatrick/silo-harness/releases). It isn't notarized yet: on first launch, open it once, then allow it in System Settings → Privacy & Security → Open Anyway.
 
-Hosted models: OpenRouter, Portkey, OpenAI, Anthropic, Groq, DeepSeek, Together, LM Studio or any OpenAI-compatible service, chosen in Settings → Model or named in `~/.open-harness/settings.json`.
+Hosted models: OpenRouter, Portkey, OpenAI, Anthropic, Groq, DeepSeek, Together, LM Studio or any OpenAI-compatible service, chosen in Settings → Model or named in `~/.silo-harness/settings.json`.
 
-Any coding agent can do the setup for you with the command inside the app, `Open Harness.app/Contents/Resources/bin/open-harness` (`open-harness provider add openrouter --type openrouter --model … --use`, then `open-harness provider test`): see [docs/configure.md](docs/configure.md).
+Any coding agent can do the setup for you with the command inside the app, `Silo Harness.app/Contents/Resources/bin/silo` (`silo provider add openrouter --type openrouter --model … --use`, then `silo provider test`): see [docs/configure.md](docs/configure.md).
 
 ## Features
 
@@ -73,7 +73,7 @@ Also: scheduled tasks, plan mode, rewind, artifacts, skills, MCP servers, compac
 </script>
 ```
 
-Put them in `~/.open-harness/mods/word-count/`, turn the mod on, and the panel is in the rail. Or ask the agent: "make a mod that shows …".
+Put them in `~/.silo-harness/mods/word-count/`, turn the mod on, and the panel is in the rail. Or ask the agent: "make a mod that shows …".
 
 ## Develop
 

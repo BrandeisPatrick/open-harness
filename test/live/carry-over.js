@@ -1,7 +1,9 @@
-// Live check of the first launch after the rename: a data folder left by an earlier name of the app (OpenAgent)
+// Live check of the first launch after a rename. Part 1: a data folder left by an earlier name of the app (OpenAgent)
 // sits beside the new one. Its settings, sessions and artifacts are moved over and show up in the window; what the
 // app never wrote stays behind; a second launch finds everything in place and moves nothing. Both folders are made
-// in a temp directory: your own data folders are never read.
+// in a temp directory: your own data folders are never read. Part 2, the rename to Silo Harness: the whole
+// "Open Harness" data folder is renamed, and ~/.open-harness (in a temporary home) becomes ~/.silo-harness with a
+// link left at the old place.
 //
 //   npm run build && node test/live/carry-over.js
 const fs = require('node:fs');
@@ -13,7 +15,7 @@ const { launch, checker, sleep } = require('./rig.js');
   const { check, done } = checker();
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-carry-')));
   const old = path.join(tmp, 'OpenAgent');
-  const next = path.join(tmp, 'Open Harness');
+  const next = path.join(tmp, 'Silo Harness');
   const project = path.join(tmp, 'project');
   fs.mkdirSync(project);
   fs.mkdirSync(path.join(old, 'sessions'), { recursive: true });
@@ -74,8 +76,44 @@ const { launch, checker, sleep } = require('./rig.js');
     await sleep(300);
     const again = await app.evaluate(`window.oc.getConfig()`);
     check('a second launch keeps the new folder as it is', again.permissionMode === 'plan' && !(await app.exists('.session-item[data-id="stale"]')) && fs.existsSync(path.join(old, 'sessions', 'stale.json')) && !app.logs.some((l) => /\[data\] moved/.test(l)), { mode: again.permissionMode });
+    await app.close();
+    app = null;
+
+    // ---- Part 2: Open Harness → Silo Harness ----
+    const support = path.join(tmp, 'support');
+    const ohData = path.join(support, 'Open Harness');
+    const shData = path.join(support, 'Silo Harness');
+    const home = path.join(tmp, 'home');
+    fs.mkdirSync(path.join(ohData, 'sessions'), { recursive: true });
+    fs.writeFileSync(path.join(ohData, 'config.json'), JSON.stringify({ ...config, permissionMode: 'acceptEdits' }));
+    fs.writeFileSync(path.join(ohData, 'sessions', 'oh-1.json'), JSON.stringify({ ...session, id: 'oh-1', title: 'Carried over from Open Harness' }));
+    fs.writeFileSync(path.join(ohData, 'Preferences'), '{}');
+    fs.mkdirSync(path.join(home, '.open-harness', 'skills', 'mine'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.open-harness', 'skills', 'mine', 'SKILL.md'), '---\nname: mine\ndescription: A skill from before the rename\n---\nDo it.');
+    fs.writeFileSync(path.join(home, '.open-harness', 'OPENHARNESS.md'), '- Old user instructions\n');
+    // No config-folder override (the rig sets one), and a home of its own, so the move happens in the temp folder
+    const opts2 = { profile: shData, project, seed: false, mock: true, ownsProfile: false, env: { HOME: home, SILO_HARNESS_CONFIG_DIR: '', OPEN_HARNESS_CONFIG_DIR: '' } };
+    app = await launch(opts2);
+    const row2 = '.session-item[data-id="oh-1"]';
+    await app.waitFor(`Boolean(document.querySelector(${JSON.stringify(row2)}))`, 10_000, 'the Open Harness session in the sidebar');
+    check('rename: the Open Harness session is in the sidebar', (await app.text(`${row2} .label`)) === 'Carried over from Open Harness');
+    check('rename: the data folder was renamed whole (Chromium files too) and the old one is gone', fs.existsSync(path.join(shData, 'config.json')) && fs.existsSync(path.join(shData, 'Preferences')) && !fs.existsSync(ohData));
+    const cfg2 = await app.evaluate(`window.oc.getConfig()`);
+    check('rename: the settings came along', cfg2.permissionMode === 'acceptEdits', cfg2.permissionMode);
+    const linkAt = path.join(home, '.open-harness');
+    check('rename: ~/.open-harness is now ~/.silo-harness', fs.existsSync(path.join(home, '.silo-harness', 'skills', 'mine', 'SKILL.md')) && fs.lstatSync(path.join(home, '.silo-harness')).isDirectory());
+    check('rename: … with a link left at ~/.open-harness', fs.lstatSync(linkAt).isSymbolicLink() && fs.realpathSync(linkAt) === path.join(home, '.silo-harness'));
+    const skills = await app.evaluate(`window.oc.skills.list()`);
+    check('rename: the skill from ~/.open-harness is listed', Array.isArray(skills) && skills.some((k) => k.name === 'mine' && k.source === 'user'), skills && skills.map((k) => k.name));
+    check('rename: the moves are in the log', app.logs.some((l) => /\[migrate\] moved .*Open Harness to .*Silo Harness/.test(l)) && app.logs.some((l) => /\[migrate\] left a link/.test(l)), app.logs.filter((l) => /migrate/.test(l)));
+    await app.close();
+    app = null;
+    // A second launch: both new folders exist, nothing moves
+    app = await launch(opts2);
+    await app.waitFor(`Boolean(document.querySelector(${JSON.stringify(row2)}))`, 10_000, 'the session after the second launch');
+    check('rename: a second launch moves nothing', !app.logs.some((l) => /\[migrate\]/.test(l)) && fs.lstatSync(linkAt).isSymbolicLink(), app.logs.filter((l) => /migrate/.test(l)));
   } catch (err) {
-    check(`the run finished without an error: ${err.message}`, false, app ? app.logs.slice(-8) : undefined);
+    check(`the run finished without an error: ${err.message}`, false, app ? app.logs.filter((l) => /migrate|data\]/.test(l)).concat(app.logs.slice(-4)) : undefined);
   } finally {
     await app?.close().catch(() => undefined);
     fs.rmSync(tmp, { recursive: true, force: true });

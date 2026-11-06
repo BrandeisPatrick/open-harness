@@ -3960,6 +3960,8 @@ window.__oc_debug = {
 // [feature:tasks]
 
 // [feature:images]
+import { setupImageView } from './images.js';
+setupImageView({ messages: messagesEl, openLightbox, showError: showInlineError });
 
 // [feature:history]
 

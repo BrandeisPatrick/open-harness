@@ -1,1 +1,64 @@
 /* Styles for images in replies and thumbnails on tool rows. Tokens come from styles.css. */
+
+/* ---- Figures (show_image): fitted into 420 × 320, never scaled up; consecutive ones share a row and wrap ---- */
+/* margin-top/bottom only: the transcript centres its rows with auto side margins */
+.reply-images { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 4px; margin-bottom: 16px; }
+.reply-image { position: relative; display: flex; flex-direction: column; max-width: 100%; margin: 0; }
+.reply-image-frame {
+  /* The hairline goes around the fitted size, so the image itself is never shrunk by it */
+  display: block; box-sizing: content-box; max-width: calc(100% - 2px); overflow: hidden;
+  border: 1px solid var(--border-subtle); border-radius: var(--r-card);
+  background: var(--bg-200); cursor: zoom-in;
+}
+.reply-image-frame:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.reply-image-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* No pixel size known (SVG): the box follows the image, within the same bounds */
+.reply-image.unsized .reply-image-frame { background: none; }
+.reply-image.unsized .reply-image-frame img { width: auto; height: auto; max-width: min(420px, 100%); max-height: 320px; min-width: 24px; min-height: 24px; }
+.reply-image.broken .reply-image-frame { display: flex; align-items: center; justify-content: center; min-width: 160px; min-height: 64px; cursor: default; }
+.reply-image.broken .reply-image-frame img { display: none; }
+.reply-image.broken .reply-image-frame::after { content: 'Image unavailable'; font-size: 12px; line-height: 16px; color: var(--text-400); }
+.reply-image.broken .reply-image-tools { display: none; }
+.reply-image figcaption { width: 0; min-width: 100%; margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--text-400); overflow-wrap: anywhere; }
+
+/* Hover toolbar, in the style of the assistant message's Copy button */
+.reply-image-tools {
+  position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 2px;
+  background: var(--bg-000); border: 1px solid var(--border-subtle); border-radius: var(--r-card); box-shadow: var(--shadow-sm);
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.reply-image:hover .reply-image-tools, .reply-image-tools:focus-within { opacity: 1; pointer-events: auto; }
+.reply-image-tools .icon-btn.done { color: var(--success); }
+
+/* ---- Thumbnails at the right end of a tool row's (or a group row's) summary line ---- */
+.tool-thumb {
+  flex: none; display: block; height: 20px; width: auto; max-width: 40px; object-fit: cover;
+  border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--bg-200); cursor: zoom-in;
+}
+.tool-thumb:hover { border-color: var(--border); }
+.tool-meta + .tool-thumb { margin-left: -2px; }
+.group-thumbs { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.group-thumbs .thumb-more { font-size: 11px; line-height: 16px; color: var(--text-400); font-variant-numeric: tabular-nums; }
+.tool-group[open] > summary > .group-thumbs { display: none; }
+
+/* ---- Markdown images in a reply ---- */
+.md img.md-img {
+  display: inline-block; vertical-align: top; max-width: min(420px, 100%); max-height: 320px; margin: 2px 0;
+  border: 1px solid var(--border-subtle); border-radius: var(--r-card); cursor: zoom-in;
+}
+.md .md-img-pending {
+  display: inline-flex; align-items: center; gap: 6px; vertical-align: top; min-width: 160px; max-width: 100%; height: 64px; padding: 0 12px;
+  border: 1px dashed var(--border); border-radius: var(--r-card); background: var(--bg-200);
+  font-size: 12px; line-height: 16px; color: var(--text-400);
+}
+.md .md-img-pending > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md .md-img-missing, .md a.md-img-link {
+  display: inline-flex; align-items: center; gap: 4px; vertical-align: -5px; max-width: 100%; height: 22px; padding: 0 8px;
+  border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--bg-200);
+  font-size: 12px; line-height: 16px; color: var(--text-400); text-decoration: none;
+}
+.md .md-img-missing > span, .md a.md-img-link > span:not(.md-img-arrow) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md .md-img-missing .icon, .md a.md-img-link .icon { flex: none; }
+.md a.md-img-link { color: var(--text-200); }
+.md a.md-img-link:hover { background: var(--hover); color: var(--text-100); }
+.md .md-img-arrow { flex: none; color: var(--text-400); }

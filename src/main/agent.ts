@@ -415,6 +415,10 @@ export class Agent {
     this.compactedAt = -1;
     this.emit({ type: 'run_start' });
     this.emitUserMessage(userText, attachments.length, origin, opts.from);
+    // Saved now, not only at the end: the session gets its title from this message at once, so a sidebar with
+    // several running sessions does not show several "New session" rows.
+    this.store.save(this.session);
+    this.emit({ type: 'session_changed', session: toMeta(this.session) });
 
     try {
       const { client, model } = cfg.provider === 'ollama' ? { client: null, model: cfg.ollama.model } : makeClient(cfg);

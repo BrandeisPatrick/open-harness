@@ -1,17 +1,17 @@
-# UI audit: OpenAgent vs Claude Code desktop (2026-10-28)
+# UI audit: Open Harness vs Claude Code desktop (2026-10-28)
 
-Goal: make OpenAgent feel like a sibling of the Claude Code desktop app (Code tab) and, where cheap, better. This document records what was inspected, the reference values, every gap found, and the implementation spec that follows from it.
+Goal: make Open Harness feel like a sibling of the Claude Code desktop app (Code tab) and, where cheap, better. This document records what was inspected, the reference values, every gap found, and the implementation spec that follows from it.
 
 ## Method
 
-- OpenAgent was driven over the Chrome DevTools Protocol through every state (empty, settings, slash menu, browser pane, a real tool-using run with qwen3:8b, expanded tool rows and thinking, an approval card) in light and dark, with 2x detail crops of the composer, sidebar, top bar, approval card and tool rows. Screenshots live in the session scratchpad under `audit/shots/`.
-- Reference values come from the design tokens the installed Claude desktop app ships in its main-window stylesheet (read locally, used only for colour, size, radius, weight and font-stack values; no code or fonts were copied). The proprietary Anthropic Sans / Anthropic Serif fonts are not redistributable, so OpenAgent uses the platform equivalents listed below.
+- Open Harness was driven over the Chrome DevTools Protocol through every state (empty, settings, slash menu, browser pane, a real tool-using run with qwen3:8b, expanded tool rows and thinking, an approval card) in light and dark, with 2x detail crops of the composer, sidebar, top bar, approval card and tool rows. Screenshots live in the session scratchpad under `audit/shots/`.
+- Reference values come from the design tokens the installed Claude desktop app ships in its main-window stylesheet (read locally, used only for colour, size, radius, weight and font-stack values; no code or fonts were copied). The proprietary Anthropic Sans / Anthropic Serif fonts are not redistributable, so Open Harness uses the platform equivalents listed below.
 
-## Reference tokens (Claude desktop) and what OpenAgent should use
+## Reference tokens (Claude desktop) and what Open Harness should use
 
-Fonts (Claude → OpenAgent):
+Fonts (Claude → Open Harness):
 
-| Role | Claude | OpenAgent |
+| Role | Claude | Open Harness |
 | --- | --- | --- |
 | UI and transcript | Anthropic Sans, fallback ui-sans-serif/system-ui | `-apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif` |
 | Display (greeting, empty state) | Anthropic Serif, fallback ui-serif/Georgia | `ui-serif, "New York", Georgia, serif`, weight 500 |
@@ -85,7 +85,7 @@ Transcript
 20. (M) Bash rows should show the command in the body in a mono block prefixed by `$`, then the output block; the output block gets a Copy button.
 21. (L) Consecutive read_file/glob/grep/list_directory rows (3 or more) should collapse into one group row "Read 4 files" that expands to the individual rows.
 22. (L) Fade-in new nodes (opacity 0→1, translateY 2px, 120ms); respect `prefers-reduced-motion`.
-23. (M) The approval card copies Claude's wording and keys: title "Allow OpenAgent to run this command?" (or "edit <basename>?", "write <basename>?"), the detail block (for edits show the diff component, not raw text), then buttons right-aligned: Deny (plain), "Allow for this session" (plain), Allow (accent). Keyboard: Enter/y allow, n deny, a allow-for-session; show the keys as `kbd` badges inside the buttons on the right (Claude style), not a "y / n" string on the left. After deciding, collapse the card to a one-line muted summary ("Allowed · ls -la", "Denied") with a check or x icon.
+23. (M) The approval card copies Claude's wording and keys: title "Allow Open Harness to run this command?" (or "edit <basename>?", "write <basename>?"), the detail block (for edits show the diff component, not raw text), then buttons right-aligned: Deny (plain), "Allow for this session" (plain), Allow (accent). Keyboard: Enter/y allow, n deny, a allow-for-session; show the keys as `kbd` badges inside the buttons on the right (Claude style), not a "y / n" string on the left. After deciding, collapse the card to a one-line muted summary ("Allowed · ls -la", "Denied") with a check or x icon.
 24. (M) The status line while working: spinner + verb ("Working…", "Thinking…", "Running bash…", "Waiting for approval") + elapsed, then on the right the token counter from `usage` events ("12.4k tokens" = prompt+completion of the latest call, with a tooltip showing input/output) and "esc to interrupt" in a kbd badge. Keep the Stop button behaviour. If no usage event arrives, hide the counter.
 25. (L) System notices (mode changes, fork notices) should be a quiet centred 12px line with an info icon; errors a danger-tinted row with an alert icon.
 

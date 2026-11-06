@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type OpenAI from 'openai';
-import type { CompactionInfo, PlanInfo, SessionMeta, TaskItem, TranscriptItem, ArtifactInfo } from '../shared/types';
+import type { CompactionInfo, MessageOrigin, PlanInfo, SessionMeta, SessionOrigin, TaskItem, TranscriptItem, ArtifactInfo } from '../shared/types';
+import type { ImageInfo } from '../shared/images';
 import type { Snapshot } from './changes';
 import { isCompactPreamble } from './compact';
+import { imagesByCall } from './images/store';
 import { FILE_BLOCK_RE, mentionedPaths } from './mentions';
 
 export type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
@@ -15,6 +17,18 @@ export interface Session {
   createdAt: number;
   updatedAt: number;
   forkedFrom?: string;
+  /** The folder the agent works in for this session (absolute). Missing on sessions stored before folders were per session. */
+  cwd?: string;
+  /** The session this one was spawned from (origin 'spawn') */
+  parentId?: string;
+  origin?: SessionOrigin;
+  /** A run ended while the session was not on screen and it has not been opened since */
+  unread?: boolean;
+  /** For a fork: how many messages it was seeded with from its source */
+  seedLength?: number;
+  /** Set once this session (a sub-session or fork) was merged into another: that session's id, and when (see subagents) */
+  mergedInto?: string;
+  mergedAt?: number;
   /** Set once the user renamed the session or a title was generated; save() then stops deriving one. */
   titleLocked?: boolean;
   messages: Msg[];
@@ -22,6 +36,8 @@ export interface Session {
   plans?: Record<string, PlanInfo>;
   /** Artifacts the model created with create_artifact (see artifacts.ts) */
   artifacts?: Record<string, ArtifactInfo>;
+  /** Images the model showed with show_image, by id (see images/store.ts) */
+  images?: Record<string, ImageInfo>;
   /** Files the agent changed: content before the first change (see changes.ts) */
   changes?: Record<string, Snapshot>;
   /** Compactions in order; each keeps the messages it folded so the transcript can still show them */
@@ -47,6 +63,9 @@ export interface Turn {
   skipped?: string[];
   /** The agent's task list when the turn started (restored by a rewind) */
   tasks?: TaskItem[];
+  /** Set when the message was not typed in the window (a schedule, another session, …) */
+  origin?: MessageOrigin;
+  from?: string;
 }
 
 const SNAPSHOT_LIMIT = 2 * 1024 * 1024;
@@ -87,7 +106,7 @@ export interface RewindOutcome {
  * content at that point (a file that did not exist is removed), and the messages from that user message on are dropped.
  * Returns the message's text so it can be edited and sent again. Paths in the result are relative to `cwd`.
  */
-export function rewindSession(s: Session, cwd: string, turnIndex: number): RewindOutcome {
+export function rewindSession(s: Session, cwd: string, turnIndex: number, store?: SessionStore): RewindOutcome {
   const turns = s.turns ?? [];
   const turn = turns[turnIndex];
   if (!turn || turn.at > s.messages.length) throw new Error('That message can no longer be rewound to.');
@@ -116,7 +135,8 @@ export function rewindSession(s: Session, cwd: string, turnIndex: number): Rewin
       skipped.add(abs);
     }
   }
-  s.messages.splice(turn.at);
+  if (store) store.truncate(s, turn.at);
+  else s.messages.splice(turn.at);
   s.turns = turns.slice(0, turnIndex);
   s.tasks = turn.tasks?.length ? structuredClone(turn.tasks) : undefined;
   if (s.lastPrompt && s.lastPrompt.at > s.messages.length) delete s.lastPrompt;
@@ -196,24 +216,33 @@ export function toMeta(s: Session): SessionMeta {
     artifacts: Object.keys(s.artifacts ?? {}).length,
     compactions: s.compactions?.length ?? 0,
     tasks: s.tasks?.length ? s.tasks.map((t) => ({ ...t })) : undefined,
+    cwd: s.cwd,
+    parentId: s.parentId,
+    origin: s.origin,
+    mergedInto: s.mergedInto,
   };
 }
 
-/** The whole conversation for the renderer: folded messages, a divider per compaction, then the live messages. */
-export function toTranscript(s: Session): TranscriptItem[] {
+/**
+ * The whole conversation for the renderer: folded messages, a divider per compaction, then the live messages.
+ * With `running` (the session has a run in progress) a tool call that has no result yet is left out instead of shown
+ * as a finished "(no result)" row: it is still in flight, and the window shows it from the runtime's LiveState.
+ */
+export function toTranscript(s: Session, opts: { running?: boolean } = {}): TranscriptItem[] {
   const items: TranscriptItem[] = [];
+  const shown = s.images ? imagesByCall(s, [...(s.compactions ?? []).flatMap((c) => c.folded), ...s.messages]) : undefined;
   for (const c of s.compactions ?? []) {
-    appendTranscript(s, c.folded, items);
+    appendTranscript(s, c.folded, items, undefined, false, shown);
     items.push({ role: 'compaction', compaction: compactionInfo(c) });
   }
   // Only the live messages have checkpoints; folded ones cannot be rewound to.
   const turnByAt = new Map<number, number>();
   (s.turns ?? []).forEach((t, i) => turnByAt.set(t.at, i));
-  appendTranscript(s, s.messages, items, turnByAt);
+  appendTranscript(s, s.messages, items, turnByAt, opts.running === true, shown);
   return items;
 }
 
-function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], turnByAt?: Map<number, number>): void {
+function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], turnByAt?: Map<number, number>, inFlight = false, shown?: Map<string, ImageInfo>): void {
   const results = new Map<string, string>();
   for (const m of messages) if (m.role === 'tool') results.set(m.tool_call_id, typeof m.content === 'string' ? m.content : String(m.content));
   messages.forEach((m, index) => {
@@ -227,13 +256,21 @@ function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], 
       if (images.length) item.images = images;
       if (mentions.length) item.mentions = mentions;
       const turn = turnByAt?.get(index);
-      if (turn !== undefined) item.turn = turn;
+      if (turn !== undefined) {
+        item.turn = turn;
+        const t = s.turns?.[turn];
+        if (t?.origin && t.origin !== 'user' && t.origin !== 'queue') {
+          item.origin = t.origin;
+          if (t.from) item.from = t.from;
+        }
+      }
       items.push(item);
     } else if (m.role === 'assistant') {
       const text = typeof m.content === 'string' ? m.content : '';
       if (text) items.push({ role: 'assistant', text });
       for (const call of m.tool_calls ?? []) {
         if (call.type !== 'function') continue;
+        if (inFlight && !results.has(call.id)) continue;
         const result = results.get(call.id) ?? '(no result)';
         const ok = !/^(Error:|User denied|Not permitted|Tool call was interrupted)/.test(result);
         if (call.function.name === 'submit_plan') {
@@ -250,6 +287,12 @@ function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], 
             items.push({ role: 'artifact', artifact });
             continue;
           }
+        }
+        // A show_image call is the image itself (a failed one stays a tool row with its error)
+        const image = call.function.name === 'show_image' && ok ? shown?.get(call.id) : undefined;
+        if (image) {
+          items.push({ role: 'image', image });
+          continue;
         }
         items.push({ role: 'tool', name: call.function.name, args: call.function.arguments, result, ok });
       }
@@ -272,8 +315,37 @@ function planForCall(s: Session, rawArgs: string): PlanInfo | null {
   return stored ?? { id: '', title, markdown, status: 'proposed', createdAt: s.updatedAt };
 }
 
+/**
+ * One event in a session's life. Every change to its messages goes through SessionStore.append / truncate /
+ * replaceAll, and the store reports creating, forking, renaming, saving and deleting too, so one listener
+ * (onMutation) can keep a complete record of what the model saw.
+ */
+export type SessionMutation =
+  /** `index` is where the message now sits in session.messages */
+  | { kind: 'append'; message: Msg; index: number }
+  /** Messages from `length` on were removed (a rewind); `removed` holds them */
+  | { kind: 'truncate'; length: number; removed: Msg[] }
+  /** reason: 'compaction' | 'prune' | 'recovery' | … ; `removed` are the messages that were replaced */
+  | { kind: 'replace'; messages: Msg[]; removed: Msg[]; reason: string }
+  /** The session file was written with this many messages */
+  | { kind: 'save'; messages: number }
+  | { kind: 'create' }
+  /** Fires on the new session: the source's id and how many messages it was seeded with */
+  | { kind: 'fork'; from: string; seedLength: number }
+  | { kind: 'rename'; title: string }
+  /** Fires before the session's file is removed */
+  | { kind: 'delete' };
+
+export interface CreateSessionOptions {
+  cwd?: string;
+  parentId?: string;
+  origin?: SessionOrigin;
+  title?: string;
+}
+
 export class SessionStore {
   private sessions = new Map<string, Session>();
+  private mutationListeners = new Set<(session: Session, op: SessionMutation) => void>();
 
   constructor(private readonly dir: string) {
     fs.mkdirSync(dir, { recursive: true });
@@ -297,11 +369,58 @@ export class SessionStore {
   }
 
   /** New empty session. It is only written to disk once it has messages. */
-  create(): Session {
+  create(opts: CreateSessionOptions = {}): Session {
     const now = Date.now();
     const s: Session = { id: randomUUID(), title: NEW_TITLE, createdAt: now, updatedAt: now, messages: [] };
+    if (opts.cwd) s.cwd = opts.cwd;
+    if (opts.parentId) s.parentId = opts.parentId;
+    if (opts.origin) s.origin = opts.origin;
+    const title = opts.title ? clip(opts.title.replace(/\s+/g, ' ').trim(), MAX_TITLE).trim() : '';
+    if (title) {
+      s.title = title;
+      s.titleLocked = true;
+    }
     this.sessions.set(s.id, s);
+    this.notify(s, { kind: 'create' });
     return s;
+  }
+
+  // ---------- Message mutations: the only way session.messages changes ----------
+
+  /** Adds a message at the end of the conversation. */
+  append(s: Session, message: Msg): void {
+    s.messages.push(message);
+    this.notify(s, { kind: 'append', message, index: s.messages.length - 1 });
+  }
+
+  /** Drops the messages from `length` on. */
+  truncate(s: Session, length: number): void {
+    const at = Math.max(0, Math.min(s.messages.length, Math.floor(length)));
+    if (at >= s.messages.length) return;
+    const removed = s.messages.splice(at);
+    this.notify(s, { kind: 'truncate', length: at, removed });
+  }
+
+  /** Replaces the whole conversation; `reason` says why (e.g. 'compaction'). */
+  replaceAll(s: Session, messages: Msg[], reason: string): void {
+    const removed = s.messages.splice(0, s.messages.length, ...messages);
+    this.notify(s, { kind: 'replace', messages: [...messages], removed, reason });
+  }
+
+  /** Called for every mutation of any session, right after it happened (a delete: right before the file goes). */
+  onMutation(cb: (session: Session, op: SessionMutation) => void): () => void {
+    this.mutationListeners.add(cb);
+    return () => this.mutationListeners.delete(cb);
+  }
+
+  private notify(s: Session, op: SessionMutation): void {
+    for (const cb of [...this.mutationListeners]) {
+      try {
+        cb(s, op);
+      } catch (err) {
+        console.warn('[sessions] a mutation listener failed:', err);
+      }
+    }
   }
 
   /** Copy of a session, including its full history, that continues independently. */
@@ -315,6 +434,8 @@ export class SessionStore {
       createdAt: now,
       updatedAt: now,
       forkedFrom: src.id,
+      cwd: src.cwd,
+      origin: 'fork',
       titleLocked: src.titleLocked,
       messages: structuredClone(src.messages),
       plans: src.plans ? structuredClone(src.plans) : undefined,
@@ -323,13 +444,29 @@ export class SessionStore {
       lastPrompt: src.lastPrompt ? { ...src.lastPrompt } : undefined,
       turns: src.turns ? structuredClone(src.turns) : undefined,
       tasks: src.tasks ? structuredClone(src.tasks) : undefined,
+      seedLength: src.messages.length,
     };
     this.sessions.set(s.id, s);
+    this.notify(s, { kind: 'fork', from: src.id, seedLength: src.messages.length });
     if (s.messages.length) this.save(s);
     return s;
   }
 
+  /**
+   * Takes in a session that was not loaded from this store's folder (brought back from the trash, or rebuilt from
+   * its history log) and writes it. Refused when a session with that id exists.
+   */
+  adopt(s: Session): Session {
+    if (!s?.id || !Array.isArray(s.messages)) throw new Error('Not a session.');
+    if (this.sessions.has(s.id)) throw new Error(`A session ${s.id} already exists.`);
+    this.sessions.set(s.id, s);
+    this.save(s, false);
+    return s;
+  }
+
   delete(id: string): void {
+    const s = this.sessions.get(id);
+    if (s) this.notify(s, { kind: 'delete' });
     this.sessions.delete(id);
     fs.rmSync(path.join(this.dir, `${id}.json`), { force: true });
   }
@@ -345,6 +482,7 @@ export class SessionStore {
     if (!clean) throw new Error('A session title cannot be empty.');
     s.title = clean;
     s.titleLocked = true;
+    this.notify(s, { kind: 'rename', title: clean });
     this.save(s, false);
     return s;
   }
@@ -361,5 +499,6 @@ export class SessionStore {
     }
     if (!s.messages.length) return;
     fs.writeFileSync(path.join(this.dir, `${s.id}.json`), JSON.stringify(s));
+    this.notify(s, { kind: 'save', messages: s.messages.length });
   }
 }

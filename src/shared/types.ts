@@ -1,5 +1,10 @@
 // Types shared by the main process, preload and renderer.
 
+import type { ModsConfig } from './mods';
+import type { ImageInfo } from './images';
+
+import type { RpcEvents, RpcMethods } from './rpc';
+
 export type ProviderKind = 'ollama' | 'portkey';
 
 /**
@@ -126,6 +131,12 @@ export interface CompactionInfo {
   summary: string;
   /** How many messages were folded into the summary */
   messages: number;
+  /** Messages after the brief that were kept word for word (older compactions kept none) */
+  kept?: number;
+  /** Tokens of old tool output cleared by pruning just before this compaction */
+  pruned?: number;
+  /** summary: the folded part was summarised; dropped: no summary could be produced, so it was dropped */
+  stage?: 'summary' | 'dropped';
 }
 
 export interface AppConfig {
@@ -156,6 +167,26 @@ export interface AppConfig {
   allowRules: Record<string, StoredRules>;
   /** Working directories used before, most recent first (at most 8); the welcome screen offers them */
   recentDirs: string[];
+  /** Keep the Mac awake: never, while a session is running, or whenever the app is open */
+  keepAwake: 'off' | 'running' | 'always';
+  /** Fraction of the context window at which a run compacts on its own (0.5 to 0.95) */
+  compactThreshold: number;
+  /** Before summarising, shorten old tool results the model no longer needs word for word */
+  pruneToolResults: boolean;
+  /**
+   * Which tools the model is offered. Every tool's definition is sent with every request, so a small context window
+   * cannot afford them all. essential: files, shell, browser, terminal, tasks, artifacts, images. all: also scheduled
+   * tasks, sub-sessions and mod authoring. auto: all when the window is at least 32k tokens, essential below that.
+   */
+  toolSet: 'auto' | 'all' | 'essential';
+  /** Days a deleted session stays in the trash before it is removed for good (0: at once) */
+  historyTrashDays: number;
+  /** Mods: which are on, their settings, and how the rail and background are arranged */
+  mods: ModsConfig;
+  /** Remote control: whether it is on, who can reach it (this Mac or the local network) and the port (0: any free one) */
+  remote: { enabled: boolean; bind: 'localhost' | 'lan'; port: number };
+  /** Project settings.json files the user agreed to apply, by working directory: the SHA-256 of the content that was approved */
+  settingsTrusted: Record<string, string>;
 }
 
 /** What an approval card's "always" answer covers: the rest of this session, or this working directory from now on */
@@ -221,8 +252,8 @@ export interface FileHit {
 
 export interface InstructionsApi {
   /**
-   * Appends a bullet to the project's instructions file (the first of OPENAGENT.md, OPENCODER.md, AGENTS.md, CLAUDE.md
-   * in the working directory; OPENAGENT.md is created when none exists). Returns the file and its short label.
+   * Appends a bullet to the project's instructions file (the first of OPENHARNESS.md, OPENCODER.md, AGENTS.md, CLAUDE.md
+   * in the working directory; OPENHARNESS.md is created when none exists). Returns the file and its short label.
    */
   append(text: string): Promise<{ path: string; label: string }>;
 }
@@ -279,7 +310,62 @@ export type AgentEvent =
   /** kind 'notice' is informational (shown as a note, not an error), e.g. a model that runs without tools */
   | { type: 'error'; message: string; kind?: 'error' | 'notice' }
   | { type: 'session_changed'; session: SessionMeta }
-  | { type: 'run_end'; reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan' };
+  /** A user-role message entered the conversation (typed, queued, or delivered by a schedule, another session, the remote or a mod) */
+  | { type: 'user_message'; text: string; images: number; origin: MessageOrigin; turn?: number; from?: string }
+  /** The assistant finished one message: its full text (tool calls follow as tool_start events) */
+  | { type: 'assistant_message'; text: string; toolCalls: number }
+  | { type: 'approval_resolved'; id: string; ok: boolean; scope: 'once' | 'session' | 'project' }
+  /** The model showed an image with show_image; it appears inline in the reply */
+  | { type: 'image'; image: ImageInfo }
+  /** `text` is the last assistant text of the run, when it had any */
+  | { type: 'run_end'; reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan'; text?: string };
+
+/** Where a user-role message came from. */
+export type MessageOrigin = 'user' | 'queue' | 'schedule' | 'session' | 'remote' | 'mod' | 'command';
+
+/** How a session came to be: started by the user, forked from another, spawned by an agent as a sub-session, or started by a schedule. */
+export type SessionOrigin = 'user' | 'fork' | 'spawn' | 'schedule';
+
+/** Run-time state of a session (only `unread` is stored). */
+export interface SessionStatus {
+  running: boolean;
+  /** The run is waiting for the user: an approval card or a proposed plan */
+  attention?: 'approval' | 'plan';
+  /** A run ended while the session was not on screen and it has not been opened since */
+  unread?: boolean;
+}
+
+/** What is in flight in a running session, so a window that switches to it can show what one that watched from the start would. */
+export interface LiveState {
+  running: boolean;
+  startedAt?: number;
+  /** Text of the assistant message being streamed (not yet in the transcript) */
+  text: string;
+  thinking: string;
+  /** Tool calls that have started and not finished */
+  tools: { id: string; name: string; args: unknown }[];
+  /** Approval cards waiting for an answer */
+  approvals: Extract<AgentEvent, { type: 'approval_request' }>[];
+  queue: QueuedMessage[];
+}
+
+export interface CommandInfo {
+  name: string;
+  description: string;
+  source: 'app' | 'mod';
+  /** Shown after the name in the menu, e.g. "<task>" */
+  argsHint?: string;
+}
+
+/** What running a slash command asks the window to do. */
+export interface CommandResult {
+  notice?: string;
+  error?: string;
+  /** Send this text as the user's message */
+  send?: string;
+  /** Put this text into the composer */
+  insert?: string;
+}
 
 export interface BrowserState {
   url: string;
@@ -404,6 +490,9 @@ export interface QueuedMessage {
   text: string;
   attachments: ImageAttachment[];
   createdAt: number;
+  /** Who queued it when it was not typed in the window (a schedule, another session, …); see MessageOrigin */
+  origin?: MessageOrigin;
+  from?: string;
 }
 
 export interface ModelCapabilities {
@@ -452,7 +541,9 @@ export interface ArtifactsApi {
 }
 
 /** The API the preload script exposes to the renderer as window.oc */
-export interface OpenAgentApi {
+export interface OpenHarnessApi {
+  /** The user's home folder: what "~" stands for in the paths the window shows */
+  homeDir: string;
   getConfig(): Promise<AppConfig>;
   setConfig(cfg: AppConfig): Promise<AppConfig>;
   chooseDirectory(): Promise<string | null>;
@@ -489,7 +580,12 @@ export interface OpenAgentApi {
   files: FilesApi;
   rules: RulesApi;
   instructions: InstructionsApi;
-  onAgentEvent(cb: (ev: AgentEvent) => void): () => void;
+  /** Every agent event of every session, tagged with the session it belongs to */
+  onAgentEvent(cb: (ev: AgentEvent, sessionId: string) => void): () => void;
+  /** Calls a method registered with app.rpc.handle in the main process (see src/shared/rpc.ts); rejects for unknown names */
+  rpc<K extends keyof RpcMethods>(method: K, ...args: Parameters<RpcMethods[K]>): Promise<Awaited<ReturnType<RpcMethods[K]>>>;
+  /** Follows a push channel the main process sends with app.push */
+  onPush<K extends keyof RpcEvents>(channel: K, cb: (payload: RpcEvents[K]) => void): () => void;
   sessions: SessionsApi;
   skills: SkillsApi;
   changes: ChangesApi;
@@ -529,6 +625,15 @@ export interface SessionMeta {
   compactions?: number;
   /** The agent's current task list, if it keeps one */
   tasks?: TaskItem[];
+  /** The session's own working directory (absolute); older sessions have none until they are opened or run */
+  cwd?: string;
+  /** The session this one was spawned from */
+  parentId?: string;
+  origin?: SessionOrigin;
+  /** Run-time state; set by the runtime (sessions:list, sessions:changed), not by toMeta */
+  status?: SessionStatus;
+  /** Set once the session was merged into another (its id) */
+  mergedInto?: string;
 }
 
 export interface SkillInfo {
@@ -541,9 +646,10 @@ export interface SkillInfo {
 export type TranscriptItem =
   /**
    * images: data URLs of the attached images, in order; mentions: @-mentioned paths whose contents went to the model;
-   * turn: the message's checkpoint index, present when the conversation can be rewound to it (sessions.rewind)
+   * turn: the message's checkpoint index, present when the conversation can be rewound to it (sessions.rewind);
+   * origin/from: set when the message was not typed in the window (see MessageOrigin)
    */
-  | { role: 'user'; text: string; images?: string[]; mentions?: string[]; turn?: number }
+  | { role: 'user'; text: string; images?: string[]; mentions?: string[]; turn?: number; origin?: MessageOrigin; from?: string }
   | { role: 'assistant'; text: string }
   | { role: 'tool'; name: string; args: string; result: string; ok: boolean }
   /** A submit_plan call is shown as a plan card instead of a tool row */
@@ -551,7 +657,9 @@ export type TranscriptItem =
   /** A create_artifact call is shown as an artifact card instead of a tool row */
   | { role: 'artifact'; artifact: ArtifactInfo }
   /** A divider: everything above it was folded into the summary */
-  | { role: 'compaction'; compaction: CompactionInfo };
+  | { role: 'compaction'; compaction: CompactionInfo }
+  /** A show_image call is shown as the image itself instead of a tool row */
+  | { role: 'image'; image: ImageInfo };
 
 export interface SessionsApi {
   list(): Promise<SessionMeta[]>;

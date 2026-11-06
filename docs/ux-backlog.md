@@ -1,6 +1,6 @@
 # UX backlog: closing the gap to Claude Code desktop
 
-What OpenAgent still lacks, or does differently, compared with the Claude Code desktop app's day-to-day experience.
+What Open Harness still lacks, or does differently, compared with the Claude Code desktop app's day-to-day experience.
 Ordered by how often a user would feel the difference. Items are ticked off as they land; each entry says where.
 
 ## Done in earlier rounds
@@ -8,7 +8,7 @@ Ordered by how often a user would feel the difference. Items are ticked off as t
 Sessions sidebar (day groups, search, rename, fork, delete, generated titles) · transcript with tool rows, diffs,
 thinking blocks, grouped reads · approval cards with keyboard answers and "allow for this session" · permission
 modes incl. plan mode with plan cards · Browser, Diff and Terminal panes · image paste, queued messages, artifacts ·
-MCP servers · context meter, auto-compaction and `/compact` · project instructions (OPENAGENT.md / AGENTS.md / CLAUDE.md).
+MCP servers · context meter, auto-compaction and `/compact` · project instructions (OPENHARNESS.md / AGENTS.md / CLAUDE.md).
 
 ## Backlog
 
@@ -25,15 +25,31 @@ MCP servers · context meter, auto-compaction and `/compact` · project instruct
 | 9 | **Welcome and empty states**: recent sessions and project hints on the empty screen, first-run checklist (Ollama running, model pulled, folder chosen) | First five minutes | done (ticks 3–4) |
 | 10 | **Transcript details**: collapse long tool output by default with "show more", sticky date dividers, unread marker when returning to a session | Reading long sessions | done (tick 4) |
 | 11 | **Diff pane review**: accept/revert per hunk, "open in editor" per line | Reviewing larger changes | later |
-| 12 | **Subagents / background tasks** with a Tasks pane | Parallel work; heavy for small local models | later |
+| 12 | **Subagents / background tasks** with a Tasks pane | Parallel work; heavy for small local models | done (0.2): sessions run concurrently; sub-sessions with `session_spawn` / `/spawn`, reports back, merge; a Sub-sessions panel |
+| 13 | **Mods**: an open protocol for panels, tabs, a composer strip, backgrounds, themes and commands, written and edited live by the agent | The right-hand panel of the desktop app, made extensible | done (0.2): [mods.md](mods.md) |
+| 14 | **Sidebar**: navigation rows, day groups, forks and sub-sessions as a tree, unread and waiting marks, search inside conversations | Finding and following many sessions | done (0.2) |
+| 15 | **Settings page** with sections, search, changes applied at once | The old form could not hold what the app grew | done (0.2) |
+| 16 | **Images in replies** and thumbnails on tool rows | "Here is the screenshot" should show the screenshot | done (0.2) |
+| 17 | **History**: append-only log, crash recovery, trash, export | Nothing said in a session should be lost | done (0.2) |
+| 18 | **Compaction** that prunes first and keeps the recent turn | Long sessions on small windows | done (0.2) |
+| 19 | **Scheduled tasks** the agent can create, **remote control** from a phone, **keep awake** | Work that goes on while you are away | done (0.2) |
+| 20 | **Tools loaded on demand**: the model asks for a tool family (schedules, sessions, mods) when it needs it | Today a small window simply goes without them (`toolSet`) | next |
+| 21 | **Per-session project context**: MCP servers and the project settings file follow each session's folder, not the one on screen | Background sessions in another project | next |
+| 22 | **Mod protocol 2**: tools a mod provides to the model, a background page per mod, seats in the transcript and the status line | Mods that extend the agent, not only the window | next |
+| 23 | **History, further**: thinking blocks restored on reload; search over messages a rewind removed | The log already holds both | later |
+| 24 | **Remote control over HTTPS**, tried on real phone browsers | Plain HTTP is for networks you trust | later |
+| 25 | **Sub-sessions in Auto mode**: decide whether starting one should still ask | Auto runs everything the guard does not flag, yet `session_spawn` shows a card | next |
+| 26 | **Many mod tabs**: let the pane's tab strip scroll or fold into a menu | Past icon-only, tabs at the end fall out of view | next |
+| 27 | **Provider wording**: "Gateway" instead of "Portkey" for any OpenAI-compatible endpoint; a long model name is cut in the sidebar footer | The label names one product among many | next |
+| 28 | **Test rig captures through the main process** (`invalidate` + `capturePage`), and `browser_screenshot` in a hidden window | Screenshots of the hidden test window can be stale or tiled; the built-in browser's screenshot fails there | later |
 
 Out of scope: hosted features (cloud sessions, remote control), Anthropic-specific fonts and branding, usage billing.
 
 ## Tick 3 renderer spec (items 7–9)
 
-Contract: `OpenCoderApi.instructions.append(text)` → `{ path, label }` (main appends a bullet to the project's instructions file, creating `OPENAGENT.md` when none exists) in `src/shared/types.ts`.
+Contract: `OpenCoderApi.instructions.append(text)` → `{ path, label }` (main appends a bullet to the project's instructions file, creating `OPENHARNESS.md` when none exists) in `src/shared/types.ts`.
 
-- **`#` memory shortcut**: a composer message that starts with `#` (followed by a space or text) is not sent to the model. Instead the existing confirm dialog asks "Add to the project's instructions?" with the text and the target label (from `oc.instructions.append` the first time it is known, else "OPENAGENT.md"), OK = "Add". On OK call `oc.instructions.append(text without the leading #)`, then show a system notice "Added to OPENAGENT.md" (the returned label) and clear the composer; on cancel keep the text. Images attached are ignored for this path (notice says so). While a run is going, `#` messages are still handled this way, not queued.
+- **`#` memory shortcut**: a composer message that starts with `#` (followed by a space or text) is not sent to the model. Instead the existing confirm dialog asks "Add to the project's instructions?" with the text and the target label (from `oc.instructions.append` the first time it is known, else "OPENHARNESS.md"), OK = "Add". On OK call `oc.instructions.append(text without the leading #)`, then show a system notice "Added to OPENHARNESS.md" (the returned label) and clear the composer; on cancel keep the text. Images attached are ignored for this path (notice says so). While a run is going, `#` messages are still handled this way, not queued.
 - **Keyboard**: `Esc` twice within 600 ms while no run is going opens the rewind confirm for the latest user message that has a `turn` (nothing happens when there is none); the single `Esc` keeps its meaning (stop a run, close menus). `⌘↑` / `⌘↓` in the composer when the caret is on the first/last line (or the composer is empty) walk through the session's previous user messages (newest first), restoring the draft when walking past the end; the history comes from the rendered user bubbles. `⌘⇧C` copies the last assistant reply's Markdown source (the same text the Copy button copies) and flashes a short "Copied" tooltip on the status area. Add the three to the shortcuts sheet.
 - **Welcome and empty states**: the empty state gains a compact setup strip (`#setup-strip`) above the suggestion chips, shown only when something is missing: Ollama unreachable (reuse the connection check), the configured model not in `listOllamaModels()`, or the working directory still the home folder. Each line has a short action ("Start Ollama", "Pull a model" → shows the `ollama pull qwen3:8b` command with a Copy button, "Choose folder" → the existing cwd picker). It disappears once all three are fine; it is never shown for the Portkey provider except the folder line.
 - **Debug hooks**: `__oc_debug.setup({ ollama: boolean, model: boolean, folder: boolean })` renders the strip directly; `null` restores the real checks.
@@ -49,9 +65,9 @@ Contract: `AppConfig.recentDirs` (most recent first, at most 8; main maintains i
 
 ## How changes are verified
 
-- `npm test` runs the headless suites in `test/` against the built app: a mock model server (OpenAI-compatible and Ollama-native) and a small stdio MCP server stand in for real services, so the agent loop, tools, approvals, compaction, mentions, rules, checkpoints and the terminal manager are exercised without a model.
-- Live checks drive the running app over the Chrome DevTools Protocol (`electron . --remote-debugging-port=9222`) with the same mock server: they type into the composer, click cards and settings, and take screenshots; `window.__oc_debug` offers hooks to render synthetic states. These scripts live outside the repository for now.
-- CPU is measured with per-process CPU-time deltas while a run streams (the spinner-only and streaming numbers in the commit history came from that).
+- `npm test` runs the headless suites in `test/` against the built app: a mock model server (OpenAI-compatible and Ollama-native) and a small stdio MCP server stand in for real services, so the agent loop, the session runtime, tools, approvals, compaction, history, schedules, sub-sessions, mods, remote control and settings are exercised without a model.
+- `npm run test:live` drives the real app over the Chrome DevTools Protocol (`test/live/rig.js`): the window stays hidden and uses a throwaway profile and config folder, so it never touches your own. With `ANTHROPIC_API_KEY` set the runs talk to the real API; without it, to the mock model. The scripts type into the composer, answer cards, open Settings, switch sessions, kill the app mid-run and relaunch it, and take screenshots; `window.__oc_debug` offers hooks to render synthetic states.
+- `node modkit/playground/serve.js` hosts mods outside the app with a mock behind the bridge, and `modkit/playground/shot.js` screenshots them.
 
 ## Tick 2 renderer spec (items 4–6)
 

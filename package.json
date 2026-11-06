@@ -1,15 +1,17 @@
 {
-  "name": "openagent",
-  "version": "0.1.0",
-  "description": "Open-source agentic coding assistant for macOS with a built-in browser. Runs on Ollama (local models) or Portkey (AI gateway).",
+  "name": "open-harness",
+  "version": "0.2.0",
+  "description": "An open-source agent harness for macOS, in the style of Claude Code: local models via Ollama or any OpenAI-compatible provider, sessions that run side by side, and mods.",
   "main": "dist/main/index.js",
+  "repository": "github:BrandeisPatrick/open-harness",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && mkdir -p dist/renderer/vendor && cp src/renderer/index.html src/renderer/styles.css dist/renderer/ && cp node_modules/@xterm/xterm/lib/xterm.js node_modules/@xterm/xterm/css/xterm.css node_modules/@xterm/addon-fit/lib/addon-fit.js node_modules/@xterm/addon-web-links/lib/addon-web-links.js dist/renderer/vendor/",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && mkdir -p dist/renderer/vendor && cp src/renderer/index.html src/renderer/*.css dist/renderer/ && cp node_modules/@xterm/xterm/lib/xterm.js node_modules/@xterm/xterm/css/xterm.css node_modules/@xterm/addon-fit/lib/addon-fit.js node_modules/@xterm/addon-web-links/lib/addon-web-links.js dist/renderer/vendor/",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "node test/run.js",
+    "test:live": "node test/live/run.js",
     "brand-dev": "scripts/brand-dev.sh",
     "package": "npm run build && electron-builder --mac --dir -c.mac.identity=null",
     "dist": "npm run build && electron-builder --mac -c.mac.identity=null",
@@ -31,10 +33,10 @@
     "electron-builder": "^26.18.0",
     "typescript": "^7.0.2"
   },
-  "productName": "OpenAgent",
+  "productName": "Open Harness",
   "build": {
-    "appId": "dev.openagent.app",
-    "productName": "OpenAgent",
+    "appId": "dev.openharness.app",
+    "productName": "Open Harness",
     "afterPack": "scripts/adhoc-sign.js",
     "mac": {
       "icon": "build/icon.icns",
@@ -44,6 +46,10 @@
       "dist/**",
       "build/icon.png",
       "skills/**",
+      "remote/**",
+      "modkit/**",
+      "!modkit/playground/**",
+      "mods/**",
       "package.json"
     ],
     "directories": {
@@ -53,7 +59,8 @@
       "build/icon.png",
       "node_modules/node-pty/**"
     ],
-    "npmRebuild": false
+    "npmRebuild": false,
+    "artifactName": "Open-Harness-${version}-${arch}.${ext}"
   },
-  "author": "OpenAgent contributors"
+  "author": "Open Harness contributors"
 }

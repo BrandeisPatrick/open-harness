@@ -6,6 +6,7 @@ import type { McpApi, McpScope, McpServerConfig, McpServerInfo, McpStatus, McpTo
 import type { ConfirmOptions } from './changes.js';
 import { escapeHtml } from './dom.js';
 import { icon } from './icons.js';
+import { tilde } from './home.js';
 
 export const MCP_STATUS_LABEL: Record<McpStatus, string> = {
   connected: 'Connected',
@@ -113,7 +114,7 @@ export interface McpPanel {
 const slug = (key: string): string => key.replace(/[^A-Za-z0-9_-]+/g, '-');
 
 function shortDir(p: string): string {
-  return p.replace(/^\/Users\/[^/]+/, '~').replace(/\/+$/, '');
+  return tilde(p).replace(/\/+$/, '');
 }
 
 function toolHtml(t: McpToolInfo): string {
@@ -194,7 +195,7 @@ export function createMcpPanel(opts: McpPanelOptions): McpPanel {
     else if (s.status === 'disabled') state = '<span class="mcp-state">Disabled</span>';
 
     const version = s.serverInfo?.version ? `<span class="mcp-version" title="${escapeHtml(`${s.serverInfo.name || name} ${s.serverInfo.version}`)}">v${escapeHtml(String(s.serverInfo.version).replace(/^v/, ''))}</span>` : '';
-    const scopeTip = s.scope === 'project' ? "From the project's .mcp.json" : "Stored in OpenAgent's settings on this Mac";
+    const scopeTip = s.scope === 'project' ? "From the project's .mcp.json" : "Stored in Open Harness's settings on this Mac";
     const target = s.target || (s.transport === 'stdio' ? '' : s.transport);
     const switchTip = s.status === 'blocked' ? `Enable ${name} for this project` : on ? `Disable ${name}` : `Enable ${name}`;
     el.innerHTML =
@@ -250,7 +251,7 @@ export function createMcpPanel(opts: McpPanelOptions): McpPanel {
         description:
           s.scope === 'project'
             ? `This edits the project's .mcp.json${dir ? ` (${shortDir(dir)}/.mcp.json)` : ''}: the server is deleted from the file, for everyone who uses it.`
-            : "OpenAgent disconnects it and deletes it from this Mac's settings.",
+            : "Open Harness disconnects it and deletes it from this Mac's settings.",
         confirmLabel: 'Remove',
         danger: true,
       });
@@ -277,7 +278,7 @@ export function createMcpPanel(opts: McpPanelOptions): McpPanel {
     if (busy.has(key)) return;
     const api = opts.source();
     if (!api) {
-      showStatus(`Couldn't ${VERBS[action]} ${s.name}: this needs the updated app. Restart OpenAgent and try again.`);
+      showStatus(`Couldn't ${VERBS[action]} ${s.name}: this needs the updated app. Restart Open Harness and try again.`);
       panel.render(current);
       return;
     }
@@ -307,7 +308,7 @@ export function createMcpPanel(opts: McpPanelOptions): McpPanel {
     const parsed = parseEnv(kind === 'url' ? '' : els.env.value);
     if (parsed.error) return showAddError(parsed.error, els.env);
     const api = opts.source();
-    if (!api) return showAddError('Adding servers needs the updated app. Restart OpenAgent and try again.');
+    if (!api) return showAddError('Adding servers needs the updated app. Restart Open Harness and try again.');
     const scope: McpScope = els.scope.value === 'project' ? 'project' : 'user';
     const before = new Set(current.map(mcpKey));
     adding = true;
@@ -371,7 +372,7 @@ export function createMcpPanel(opts: McpPanelOptions): McpPanel {
       els.list.innerHTML = '';
       els.list.classList.toggle('is-empty', !current.length);
       if (unavailable) {
-        els.list.innerHTML = `<div class="mcp-empty">${icon('plug', 16)}<p>MCP servers need the updated app. Restart OpenAgent and try again.</p></div>`;
+        els.list.innerHTML = `<div class="mcp-empty">${icon('plug', 16)}<p>MCP servers need the updated app. Restart Open Harness and try again.</p></div>`;
       } else if (!current.length) {
         els.list.innerHTML =
           `<div class="mcp-empty">${icon('plug', 16)}<p>No MCP servers yet. Add one below with its command line, its URL, or the JSON from its README. ` +

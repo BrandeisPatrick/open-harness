@@ -113,6 +113,8 @@ export interface OllamaChatOptions {
   onWarning?: (message: string) => void;
   /** Called once, with the counts from the final chunk (missing counts are 0). */
   onUsage?: (usage: Usage) => void;
+  /** Most tokens to generate (options.num_predict); unlimited when absent */
+  numPredict?: number;
 }
 
 /**
@@ -126,7 +128,7 @@ export async function ollamaChat(o: OllamaChatOptions): Promise<{ text: string; 
     model: o.model,
     messages: toOllamaMessages(o.messages),
     stream: true,
-    options: { num_ctx: o.numCtx },
+    options: o.numPredict ? { num_ctx: o.numCtx, num_predict: o.numPredict } : { num_ctx: o.numCtx },
   };
   // Models without tool support (vision-only ones, say) reject any tools field; leave it out when there are none.
   if (o.tools.length) body.tools = o.tools;

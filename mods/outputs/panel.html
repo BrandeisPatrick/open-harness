@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  .h-item { min-height: 28px; }
+  .h-item .h-icon { color: var(--text-400); }
+  .h-item:hover .h-icon { color: var(--text-200); }
+  .h-item .h-label { color: var(--text-100); }
+  .h-item .detail { max-width: 45%; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .h-item .dir { color: var(--text-400); font-size: 12px; }
+  .add { color: var(--success); }
+  .del { color: var(--danger); }
+</style>
+</head>
+<body>
+<ul class="h-list" id="list" hidden></ul>
+<p class="h-empty" id="empty" hidden>Nothing yet. Artifacts, images and files the agent changes show up here.</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const PAGE = 'M9 1.75H4.25c-.83 0-1.5.67-1.5 1.5v9.5c0 .83.67 1.5 1.5 1.5h7.5c.83 0 1.5-.67 1.5-1.5V6L9 1.75z';
+  const ICONS = {
+    artifact: '<path d="M5.25 4.5L1.75 8l3.5 3.5M10.75 4.5L14.25 8l-3.5 3.5"/>',
+    image: '<rect x="2" y="2.75" width="12" height="10.5" rx="2"/><circle cx="5.75" cy="6.5" r="1.25"/><path d="M14 10.25l-2.6-2.6a1 1 0 0 0-1.4 0L4.5 13.25"/>',
+    file: `<path d="${PAGE}"/><path d="M9 1.75V6h4.25M8 6.75v3M6.5 8.25h3M6.5 11.5h3"/>`,
+  };
+  const KIND = { artifact: 'Artifact', image: 'Image', file: 'Changed file' };
+  let outputs = [];
+
+  /** "+12 −3" keeps its colours; anything else is plain muted text. */
+  function detail(el, text) {
+    const m = /^([+]\d+)?\s*([−-]\d+)?$/.exec(String(text || '').trim());
+    if (m && (m[1] || m[2])) {
+      if (m[1]) { const a = document.createElement('span'); a.className = 'add'; a.textContent = m[1]; el.appendChild(a); }
+      if (m[1] && m[2]) el.appendChild(document.createTextNode(' '));
+      if (m[2]) { const d = document.createElement('span'); d.className = 'del'; d.textContent = m[2]; el.appendChild(d); }
+    } else el.textContent = text || '';
+  }
+
+  function render() {
+    const list = $('list');
+    const items = (Array.isArray(outputs) ? outputs : []).slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    list.hidden = !items.length;
+    $('empty').hidden = !!items.length;
+    list.textContent = '';
+    for (const o of items) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.className = 'h-item';
+      b.title = `${KIND[o.kind] || o.kind}: ${o.title}${o.detail ? ' · ' + o.detail : ''}`;
+      b.innerHTML = `<svg class="h-icon" viewBox="0 0 16 16" aria-hidden="true">${ICONS[o.kind] || ICONS.file}</svg>`;
+      const name = document.createElement('span');
+      name.className = 'h-label';
+      if (o.kind === 'file' && String(o.title).includes('/')) {
+        const parts = String(o.title).split('/');
+        name.textContent = parts.pop() + ' ';
+        const dir = document.createElement('span');
+        dir.className = 'dir';
+        dir.textContent = parts.join('/');
+        name.appendChild(dir);
+      } else name.textContent = o.title;
+      const d = document.createElement('span');
+      d.className = 'h-muted detail';
+      detail(d, o.detail);
+      b.append(name, d);
+      b.onclick = () => harness.outputs.open({ kind: o.kind, id: o.id }).catch((e) => harness.ui.toast(e.message, { kind: 'error' }));
+      li.appendChild(b);
+      list.appendChild(li);
+    }
+    harness.ui.setBadge(items.length || null);
+  }
+
+  async function load() {
+    try { outputs = (await harness.session.outputs()).outputs || []; } catch (e) { outputs = []; }
+    render();
+  }
+
+  let lastId = null;
+  harness.on('outputs.changed', load);
+  harness.on('session.changed', (s) => { if (s && s.id === lastId) return; lastId = s && s.id; load(); });
+  harness.ready.then(async () => {
+    render(); // the empty state at once: the first answer can take a while in a large repository
+    const s = await harness.session.get().catch(() => null);
+    lastId = s && s.id;
+    load();
+  });
+</script>
+</body>
+</html>

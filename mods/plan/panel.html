@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .title { min-width: 0; font-weight: 600; color: var(--text-100); }
+  .head .h-chip { margin-top: -1px; }
+  .body { position: relative; margin-top: 6px; overflow: hidden; color: var(--text-200); }
+  .body.clamped { max-height: 108px; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
+  /* The plan's Markdown: the kit's .h-md at rail size (harness.css), a step quieter than the title */
+  .body .h-md { color: var(--text-200); }
+  .more { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--accent); }
+  .more:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 2px; }
+</style>
+</head>
+<body>
+<div id="root" hidden>
+  <div class="head"><span class="title" id="title"></span><span class="h-chip" id="status"></span></div>
+  <div class="body" id="body"><div class="h-md compact" id="md"></div></div>
+  <button class="more" id="more" hidden></button>
+</div>
+<p class="h-empty" id="empty" hidden>No plan in this session. Plans appear here when the agent works in Plan mode.</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const STATUS = { proposed: ['Proposed', 'accent'], approved: ['Approved', 'success'], rejected: ['Not approved', ''] };
+  let plan = null;
+  let expanded = false;
+  let renderedFor = null;
+  let seq = 0;
+
+  async function render() {
+    $('root').hidden = !plan;
+    $('empty').hidden = !!plan;
+    if (!plan) { harness.ui.setBadge(null); renderedFor = null; return; }
+    $('title').textContent = plan.title || 'Plan';
+    const st = STATUS[plan.status] || [plan.status || '', ''];
+    $('status').textContent = st[0];
+    $('status').className = 'h-chip' + (st[1] ? ' ' + st[1] : '');
+    $('status').hidden = !st[0];
+    const key = plan.id + '\u0000' + plan.markdown;
+    if (renderedFor !== key) {
+      const mine = ++seq;
+      let html = '';
+      try { html = (await harness.ui.markdown(plan.markdown || '')).html; } catch (e) { html = ''; }
+      if (mine !== seq) return;
+      const md = $('md');
+      if (html) md.innerHTML = html; else md.textContent = plan.markdown || '';
+      // Links open in the browser and code blocks copy: harness.js does both inside .h-md
+      renderedFor = key;
+    }
+    layout();
+  }
+
+  function layout() {
+    const body = $('body');
+    body.classList.remove('clamped');
+    const tall = $('md').scrollHeight > 128;
+    body.classList.toggle('clamped', tall && !expanded);
+    $('more').hidden = !tall;
+    $('more').textContent = expanded ? 'Show less' : 'Show all';
+  }
+
+  $('more').onclick = () => { expanded = !expanded; layout(); };
+
+  async function load() {
+    try { plan = (await harness.session.plan()).plan || null; } catch (e) { plan = null; }
+    render();
+  }
+
+  let lastId = null;
+  harness.on('plan.changed', (d) => {
+    const next = (d && d.plan) || null;
+    if (!next || !plan || next.id !== plan.id) expanded = false;
+    plan = next;
+    render();
+  });
+  harness.on('session.changed', (s) => {
+    if (s && s.id === lastId) return;
+    lastId = s && s.id;
+    expanded = false;
+    load();
+  });
+  harness.ready.then(async () => {
+    const s = await harness.session.get().catch(() => null);
+    lastId = s && s.id;
+    load();
+  });
+</script>
+</body>
+</html>

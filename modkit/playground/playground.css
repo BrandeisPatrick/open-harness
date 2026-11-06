@@ -1,0 +1,135 @@
+/* The playground page: a mock of the app's window around the seats. Uses the kit's tokens. */
+html, body.pg { height: 100%; }
+body.pg {
+  display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 1fr auto;
+  padding: 0; overflow: hidden; background: var(--bg-100); font-size: 13px; line-height: 18px;
+}
+.pg-spacer { flex: 1; }
+.pg-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.pg-bg iframe { width: 100%; height: 100%; border: 0; display: block; }
+body.has-bg .pg-side, body.has-bg .pg-chat, body.has-bg .pg-rail, body.has-bg .pg-pane, body.has-bg .pg-log { background: color-mix(in srgb, var(--bg-100) 82%, transparent); }
+
+/* ---------- sidebar ---------- */
+.pg-side { position: relative; z-index: 1; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow-y: auto; padding: 14px 12px 24px; background: var(--bg-200); border-right: 1px solid var(--border-subtle); }
+.pg-brand { font-size: 14px; line-height: 20px; font-weight: 600; }
+.pg-dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-block { display: flex; flex-direction: column; gap: 8px; }
+.pg-mods { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.pg-mod { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 4px 8px; border-radius: var(--r-control); color: var(--text-200); }
+.pg-mod:hover { background: var(--hover); color: var(--text-100); }
+.pg-mod[aria-current="true"] { background: var(--bg-000); color: var(--text-100); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border-subtle); }
+.pg-mod-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-mod-meta { flex: none; font-size: 11px; color: var(--text-400); font-variant-numeric: tabular-nums; }
+.pg-mod-bad { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+.pg-mod-warn { background: var(--warn); }
+.pg-problems:empty { display: none; }
+.pg-problems { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: var(--r-card); background: var(--bg-100); border: 1px solid var(--border-subtle); font-size: 12px; line-height: 16px; }
+.pg-problem.error { color: var(--danger); }
+.pg-problem.warning { color: var(--text-200); }
+.pg-problem.runtime { color: var(--danger); font-family: var(--mono); font-size: 11px; }
+.pg-field-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; }
+.pg-field-label { flex: none; color: var(--text-200); white-space: nowrap; }
+.pg-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.pg-tasks { min-height: 96px; font-size: 12px; line-height: 18px; }
+.pg-form { display: flex; flex-direction: column; gap: 8px; }
+.pg-form:empty::before { content: 'This mod has no settings.'; color: var(--text-400); font-size: 12px; }
+.pg-form label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pg-form .h-input { width: 140px; height: 28px; }
+.pg-perms { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+.pg-perms label, .pg-check { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 20px; color: var(--text-200); cursor: pointer; }
+.pg-perms label.asked { color: var(--text-100); font-weight: 500; }
+.pg-perms input, .pg-check input { margin: 0; accent-color: var(--accent); }
+.pg-json textarea { min-height: 220px; margin-top: 6px; font-size: 11px; line-height: 15px; }
+.pg-json summary { cursor: pointer; }
+
+/* ---------- the window ---------- */
+.pg-main { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(320px, 1fr) 300px minmax(280px, 380px); min-height: 0; min-width: 0; }
+.pg-chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg-100); }
+.pg-chat-head { display: flex; flex-direction: column; padding: 12px 24px 8px; font-weight: 600; border-bottom: 1px solid var(--border-subtle); }
+.pg-chat-head .h-muted { font-weight: 400; }
+.pg-transcript { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; line-height: 20px; }
+.pg-msg.user { align-self: flex-end; max-width: 80%; padding: 8px 14px; border-radius: 16px; background: var(--bg-300); }
+:root[data-theme="dark"] .pg-msg.user { background: var(--bg-000); }
+.pg-msg.assistant { color: var(--text-100); }
+.pg-msg.meta { font-size: 12px; line-height: 16px; color: var(--text-400); }
+.pg-msg.streaming::after { content: '▍'; color: var(--accent); }
+.pg-composer-wrap { padding: 0 24px 16px; }
+.pg-composer-seat { display: flex; flex-direction: column; }
+.pg-composer-seat iframe { display: block; width: 100%; border: 0; }
+.pg-composer { padding: 10px 12px 8px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-000); box-shadow: var(--shadow-sm); }
+:root[data-theme="dark"] .pg-composer { background: var(--bg-000); }
+.pg-composer textarea { width: 100%; border: 0; outline: none; resize: none; background: transparent; font-size: 14px; line-height: 20px; }
+.pg-composer-bar { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.pg-chip { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text-200); }
+
+/* ---------- rail ---------- */
+.pg-rail { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; background: var(--bg-100); border-left: 1px solid var(--border-subtle); }
+/* A mod with no rail views gives the rail's room to the side pane */
+.pg-main.no-rail { grid-template-columns: minmax(320px, 1fr) minmax(380px, 640px); }
+.pg-main.no-rail .pg-rail { display: none; }
+.pg-rail:empty::before { content: 'No rail views in this mod.'; padding: 16px 12px; color: var(--text-400); font-size: 12px; }
+.pg-section { flex: none; border-bottom: 1px solid var(--border-subtle); }
+.pg-section-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 36px; padding: 0 8px 0 12px; color: var(--text-100); user-select: none; }
+.pg-section-head:hover { background: var(--surface-hover); }
+.pg-section-head:focus-visible { outline-offset: -2px; }
+.pg-section-icon { display: inline-flex; color: var(--text-400); }
+.pg-section-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.pg-badge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--text-200) 13%, transparent); color: var(--text-200); font-size: 11px; line-height: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pg-badge:empty { display: none; }
+.pg-chev { margin-left: auto; display: inline-flex; color: var(--text-400); transition: transform 0.15s ease; }
+.pg-section.collapsed .pg-chev { transform: rotate(-90deg); }
+.pg-section.collapsed .pg-frame { display: none; }
+.pg-frame { display: block; width: 100%; border: 0; height: 0; background: transparent; }
+.pg-section.flash { animation: pg-flash 0.6s ease; }
+@keyframes pg-flash { from { background: var(--accent-soft); } }
+
+/* ---------- side pane ---------- */
+.pg-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--border-subtle); background: var(--bg-100); }
+.pg-tabs { display: flex; gap: 2px; padding: 8px; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
+.pg-tab { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--r-control); color: var(--text-200); font-weight: 500; white-space: nowrap; }
+.pg-tab:hover { background: var(--hover); color: var(--text-100); }
+.pg-tab[aria-selected="true"] { background: var(--bg-300); color: var(--text-100); }
+.pg-tab-body { position: relative; flex: 1; min-height: 0; }
+.pg-tab-body > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.pg-tab-body > .pg-browser { display: flex; align-items: center; justify-content: center; height: 100%; padding: 24px; color: var(--text-400); text-align: center; }
+
+/* ---------- log ---------- */
+.pg-log { position: relative; z-index: 1; grid-column: 2; display: flex; flex-direction: column; border-top: 1px solid var(--border); background: var(--bg-200); }
+.pg-log-head { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; }
+.pg-log-toggle { font-weight: 600; }
+.pg-log-toggle::before { content: '▾ '; color: var(--text-400); }
+.pg-log-toggle[aria-expanded="false"]::before { content: '▸ '; }
+.pg-log-filter { width: 220px; height: 26px; font-size: 12px; }
+.pg-log-body { height: 220px; overflow-y: auto; padding: 0 12px 8px; font: 11px/16px var(--mono); }
+.pg-log.collapsed .pg-log-body { display: none; }
+.pg-log-row { display: grid; grid-template-columns: 64px 150px 20px minmax(120px, 200px) 1fr; gap: 8px; padding: 1px 0; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+.pg-log-row > span { overflow: hidden; text-overflow: ellipsis; }
+.pg-log-row .k-request { color: var(--text-200); }
+.pg-log-row .k-response { color: var(--success); }
+.pg-log-row .k-event { color: var(--accent); }
+.pg-log-row.error { color: var(--danger); background: var(--danger-soft); }
+.pg-log-row .who { color: var(--text-400); }
+.pg-log-row .payload { color: var(--text-400); }
+
+/* ---------- toasts ---------- */
+.pg-toasts { position: fixed; z-index: 10; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.pg-toast { padding: 8px 14px; border-radius: var(--r-card); background: var(--text-100); color: var(--bg-100); font-size: 13px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); animation: pg-in 0.15s ease-out; }
+.pg-toast.error { background: var(--danger); color: #fff; }
+@keyframes pg-in { from { opacity: 0; transform: translateY(4px); } }
+
+/* ---------- shot mode: only the rail, at its real width ---------- */
+body.pg.shot { display: block; width: 100%; min-width: 0; height: auto; overflow: visible; background: var(--bg-100); }
+body.pg.shot .pg-side, body.pg.shot .pg-chat, body.pg.shot .pg-pane, body.pg.shot .pg-log, body.pg.shot .pg-toasts, body.pg.shot .pg-bg { display: none; }
+body.pg.shot .pg-main { display: block; }
+body.pg.shot .pg-rail { border-left: 0; overflow: visible; }
+body.pg.shot .pg-section:last-child { border-bottom: 0; }
+html.shot { height: auto; }
+/* shot mode for a mod with only tab views: the side pane fills the window */
+html.shot body.pg.shot-tab, body.pg.shot.shot-tab { width: 100%; height: 100vh; overflow: hidden; }
+html.shot:has(body.shot-tab) { height: 100%; }
+body.pg.shot.shot-tab .pg-main { height: 100%; }
+body.pg.shot.shot-tab .pg-rail { display: none; }
+body.pg.shot.shot-tab .pg-pane { display: flex; height: 100%; border-left: 0; }
+body.pg.shot.shot-tab .pg-tabs { display: none; }
+
+@media (prefers-reduced-motion: reduce) { .pg-section.flash, .pg-toast { animation: none; } }

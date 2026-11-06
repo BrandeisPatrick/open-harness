@@ -1,0 +1,14 @@
+{
+  "protocol": 1,
+  "id": "scheduled",
+  "name": "Scheduled",
+  "version": "1.0.0",
+  "description": "Prompts that run later or on a rhythm: create, edit, pause, run now and see how the last run went.",
+  "author": "Open Harness",
+  "license": "MIT",
+  "icon": "clock",
+  "permissions": ["schedules", "session:control"],
+  "contributes": {
+    "views": [{ "id": "main", "title": "Scheduled", "entry": "panel.html", "seat": "tab" }]
+  }
+}

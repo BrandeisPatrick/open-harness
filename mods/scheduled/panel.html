@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  html, body { height: 100%; }
+  /* A tab fills the side pane: the page scrolls its own list */
+  body { display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--bg-100); }
+  .wrap { width: 100%; max-width: 760px; margin: 0 auto; padding: 0 16px; }
+
+  .bar { flex: none; border-bottom: 1px solid var(--border-subtle); }
+  .bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; }
+  .bar .summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .scroller { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .content { padding-top: 12px; padding-bottom: 24px; }
+
+  /* ---------- the first time ---------- */
+  .intro { display: flex; gap: 14px; margin: 4px 0 16px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--r-card); background: var(--bg-000); box-shadow: var(--shadow-sm); }
+  .intro .mark { display: flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+  .intro .mark .h-icon { width: 18px; height: 18px; }
+  .intro h2 { margin: 0 0 6px; font-size: 14px; line-height: 20px; font-weight: 600; }
+  .intro p { color: var(--text-200); }
+  .intro p + p { margin-top: 6px; }
+  .intro .h-btn { margin-top: 12px; }
+
+  /* ---------- the list ---------- */
+  .list { margin: 0; padding: 0; list-style: none; }
+  .sch { padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
+  .sch:first-child { padding-top: 4px; }
+  .sch:last-child { border-bottom: 0; }
+  .top { display: flex; align-items: flex-start; gap: 12px; }
+  .main { flex: 1 1 auto; min-width: 0; }
+  .name { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; color: var(--text-100); }
+  .name > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; margin-top: 2px; color: var(--text-200); font-size: 12px; line-height: 18px; }
+  .meta .sep { color: var(--text-400); }
+  .meta .next { font-variant-numeric: tabular-nums; }
+  .meta button { color: var(--text-200); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 2px; }
+  .meta button:hover { color: var(--text-100); text-decoration-color: currentColor; }
+  .prompt { margin-top: 4px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--text-400); font-size: 12px; line-height: 16px; white-space: pre-line; }
+  .top input.h-switch { margin-top: 1px; }
+  .bottom { display: flex; align-items: center; gap: 4px; margin-top: 8px; min-height: 28px; }
+  .bottom .grow { flex: 1 1 auto; min-width: 0; }
+  .bottom .h-btn.ghost { color: var(--text-200); }
+  .bottom .h-btn.icon .h-icon { color: var(--text-400); }
+  .bottom .h-btn.icon:hover .h-icon { color: var(--text-100); }
+  .bottom > .h-btn:last-child { margin-right: -6px; }
+  .last { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  .last .h-chip .h-icon { width: 12px; height: 12px; }
+  .last .h-chip .h-spin { width: 10px; height: 10px; border-width: 1.25px; }
+  .last .when { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Missed is worth noticing but is nobody's fault: a neutral chip with a warn-coloured icon */
+  .h-chip.warn .h-icon { color: var(--warn); }
+  button.h-chip { cursor: pointer; }
+  button.h-chip.success:hover { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+  button.h-chip.danger:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+  .sch.muted .name, .sch.muted .meta, .sch.muted .meta button { color: var(--text-400); }
+  .sch.muted .name { font-weight: 500; }
+  .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 8px 8px 12px; border: 1px solid var(--danger-line); border-radius: var(--r-card); background: var(--danger-soft); }
+  .confirm span { flex: 1 1 200px; min-width: 0; color: var(--text-100); }
+  .confirm .btns { display: flex; gap: 6px; margin-left: auto; }
+  .h-btn.danger { background: var(--danger); border-color: transparent; color: #fff; }
+  .h-btn.danger:hover { background: color-mix(in srgb, var(--danger) 88%, black); }
+  .row-error, .form-error { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; color: var(--danger); font-size: 12px; line-height: 16px; }
+  .row-error .h-icon, .form-error .h-icon { width: 14px; height: 14px; margin-top: 1px; }
+  .problem { padding: 24px 0; text-align: center; }
+  .problem p { margin-bottom: 10px; color: var(--text-200); }
+  .loading { display: flex; align-items: center; gap: 8px; padding: 8px 0; color: var(--text-400); }
+  .section-title { margin: 16px 0 4px; }
+
+  /* ---------- the form ---------- */
+  .form { display: flex; flex-direction: column; gap: 14px; }
+  .form h2 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > label, .field > .label { color: var(--text-100); font-weight: 500; }
+  .field .h-muted { margin-top: -2px; }
+  .field textarea.h-input { min-height: 96px; max-height: 320px; }
+  .inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .inline .h-input { width: auto; }
+  .inline input[type="date"] { min-width: 150px; flex: 1 1 150px; }
+  .inline input[type="time"] { min-width: 110px; flex: 0 1 120px; }
+  .inline input[type="number"] { width: 90px; }
+  .inline select.h-input { width: 120px; }
+  .cron { font-family: var(--mono); font-size: 13px; }
+  .inline .h-input.cron { flex: 0 1 260px; min-width: 0; }
+  .field > .h-segmented { align-self: flex-start; }
+  .h-input.invalid { border-color: var(--danger-line); }
+  .h-input.invalid:focus { box-shadow: 0 0 0 2px var(--danger-soft); }
+  .field-error { color: var(--danger); font-size: 12px; line-height: 16px; }
+  .choices { display: flex; flex-direction: column; gap: 6px; }
+  .choice { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--bg-000); cursor: pointer; transition: border-color 0.12s, background-color 0.12s; }
+  .choice:hover { background: var(--surface-hover); }
+  .choice:has(input:checked) { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line); }
+  .choice input { margin: 2px 0 0; accent-color: var(--accent); }
+  .choice b { display: block; font-weight: 500; color: var(--text-100); }
+  .choice .h-muted { display: block; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+  input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0.6; cursor: pointer; }
+  :root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator, :root[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <span class="h-muted summary" id="summary"></span>
+    <button class="h-btn primary sm" id="new"></button>
+  </div>
+</header>
+<main class="scroller" id="scroller">
+  <div class="wrap content">
+    <div id="list-view">
+      <div class="loading" id="loading"><span class="h-spin sm"></span>Loading</div>
+      <section class="intro" id="intro" hidden></section>
+      <div class="problem" id="problem" hidden><p id="problem-text"></p><button class="h-btn sm" id="retry">Try again</button></div>
+      <ul class="list" id="list" hidden></ul>
+    </div>
+    <form class="form" id="form" hidden novalidate></form>
+  </div>
+</main>
+
+<script src="/@harness/harness.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const svg = (d, cls = 'h-icon') => `<svg class="${cls}" viewBox="0 0 16 16" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    clock: svg('<circle cx="8" cy="8" r="6.25"/><path d="M8 4.75V8l2.25 1.5"/>'),
+    plus: svg('<path d="M8 3.25v9.5M3.25 8h9.5"/>'),
+    play: svg('<path d="M5 3.5v9l7.25-4.5L5 3.5z"/>'),
+    pencil: svg('<path d="M10.75 2.75l2.5 2.5L6 12.5l-3.25.75L3.5 10l7.25-7.25z"/>'),
+    trash: svg('<path d="M2.75 4.25h10.5M6.25 4.25V3c0-.41.34-.75.75-.75h2c.41 0 .75.34.75.75v1.25M4.25 4.25l.6 8.4c.06.78.7 1.35 1.48 1.35h3.34c.78 0 1.42-.57 1.48-1.35l.6-8.4"/>'),
+    check: svg('<path d="M3.25 8.25l3 3 6.5-6.5"/>'),
+    x: svg('<path d="M4.25 4.25l7.5 7.5M11.75 4.25l-7.5 7.5"/>'),
+    alert: svg('<circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v3.75M8 11.1v.15"/>'),
+    skip: svg('<path d="M4 4l5 4-5 4V4zM11.5 4v8"/>'),
+    moon: svg('<path d="M12.75 9.5A5.25 5.25 0 0 1 6.5 3.25a5.25 5.25 0 1 0 6.25 6.25z"/>'),
+  };
+  /** The last run's state as a chip: label, tint, icon, and what it means. */
+  const LAST = {
+    running: { label: 'Running', cls: 'accent', icon: '<span class="h-spin"></span>', tip: 'Running now' },
+    ok: { label: 'Ran', cls: 'success', icon: ICON.check, tip: 'The last run finished' },
+    error: { label: 'Failed', cls: 'danger', icon: ICON.x, tip: 'The last run ended with an error' },
+    stopped: { label: 'Stopped', cls: '', icon: ICON.x, tip: 'The last run was stopped' },
+    skipped: { label: 'Skipped', cls: '', icon: ICON.skip, tip: 'Skipped: the previous run was still going' },
+    missed: { label: 'Missed', cls: 'warn', icon: ICON.moon, tip: 'Missed: the app was closed at the time' },
+  };
+  const DAY = 86400000;
+
+  let schedules = null; // null until the first answer
+  let loadError = null;
+  let editing = null; // null: the list. { id?, original? }: the form
+  let confirming = null; // id of the schedule whose delete is being confirmed
+  const busy = new Set(); // ids with a call in flight
+  const rowErrors = {}; // id → message
+
+  // ---------- time ----------
+
+  function rel(t) {
+    const d = t - Date.now();
+    const s = Math.abs(d) / 1000;
+    const fut = d >= 0;
+    const say = (n, unit) => (fut ? `in ${n} ${unit}${n === 1 ? '' : 's'}` : `${n} ${unit}${n === 1 ? '' : 's'} ago`);
+    if (s < 45) return fut ? 'in a moment' : 'just now';
+    const m = Math.round(s / 60);
+    if (m < 60) return say(m, 'minute');
+    const h = Math.round(m / 60);
+    if (h < 24) return say(h, 'hour');
+    const days = Math.round(h / 24);
+    if (days === 1) return fut ? 'tomorrow' : 'yesterday';
+    return say(days, 'day');
+  }
+  const exact = (t) => new Date(t).toLocaleString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const pad = (n) => String(n).padStart(2, '0');
+  /** A local date and time from the form → ISO with this machine's offset ("2026-11-06T09:00:00-05:00"). */
+  function isoLocal(date, time) {
+    const d = new Date(`${date}T${time}:00`);
+    if (isNaN(d.getTime())) return null;
+    const off = -d.getTimezoneOffset();
+    const sign = off >= 0 ? '+' : '-';
+    return `${date}T${time}:00${sign}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
+  }
+
+  // ---------- the list ----------
+
+  const finished = (s) => s.when && s.when.kind === 'at' && !s.nextRunAt && s.lastStatus !== 'running' && (s.runs > 0 || !!s.lastRunAt);
+  const quiet = (s) => !s.enabled || finished(s);
+
+  function sorted(list) {
+    return list.slice().sort((a, b) => {
+      const qa = quiet(a), qb = quiet(b);
+      if (qa !== qb) return qa ? 1 : -1;
+      if (!qa) return (a.nextRunAt || Infinity) - (b.nextRunAt || Infinity) || String(a.name).localeCompare(b.name);
+      return (b.lastRunAt || b.createdAt || 0) - (a.lastRunAt || a.createdAt || 0);
+    });
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function iconButton(icon, label, onClick, extra = '') {
+    const b = el('button', 'h-btn ghost sm icon ' + extra);
+    b.type = 'button';
+    b.innerHTML = icon;
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.onclick = onClick;
+    return b;
+  }
+
+  function openSession(id) {
+    harness.sessions.open(id).catch((e) => harness.ui.toast(e.message, { kind: 'error' }));
+  }
+
+  function nextText(s) {
+    if (finished(s)) return { text: s.lastRunAt ? `ran once, ${rel(s.lastRunAt)}` : 'done', title: s.lastRunAt ? exact(s.lastRunAt) : '' };
+    if (!s.enabled) return { text: 'paused', title: 'Turned off: it will not run until you turn it on' };
+    if (s.lastStatus === 'running' && !s.nextRunAt) return { text: 'running now', title: '' };
+    if (!s.nextRunAt) return { text: 'will not run again', title: '' };
+    return { text: `next run ${rel(s.nextRunAt)}`, title: exact(s.nextRunAt) };
+  }
+
+  function row(s) {
+    const li = el('li', 'sch' + (quiet(s) ? ' muted' : ''));
+    li.dataset.id = s.id;
+    const top = el('div', 'top');
+    const main = el('div', 'main');
+    const name = el('div', 'name');
+    name.appendChild(el('span', '', s.name || 'Untitled'));
+    if (s.createdBy === 'agent') { const c = el('span', 'h-chip', 'By the agent'); c.title = 'The agent created this; you approved it'; name.appendChild(c); }
+    main.appendChild(name);
+
+    const meta = el('div', 'meta');
+    const add = (node) => { if (meta.childNodes.length) meta.appendChild(el('span', 'sep', '·')); meta.appendChild(node); };
+    add(el('span', '', s.describe || ''));
+    const nx = nextText(s);
+    const next = el('span', 'next', nx.text);
+    if (nx.title) next.title = nx.title;
+    add(next);
+    if (s.target === 'session' && s.sessionId) {
+      const b = el('button', '', 'into a session');
+      b.type = 'button';
+      b.title = 'Each run arrives in that session as a follow-up. Click to open it.';
+      b.onclick = () => openSession(s.sessionId);
+      add(b);
+    } else add(el('span', '', 'new session each run'));
+    main.appendChild(meta);
+    if (s.prompt) { const p = el('div', 'prompt', s.prompt); p.title = s.prompt; main.appendChild(p); }
+    top.appendChild(main);
+
+    if (!finished(s)) {
+      const sw = document.createElement('input');
+      sw.type = 'checkbox';
+      sw.className = 'h-switch';
+      sw.checked = !!s.enabled;
+      sw.disabled = busy.has(s.id);
+      sw.setAttribute('aria-label', `${s.name}: ${s.enabled ? 'on' : 'off'}`);
+      sw.title = s.enabled ? 'On: runs on its schedule' : 'Off: will not run';
+      sw.onchange = () => toggle(s, sw.checked);
+      top.appendChild(sw);
+    }
+    li.appendChild(top);
+
+    const bottom = el('div', 'bottom');
+    const last = el('div', 'last grow');
+    const st = s.lastStatus && LAST[s.lastStatus];
+    if (st) {
+      const canOpen = !!s.lastSessionId;
+      const chip = el(canOpen ? 'button' : 'span', 'h-chip ' + st.cls);
+      if (canOpen) { chip.type = 'button'; chip.onclick = () => openSession(s.lastSessionId); }
+      chip.innerHTML = st.icon;
+      chip.appendChild(document.createTextNode(st.label));
+      chip.title = st.tip + (s.lastRunAt ? ` · ${exact(s.lastRunAt)}` : '') + (canOpen ? ' · open its session' : '');
+      last.appendChild(chip);
+      if (s.lastRunAt && s.lastStatus !== 'running') { const w = el('span', 'h-muted when', rel(s.lastRunAt)); w.title = exact(s.lastRunAt); last.appendChild(w); }
+    } else last.appendChild(el('span', 'h-muted when', 'Not run yet'));
+    bottom.appendChild(last);
+
+    const run = el('button', 'h-btn ghost sm');
+    run.type = 'button';
+    run.innerHTML = ICON.play;
+    run.appendChild(document.createTextNode('Run now'));
+    run.disabled = busy.has(s.id) || s.lastStatus === 'running';
+    run.title = s.lastStatus === 'running' ? 'It is running' : 'Run it once now, whatever its schedule';
+    run.onclick = () => runNow(s);
+    bottom.appendChild(run);
+    bottom.appendChild(iconButton(ICON.pencil, `Edit ${s.name}`, () => openForm(s)));
+    bottom.appendChild(iconButton(ICON.trash, `Delete ${s.name}`, () => { confirming = s.id; delete rowErrors[s.id]; render(); focusIn(s.id, '.confirm .cancel'); }));
+    li.appendChild(bottom);
+
+    if (confirming === s.id) {
+      const c = el('div', 'confirm');
+      c.setAttribute('role', 'alertdialog');
+      c.setAttribute('aria-label', 'Delete this scheduled task');
+      c.appendChild(el('span', '', `Delete “${s.name}”? It will not run again.`));
+      const btns = el('div', 'btns');
+      const cancel = el('button', 'h-btn sm cancel', 'Cancel');
+      cancel.type = 'button';
+      cancel.onclick = () => { confirming = null; render(); focusIn(s.id, '.bottom .h-btn.icon:last-child'); };
+      const del = el('button', 'h-btn sm danger', busy.has(s.id) ? 'Deleting…' : 'Delete');
+      del.type = 'button';
+      del.disabled = busy.has(s.id);
+      del.onclick = () => remove(s);
+      btns.append(cancel, del);
+      c.appendChild(btns);
+      li.appendChild(c);
+    }
+    if (rowErrors[s.id]) {
+      const e = el('div', 'row-error');
+      e.setAttribute('role', 'alert');
+      e.innerHTML = ICON.alert;
+      e.appendChild(el('span', '', rowErrors[s.id]));
+      li.appendChild(e);
+    }
+    return li;
+  }
+
+  function focusIn(id, sel) {
+    const li = document.querySelector(`.sch[data-id="${CSS.escape(id)}"]`);
+    const t = li && li.querySelector(sel);
+    if (t) t.focus();
+  }
+
+  function renderIntro() {
+    const box = $('intro');
+    box.innerHTML = `<div class="mark">${ICON.clock}</div>`;
+    const body = el('div');
+    body.appendChild(el('h2', '', 'Scheduled tasks'));
+    body.appendChild(el('p', '', 'A scheduled task sends a prompt later or on a rhythm: once at a time you pick, every so many minutes, hours or days, or on a cron schedule. Each run starts a new session, or arrives in this one as a follow-up.'));
+    body.appendChild(el('p', '', 'They run while Open Harness is open. A run that falls while it is closed is marked missed.'));
+    body.appendChild(el('p', '', 'The agent can schedule tasks too; each one it creates is shown to you for approval first.'));
+    const b = el('button', 'h-btn primary sm');
+    b.type = 'button';
+    b.innerHTML = ICON.plus;
+    b.appendChild(document.createTextNode('New scheduled task'));
+    b.onclick = () => openForm(null);
+    body.appendChild(b);
+    box.appendChild(body);
+  }
+
+  function render() {
+    const inForm = !!editing;
+    $('form').hidden = !inForm;
+    $('list-view').hidden = inForm;
+    // The intro has its own button when there is nothing yet
+    $('new').hidden = inForm || (Array.isArray(schedules) && !schedules.length && !loadError);
+    const list = Array.isArray(schedules) ? schedules : [];
+    $('loading').hidden = schedules !== null || !!loadError;
+    $('problem').hidden = !loadError;
+    if (loadError) $('problem-text').textContent = loadError;
+    $('intro').hidden = !(schedules !== null && !list.length && !loadError);
+    const active = list.filter((s) => !quiet(s)).length;
+    $('summary').textContent = schedules === null ? '' : !list.length ? 'Nothing scheduled' : `${active} active` + (list.length > active ? ` · ${list.length - active} paused or done` : '');
+    harness.ui.setBadge(active || null);
+    const ul = $('list');
+    ul.hidden = !list.length || !!loadError;
+    if (inForm) return;
+    const keep = document.activeElement && document.activeElement.closest && document.activeElement.closest('.sch');
+    const keepId = keep && keep.dataset.id;
+    const keepIdx = keep ? [...keep.querySelectorAll('button, input')].indexOf(document.activeElement) : -1;
+    ul.textContent = '';
+    for (const s of sorted(list)) ul.appendChild(row(s));
+    // A re-render (an event, a toggle) keeps the keyboard where it was
+    if (keepId && keepIdx >= 0) {
+      const li = ul.querySelector(`.sch[data-id="${CSS.escape(keepId)}"]`);
+      const t = li && li.querySelectorAll('button, input')[keepIdx];
+      if (t && !t.disabled) t.focus();
+    }
+  }
+
+  // ---------- calls ----------
+
+  async function load() {
+    try {
+      const r = await harness.schedules.list();
+      schedules = (r && Array.isArray(r.schedules)) ? r.schedules : [];
+      loadError = null;
+    } catch (e) {
+      loadError = e.code === 'permission' ? 'Scheduled is not allowed to read scheduled tasks. Turn on its “schedules” permission in Settings → Mods.' : `Could not load the scheduled tasks: ${e.message}`;
+    }
+    render();
+  }
+
+  async function act(s, fn) {
+    busy.add(s.id);
+    delete rowErrors[s.id];
+    render();
+    try { await fn(); } catch (e) { rowErrors[s.id] = e.message || 'That did not work.'; }
+    busy.delete(s.id);
+    render();
+  }
+  const toggle = (s, on) => act(s, async () => { const u = await harness.schedules.update(s.id, { enabled: on }); patchLocal(u); });
+  const runNow = (s) => act(s, () => harness.schedules.runNow(s.id));
+  const remove = (s) => act(s, async () => {
+    await harness.schedules.remove(s.id);
+    confirming = null;
+    schedules = (schedules || []).filter((x) => x.id !== s.id);
+    // The row is gone: the keyboard goes to the next one, or to New
+    setTimeout(() => { const f = document.querySelector('#list .sch button') || $('new'); if (f) f.focus(); }, 0);
+  });
+  /** An answer from update/create counts until the event brings the whole list. */
+  function patchLocal(u) {
+    if (!u || !u.id || !Array.isArray(schedules)) return;
+    const i = schedules.findIndex((x) => x.id === u.id);
+    if (i >= 0) schedules[i] = u; else schedules.push(u);
+  }
+
+  // ---------- the form ----------
+
+  const UNITS = { minutes: 1, hours: 60, days: 1440 };
+  let form = null; // the values being edited
+
+  function defaults() {
+    const t = new Date(Date.now() + DAY);
+    return { name: '', prompt: '', kind: 'every', date: `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`, time: '09:00', every: 30, unit: 'minutes', expr: '0 9 * * 1-5', target: 'new' };
+  }
+  function fromSchedule(s) {
+    const v = defaults();
+    v.name = s.name || '';
+    v.prompt = s.prompt || '';
+    v.target = s.target === 'session' ? 'session' : 'new';
+    const w = s.when || {};
+    if (w.kind === 'at') {
+      const d = new Date(Date.parse(w.at));
+      if (!isNaN(d.getTime())) { v.date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; v.time = `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+      v.kind = 'at';
+    } else if (w.kind === 'every') {
+      v.kind = 'every';
+      const m = Number(w.minutes) || 30;
+      v.unit = m % 1440 === 0 ? 'days' : m % 60 === 0 ? 'hours' : 'minutes';
+      v.every = m / UNITS[v.unit];
+    } else if (w.kind === 'cron') { v.kind = 'cron'; v.expr = w.expr || ''; }
+    return v;
+  }
+
+  function openForm(s) {
+    editing = s ? { id: s.id, original: s } : {};
+    form = s ? fromSchedule(s) : defaults();
+    confirming = null;
+    buildForm();
+    render();
+    $('scroller').scrollTop = 0;
+    const first = $('f-name');
+    if (first) first.focus();
+  }
+  function closeForm() {
+    const id = editing && editing.id;
+    editing = null;
+    form = null;
+    $('form').textContent = '';
+    render();
+    if (id) focusIn(id, '.bottom .h-btn.icon');
+    else { const b = $('new').hidden ? document.querySelector('#intro .h-btn') : $('new'); if (b) b.focus(); }
+  }
+
+  /** What the form says, as a ScheduleWhen, or an error per field. */
+  function readWhen() {
+    if (form.kind === 'at') {
+      if (!form.date || !form.time) return { error: { when: 'Pick a date and a time.' } };
+      const at = isoLocal(form.date, form.time);
+      if (!at) return { error: { when: 'That is not a date and time.' } };
+      return { when: { kind: 'at', at } };
+    }
+    if (form.kind === 'every') {
+      const n = Number(form.every);
+      if (!Number.isFinite(n) || n <= 0 || Math.round(n) !== n) return { error: { when: 'Enter a whole number.' } };
+      const minutes = n * UNITS[form.unit];
+      if (minutes < 5) return { error: { when: 'The shortest rhythm is every 5 minutes.' } };
+      if (minutes > 366 * 1440) return { error: { when: 'The longest rhythm is once a year.' } };
+      return { when: { kind: 'every', minutes } };
+    }
+    const expr = String(form.expr || '').trim().replace(/\s+/g, ' ');
+    const parts = expr ? expr.split(' ') : [];
+    if (parts.length !== 5) return { error: { when: `A cron expression has five fields; this one has ${parts.length}.` } };
+    if (parts.some((p) => !/^[\d*,/-]+$/.test(p))) return { error: { when: 'Use numbers, *, ranges (1-5), lists (1,3) and steps (*/15) only.' } };
+    return { when: { kind: 'cron', expr } };
+  }
+
+  function sameWhen(a, b) { return !!a && !!b && JSON.stringify(a) === JSON.stringify(b); }
+
+  function validate() {
+    const errors = {};
+    if (!form.prompt.trim()) errors.prompt = 'Write the prompt it should send.';
+    if (form.name.length > 120) errors.name = 'Keep the name under 120 characters.';
+    const w = readWhen();
+    if (w.error) Object.assign(errors, w.error);
+    // A time that has passed is only a problem when it is the time being set now
+    const changed = !(editing && editing.original && sameWhen(w.when, editing.original.when));
+    if (w.when && w.when.kind === 'at' && changed && Date.parse(w.when.at) < Date.now() + 60000) errors.when = 'That time has passed. Pick one in the future.';
+    return { errors, when: w.when };
+  }
+
+  function preview() {
+    const w = readWhen();
+    if (w.error || !w.when) return '';
+    if (w.when.kind === 'at') { const t = Date.parse(w.when.at); return t > Date.now() ? `Runs once, ${rel(t)} (${exact(t)}).` : ''; }
+    if (w.when.kind === 'every') { const t = Date.now() + w.when.minutes * 60000; return `First run ${rel(t)}, then every ${describeEvery(w.when.minutes)}.`; }
+    return 'In local time. The app checks the expression when you save.';
+  }
+  function describeEvery(m) {
+    if (m % 1440 === 0) return m === 1440 ? 'day' : `${m / 1440} days`;
+    if (m % 60 === 0) return m === 60 ? 'hour' : `${m / 60} hours`;
+    return `${m} minutes`;
+  }
+
+  let formErrors = {};
+  let appError = '';
+  let saving = false;
+
+  function buildForm() {
+    formErrors = {};
+    appError = '';
+    saving = false;
+    const f = $('form');
+    f.textContent = '';
+    f.appendChild(el('h2', '', editing && editing.id ? `Edit “${editing.original.name}”` : 'New scheduled task'));
+
+    const name = field('Name', 'f-name');
+    const ni = el('input', 'h-input');
+    ni.id = 'f-name';
+    ni.placeholder = 'Morning summary';
+    ni.maxLength = 160;
+    ni.value = form.name;
+    ni.oninput = () => { form.name = ni.value; clearError('name'); };
+    name.wrap.appendChild(ni);
+    name.wrap.appendChild(el('span', 'h-muted', 'Leave it empty to use the start of the prompt.'));
+    name.wrap.appendChild(errorSlot('name'));
+    f.appendChild(name.wrap);
+
+    const pr = field('Prompt', 'f-prompt');
+    const pi = el('textarea', 'h-input');
+    pi.id = 'f-prompt';
+    pi.rows = 4;
+    pi.placeholder = 'Summarise what changed in the repo since yesterday.';
+    pi.value = form.prompt;
+    pi.oninput = () => { form.prompt = pi.value; clearError('prompt'); };
+    pr.wrap.appendChild(pi);
+    pr.wrap.appendChild(errorSlot('prompt'));
+    f.appendChild(pr.wrap);
+
+    const when = el('div', 'field');
+    when.appendChild(el('span', 'label', 'When'));
+    const seg = el('div', 'h-segmented');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'When');
+    [['at', 'Once'], ['every', 'Every'], ['cron', 'Advanced']].forEach(([k, label]) => {
+      const b = el('button', '', label);
+      b.type = 'button';
+      b.dataset.kind = k;
+      b.setAttribute('aria-pressed', String(form.kind === k));
+      b.onclick = () => { form.kind = k; clearError('when'); seg.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.kind === k))); buildWhen(); };
+      seg.appendChild(b);
+    });
+    when.appendChild(seg);
+    const whenBody = el('div', 'field');
+    whenBody.id = 'when-body';
+    when.appendChild(whenBody);
+    when.appendChild(errorSlot('when'));
+    const pv = el('span', 'h-muted');
+    pv.id = 'when-preview';
+    when.appendChild(pv);
+    f.appendChild(when);
+
+    const where = el('div', 'field');
+    where.setAttribute('role', 'radiogroup');
+    where.setAttribute('aria-label', 'Where it runs');
+    where.appendChild(el('span', 'label', 'Where'));
+    const choices = el('div', 'choices');
+    [['new', 'A new session each time', 'Every run gets a session of its own.'], ['session', 'This session', 'Every run arrives in the session on screen now, as a follow-up message.']].forEach(([k, title, sub]) => {
+      const l = el('label', 'choice');
+      const r = el('input');
+      r.type = 'radio';
+      r.name = 'target';
+      r.value = k;
+      r.checked = form.target === k;
+      r.onchange = () => { form.target = k; };
+      const t = el('span');
+      t.appendChild(el('b', '', title));
+      t.appendChild(el('span', 'h-muted', sub));
+      l.append(r, t);
+      choices.appendChild(l);
+    });
+    where.appendChild(choices);
+    f.appendChild(where);
+
+    const err = el('div', 'form-error');
+    err.id = 'app-error';
+    err.setAttribute('role', 'alert');
+    err.hidden = true;
+    f.appendChild(err);
+
+    const actions = el('div', 'actions');
+    const cancel = el('button', 'h-btn ghost', 'Cancel');
+    cancel.type = 'button';
+    cancel.onclick = closeForm;
+    const save = el('button', 'h-btn primary', editing && editing.id ? 'Save' : 'Create');
+    save.type = 'submit';
+    save.id = 'f-save';
+    actions.append(cancel, save);
+    f.appendChild(actions);
+    f.onsubmit = (e) => { e.preventDefault(); submit(); };
+    buildWhen();
+  }
+
+  function field(label, id) {
+    const wrap = el('div', 'field');
+    const l = el('label', '', label);
+    l.htmlFor = id;
+    wrap.appendChild(l);
+    return { wrap };
+  }
+  function errorSlot(key) {
+    const e = el('div', 'field-error');
+    e.id = 'err-' + key;
+    e.hidden = true;
+    return e;
+  }
+  function showErrors() {
+    ['name', 'prompt', 'when'].forEach((k) => {
+      const e = $('err-' + k);
+      if (!e) return;
+      e.hidden = !formErrors[k];
+      e.textContent = formErrors[k] || '';
+    });
+    const map = { name: ['f-name'], prompt: ['f-prompt'], when: ['f-date', 'f-time', 'f-every', 'f-expr'] };
+    Object.keys(map).forEach((k) => map[k].forEach((id) => { const i = $(id); if (i) { i.classList.toggle('invalid', !!formErrors[k]); i.setAttribute('aria-invalid', String(!!formErrors[k])); } }));
+    const a = $('app-error');
+    a.hidden = !appError;
+    a.innerHTML = appError ? ICON.alert : '';
+    if (appError) a.appendChild(el('span', '', appError));
+    const p = $('when-preview');
+    if (p) p.textContent = formErrors.when ? '' : preview();
+    const save = $('f-save');
+    save.disabled = saving;
+    save.textContent = saving ? 'Saving…' : editing && editing.id ? 'Save' : 'Create';
+  }
+  function clearError(k) { if (formErrors[k] || appError) { delete formErrors[k]; appError = ''; } showErrors(); }
+
+  function buildWhen() {
+    const body = $('when-body');
+    body.textContent = '';
+    const row = el('div', 'inline');
+    if (form.kind === 'at') {
+      const d = el('input', 'h-input');
+      d.type = 'date'; d.id = 'f-date'; d.value = form.date; d.setAttribute('aria-label', 'Date');
+      d.oninput = () => { form.date = d.value; clearError('when'); };
+      const t = el('input', 'h-input');
+      t.type = 'time'; t.id = 'f-time'; t.value = form.time; t.setAttribute('aria-label', 'Time');
+      t.oninput = () => { form.time = t.value; clearError('when'); };
+      row.append(d, t);
+    } else if (form.kind === 'every') {
+      const n = el('input', 'h-input');
+      n.type = 'number'; n.id = 'f-every'; n.min = '1'; n.step = '1'; n.value = String(form.every); n.setAttribute('aria-label', 'Every how many');
+      n.oninput = () => { form.every = n.value; clearError('when'); };
+      const u = el('select', 'h-input');
+      u.id = 'f-unit';
+      u.setAttribute('aria-label', 'Unit');
+      Object.keys(UNITS).forEach((k) => { const o = el('option', '', k); o.value = k; u.appendChild(o); });
+      u.value = form.unit;
+      u.onchange = () => { form.unit = u.value; clearError('when'); };
+      row.append(n, u);
+    } else {
+      const c = el('input', 'h-input cron');
+      c.id = 'f-expr'; c.value = form.expr; c.placeholder = '0 9 * * 1-5'; c.spellcheck = false; c.autocomplete = 'off';
+      c.setAttribute('aria-label', 'Cron expression');
+      c.oninput = () => { form.expr = c.value; clearError('when'); };
+      row.appendChild(c);
+      body.appendChild(row);
+      body.appendChild(el('span', 'h-muted h-mono', 'minute  hour  day-of-month  month  day-of-week'));
+      showErrors();
+      return;
+    }
+    body.appendChild(row);
+    showErrors();
+  }
+
+  async function submit() {
+    if (saving) return;
+    const v = validate();
+    formErrors = v.errors;
+    appError = '';
+    showErrors();
+    const firstBad = ['prompt', 'when', 'name'].find((k) => formErrors[k]);
+    if (firstBad) {
+      const id = firstBad === 'when' ? ({ at: 'f-date', every: 'f-every', cron: 'f-expr' })[form.kind] : 'f-' + firstBad;
+      const i = $(id);
+      if (i) i.focus();
+      return;
+    }
+    const name = form.name.trim() || form.prompt.trim().split('\n')[0].slice(0, 60);
+    saving = true;
+    showErrors();
+    try {
+      if (editing && editing.id) {
+        const o = editing.original;
+        const patch = {};
+        if (name !== o.name) patch.name = name;
+        if (form.prompt !== o.prompt) patch.prompt = form.prompt;
+        if (!sameWhen(v.when, o.when)) patch.when = v.when;
+        if (form.target !== (o.target === 'session' ? 'session' : 'new')) patch.target = form.target;
+        if (Object.keys(patch).length) patchLocal(await harness.schedules.update(o.id, patch));
+      } else {
+        patchLocal(await harness.schedules.create({ name, prompt: form.prompt, when: v.when, target: form.target }));
+      }
+      closeForm();
+    } catch (e) {
+      saving = false;
+      appError = e.code === 'permission' ? 'Scheduled is not allowed to change scheduled tasks (the “schedules” permission).' : e.message || 'The app refused it.';
+      showErrors();
+    }
+  }
+
+  // ---------- keyboard ----------
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (confirming) {
+      e.preventDefault();
+      const id = confirming;
+      confirming = null;
+      render();
+      focusIn(id, '.bottom .h-btn.icon:last-child');
+    }
+  });
+
+  // ---------- go ----------
+
+  $('new').innerHTML = ICON.plus;
+  $('new').appendChild(document.createTextNode('New scheduled task'));
+  $('new').onclick = () => openForm(null);
+  $('retry').onclick = () => { loadError = null; schedules = null; render(); load(); };
+  renderIntro();
+  render();
+
+  harness.on('schedules.changed', (d) => {
+    if (!d || !Array.isArray(d.schedules)) return;
+    schedules = d.schedules;
+    loadError = null;
+    if (confirming && !schedules.some((s) => s.id === confirming)) confirming = null;
+    render();
+  });
+  // Relative times ("next in 12 minutes") stay true
+  setInterval(() => { if (!editing && !document.hidden) render(); else if (editing) showErrors(); }, 30000);
+  harness.on('visibility.changed', (v) => { if (v && v.visible && !editing) render(); });
+  harness.ready.then(load);
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { SkillInfo } from '../shared/types';
+import { configDir } from './paths';
 
 export interface Skill extends SkillInfo {
   body: string;
@@ -9,13 +10,16 @@ export interface Skill extends SkillInfo {
 
 /**
  * Skills are folders containing a SKILL.md with YAML-ish frontmatter (name, description)
- * followed by instructions. Lookup order: <project>/.openagent/skills, ~/.openagent/skills,
+ * followed by instructions. Lookup order: <project>/.open-harness/skills, ~/.open-harness/skills,
  * then the skills/ folder bundled with the app. Earlier sources win on name clashes.
  */
 export function loadSkills(cwd: string, appRoot: string): Skill[] {
   const sources: [string, Skill['source']][] = [
+    [path.join(cwd, '.open-harness', 'skills'), 'project'],
+    // The folder names from before the renames (the app was OpenAgent, and OpenCoder before that)
     [path.join(cwd, '.openagent', 'skills'), 'project'],
-    [path.join(cwd, '.opencoder', 'skills'), 'project'], // the folder name from before the rename
+    [path.join(cwd, '.opencoder', 'skills'), 'project'],
+    [path.join(configDir(), 'skills'), 'user'],
     [path.join(os.homedir(), '.openagent', 'skills'), 'user'],
     [path.join(os.homedir(), '.opencoder', 'skills'), 'user'],
     [path.join(appRoot, 'skills'), 'bundled'],

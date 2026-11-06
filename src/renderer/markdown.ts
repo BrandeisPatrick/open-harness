@@ -2,7 +2,9 @@
 // Everything is escaped; only the constructs below produce markup:
 // headings, paragraphs (single newlines become <br>), fenced code (with language label, copy button and
 // highlighting), blockquotes, horizontal rules, tables (with alignment), nested ordered/unordered lists,
-// task lists, inline code, bold, italics (* and _), bold-italics, strikethrough, links, autolinks.
+// task lists, inline code, bold, italics (* and _), bold-italics, strikethrough, links, autolinks, images.
+// Images: a data: image renders directly; a remote one is only a link chip (the window never loads images from the
+// network); a local path becomes a placeholder that images.ts resolves through the main process.
 
 import { escapeHtml } from './dom.js';
 import { highlight } from './highlight.js';
@@ -15,6 +17,10 @@ const QUOTE = /^ {0,3}>[ \t]?(.*)$/;
 const ITEM = /^([ \t]*)([-*+]|\d{1,9}[.)])(?:[ \t]+(.*))?$/;
 const TABLE_DELIM = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
 const SAFE_URL = /^(?:https?:\/\/|mailto:)/i;
+const IMAGE = /!\[([^[\]\n]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"([^"\n]*)")?\s*\)/g;
+const DATA_IMAGE = /^data:image\/(?:png|jpeg|gif|webp|svg\+xml)(;base64)?,([\w+/=%.!~*'()-]*)$/i;
+/** Decoded size cap for data: images */
+const MAX_DATA_IMAGE = 8 * 1024 * 1024;
 
 const indentOf = (line: string): number => /^[ ]*/.exec(line)![0].length;
 
@@ -28,6 +34,32 @@ function isBlockStart(lines: string[], i: number): boolean {
 }
 
 // ---------- inline ----------
+
+/** The markup for ![alt](src "title"). Everything that goes into it is escaped. */
+function image(alt: string, src: string, title?: string): string {
+  const label = alt.replace(/\u0000\d+\u0001/g, '').trim();
+  const tip = title ? ` title="${escapeHtml(title)}"` : '';
+  const data = DATA_IMAGE.exec(src);
+  if (data) {
+    const bytes = data[1] ? Math.floor((data[2].replace(/=+$/, '').length * 3) / 4) : data[2].length;
+    if (bytes <= MAX_DATA_IMAGE) return `<img class="md-img" src="${escapeHtml(src)}" alt="${escapeHtml(label)}"${tip} draggable="false">`;
+    return `<span class="md-img-missing">${icon('image', 14)}<span>${escapeHtml(`image too large: ${label || 'image'}`)}</span></span>`;
+  }
+  if (/^https?:\/\//i.test(src)) {
+    let host = src;
+    try {
+      host = new URL(src).host;
+    } catch {
+      /* shown as written */
+    }
+    return (
+      `<a class="md-img-link" href="${escapeHtml(src)}" target="_blank" rel="noreferrer" title="${escapeHtml(src)}">` +
+      `${icon('image', 14)}<span>${escapeHtml(`image: ${label || host}`)}</span><span class="md-img-arrow">↗</span></a>`
+    );
+  }
+  if (/^data:/i.test(src)) return `<span class="md-img-missing">${icon('image', 14)}<span>${escapeHtml(`image not shown: ${label || 'image'}`)}</span></span>`;
+  return `<span class="md-img-pending" data-src="${escapeHtml(src)}" data-alt="${escapeHtml(label)}"${tip}>${icon('image', 14)}<span>${escapeHtml(label || src)}</span></span>`;
+}
 
 function anchor(href: string, innerHtml: string): string {
   return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${innerHtml}</a>`;
@@ -52,6 +84,7 @@ export function inline(src: string, links = true): string {
   s = s.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_m, _t: string, code: string) => stash(`<code>${escapeHtml(code.replace(/^ ([\s\S]*) $/, '$1'))}</code>`));
   s = s.replace(/\\([\\`*_{}[\]()#+\-.!|~<>])/g, (_m, c: string) => stash(escapeHtml(c)));
   if (links) {
+    s = s.replace(IMAGE, (_m, alt: string, src: string, title?: string) => stash(image(alt, src, title)));
     s = s.replace(/!?\[((?:[^[\]\n]|\[[^\]\n]*\])+)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"\n]*")?\s*\)/g, (m, text: string, url: string) =>
       SAFE_URL.test(url) ? stash(anchor(url, inline(text, false))) : m,
     );

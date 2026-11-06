@@ -7,6 +7,8 @@ import { highlight, langFromPath } from './highlight.js';
 import { icon, type IconName } from './icons.js';
 import { artifactIcon } from './artifacts.js';
 import { cleanTasks, taskProgress, taskSnapshot, taskSummary } from './tasks.js';
+import { AGENT_TOOLS, agentApproval, agentArgFromApproval, agentArgFromResult, agentBrief, agentStatusVerb, agentToolLabel, agentToolMeta, isDeniedResult } from './tool-labels.js';
+import { homeDir, tilde } from './home.js';
 
 export type Args = Record<string, unknown>;
 
@@ -136,6 +138,8 @@ export function toolLabel(name: string, a: Args): ToolLabel {
   if (mcp) return mcpLabel(mcp, a);
   const browser = browserLabel(name, a);
   if (browser) return browser;
+  const agent = agentToolLabel(name, a);
+  if (agent) return agent;
   switch (name) {
     case 'read_file': return { verb: 'Read', arg: displayPath(str(a, 'path')), title: str(a, 'path'), icon: 'file-text', mono: true };
     case 'write_file': return { verb: 'Write', arg: displayPath(str(a, 'path')), title: str(a, 'path'), icon: 'file-plus', mono: true };
@@ -153,6 +157,7 @@ export function toolLabel(name: string, a: Args): ToolLabel {
       const title = str(a, 'title').trim();
       return { verb: 'Artifact', arg: short(title, 80), title: title || undefined, icon: artifactIcon(str(a, 'kind')), mono: false };
     }
+    case 'show_image': return { verb: 'Show image', arg: displayPath(str(a, 'path')), title: str(a, 'path'), icon: 'image', mono: true };
     case 'update_tasks': {
       const summary = taskSummary(cleanTasks(a.tasks));
       return { verb: 'Tasks', arg: short(summary, 80), title: summary.length > 80 ? summary : undefined, icon: 'list-checks', mono: false };
@@ -272,6 +277,9 @@ export function statusVerb(name: string): string {
   if (name === 'terminal_stop') return 'Stopping the command…';
   if (name === 'create_artifact') return 'Making the artifact…';
   if (name === 'update_tasks') return 'Updating tasks…';
+  if (name === 'show_image') return 'Showing the image…';
+  const agent = agentStatusVerb(name);
+  if (agent) return agent;
   if (name.startsWith('browser_')) return 'Browsing…';
   const mcp = mcpParts(name);
   if (mcp) return `Calling ${mcp.server}…`;
@@ -279,10 +287,11 @@ export function statusVerb(name: string): string {
 }
 
 const KNOWN_TOOLS = new Set([
-  'read_file', 'write_file', 'edit_file', 'list_directory', 'glob', 'grep', 'bash', 'skill', 'create_artifact', 'update_tasks',
+  'read_file', 'write_file', 'edit_file', 'list_directory', 'glob', 'grep', 'bash', 'skill', 'create_artifact', 'update_tasks', 'show_image',
   'terminal_run', 'terminal_read', 'terminal_list', 'terminal_stop',
   'browser_navigate', 'browser_get_text', 'browser_read_page', 'browser_find', 'browser_click',
   'browser_type', 'browser_press_key', 'browser_scroll', 'browser_screenshot', 'browser_eval', 'browser_wait_for',
+  ...AGENT_TOOLS,
 ]);
 
 /** Tools whose consecutive rows collapse into one "Read 4 files" group (MCP tools join them: "Called 3 tools on github"). */
@@ -337,8 +346,6 @@ function cwdVariants(): string[] {
   return v;
 }
 
-const HOME_RE = /^\/Users\/[^/]+/;
-
 /** A path for display: relative to the working directory, ~ for home, middle-truncated past `max` with the file name kept. */
 export function displayPath(p: string, max = 56): string {
   let s = (p ?? '').trim();
@@ -350,7 +357,7 @@ export function displayPath(p: string, max = 56): string {
       break;
     }
   }
-  s = s.replace(HOME_RE, '~');
+  s = tilde(s);
   if (s.length <= max) return s;
   const parts = s.split('/');
   if (parts.length <= 2) return '…' + s.slice(-(max - 1));
@@ -372,9 +379,9 @@ export function stripCwd(text: string): string {
 
 // ---------- Paths that open in the editor ----------
 
-/** /Users/me (or /home/me) when the working directory is inside it: what "~" stands for in a tool's path */
+/** What "~" stands for in a tool's path: the home folder, or the one the working directory sits in when it is not known */
 function homeOf(dir: string): string {
-  return /^\/(?:Users|home)\/[^/]+/.exec(dir)?.[0] ?? '';
+  return homeDir(dir);
 }
 
 /**
@@ -467,6 +474,8 @@ export interface ToolCard {
   finish(res: ToolResult): void;
   /** The run ended before this tool reported back */
   interrupt(): void;
+  /** The approval card for this call arrived: its detail may name what the arguments only gave as an id */
+  noteApproval(detail: string): void;
 }
 
 /** Lines of a file's content, without the empty "line" after a trailing newline. */
@@ -706,8 +715,10 @@ function terminalBody(name: string, body: HTMLElement, r: string): void {
 function metaHtml(name: string, a: Args, res: ToolResult, edit?: DiffRow[]): string {
   const parts: string[] = [];
   const r = res.result;
+  const agent = res.ok ? agentToolMeta(name, a, r) : null;
   if (!res.ok) parts.push('<span class="meta-err">error</span>');
-  else if (/^Not permitted/.test(r)) parts.push('<span>denied</span>');
+  else if (/^Not permitted/.test(r) || isDeniedResult(r)) parts.push('<span>denied</span>');
+  else if (agent) parts.push(agent.err ? `<span class="meta-err">${escapeHtml(agent.text)}</span>` : escapeHtml(agent.text));
   else {
     switch (name) {
       case 'read_file': {
@@ -802,6 +813,8 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
   const body = document.createElement('div');
   body.className = 'tool-body';
   el.append(summary, body);
+  // show_image has no row: the image itself appears in the reply (images.ts). Only a failure shows the row.
+  if (name === 'show_image') el.hidden = true;
 
   // Bodies that are known before the tool runs
   let editRows: DiffRow[] | undefined;
@@ -825,24 +838,47 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
   } else if (name === 'update_tasks' && Array.isArray(a.tasks)) {
     // The list as the agent set it at this point (the pinned card shows the latest one)
     body.appendChild(taskSnapshot(cleanTasks(a.tasks)));
+  } else if (agentBrief(name, a)) {
+    // A sub-session's brief, a message, a schedule's prompt: what was handed over (the result follows it)
+    body.appendChild(outBlock(clip(agentBrief(name, a)), 'note'));
   } else if (!KNOWN_TOOLS.has(name)) {
     // Unknown tools (or arguments that were not valid JSON): show what the model sent.
     if (Object.keys(a).length || typeof rawArgs === 'string') body.appendChild(argsBlock(a, typeof rawArgs === 'string' && !Object.keys(a).length ? rawArgs : undefined));
   }
+
+  /** Replaces the row's argument (and its tooltip) */
+  const setArg = (text: string | null) => {
+    const argEl = summary.querySelector<HTMLElement>('.tool-arg');
+    const full = (text ?? '').replace(/\s+/g, ' ').trim();
+    if (!argEl || !full || full === (argEl.getAttribute('title') || argEl.textContent)) return;
+    argEl.textContent = full.length > 80 ? full.slice(0, 80) + '…' : full;
+    argEl.setAttribute('title', full);
+  };
 
   const card: ToolCard = {
     el,
     name,
     args: a,
     running: true,
+    noteApproval(detail: string) {
+      setArg(agentArgFromApproval(name, detail));
+    },
     finish(res: ToolResult) {
       if (!card.running) return;
       card.running = false;
+      if (name === 'show_image') {
+        if (res.ok && /^Shown to the user:/.test(res.result)) {
+          el.remove();
+          return;
+        }
+        el.hidden = false;
+      }
       const status = el.querySelector<HTMLElement>('.tool-status')!;
       status.className = `tool-status ${res.ok ? 'ok' : 'err'}`;
       if (!res.ok) status.innerHTML = icon('circle-alert');
       el.querySelector('.tool-meta')!.innerHTML = metaHtml(name, a, res, editRows);
-      const denied = res.ok && /^Not permitted/.test(res.result);
+      if (res.ok) setArg(agentArgFromResult(name, a, res.result));
+      const denied = res.ok && (/^Not permitted/.test(res.result) || isDeniedResult(res.result));
       if (!res.ok || denied) {
         el.classList.toggle('denied', denied);
         body.appendChild(outBlock(clip(stripCwd(res.result)), res.ok ? 'note' : 'error'));
@@ -903,11 +939,20 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
         }
         body.appendChild(img);
         el.open = true;
+        // A small copy at the right end of the summary line; it opens the lightbox (images.ts) and stays visible collapsed
+        const thumb = document.createElement('img');
+        thumb.className = 'tool-thumb';
+        thumb.src = res.image;
+        thumb.alt = img.alt;
+        thumb.title = 'Open the image';
+        thumb.draggable = false;
+        summary.appendChild(thumb);
       }
     },
     interrupt() {
       if (!card.running) return;
       card.running = false;
+      el.hidden = false;
       const status = el.querySelector<HTMLElement>('.tool-status')!;
       status.className = 'tool-status err';
       status.innerHTML = icon('circle-alert');
@@ -920,13 +965,15 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
 /** Title for the approval card. */
 export function approvalTitle(name: string, detail: string, args?: Args): string {
   const target = (args && str(args, 'path')) || detail.split('\n')[0] || '';
-  if (name === 'bash') return 'Allow OpenAgent to run this command?';
-  if (name === 'terminal_run') return 'Allow OpenAgent to run this command in the terminal?';
-  if (name === 'edit_file') return `Allow OpenAgent to edit ${basename(target) || 'this file'}?`;
-  if (name === 'write_file') return `Allow OpenAgent to write ${basename(target) || 'this file'}?`;
+  if (name === 'bash') return 'Allow Open Harness to run this command?';
+  if (name === 'terminal_run') return 'Allow Open Harness to run this command in the terminal?';
+  if (name === 'edit_file') return `Allow Open Harness to edit ${basename(target) || 'this file'}?`;
+  if (name === 'write_file') return `Allow Open Harness to write ${basename(target) || 'this file'}?`;
   const mcp = mcpParts(name);
-  if (mcp) return `Allow OpenAgent to call ${mcp.tool} on ${mcp.server}?`;
-  return `Allow OpenAgent to use ${name}?`;
+  if (mcp) return `Allow Open Harness to call ${mcp.tool} on ${mcp.server}?`;
+  const agent = agentApproval(name, detail);
+  if (agent) return agent.title;
+  return `Allow Open Harness to use ${name}?`;
 }
 
 /** Line number where an edit's old text starts, from known file contents. */

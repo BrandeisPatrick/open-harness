@@ -1,0 +1,132 @@
+/*
+ * Compact chat bar: the composer as one rounded bar, CSS only.
+ *
+ *   [attachments, when there are any]
+ *   ( +   Describe a task…                         ↵ )
+ *                                  Model   Mode   (◔ 12%)
+ *
+ * How it works without touching the markup: #composer becomes a grid and its .composer-bar is dissolved
+ * (display: contents), so the attach button, the field and the send button share one row while the model chip, the
+ * mode chip and the context meter drop into a row of their own underneath. The bar's surface is #composer::before,
+ * laid over the attachment rows and the input row only, so the line below sits outside it on the page.
+ *
+ * Everything is scoped under #composer and uses the app's tokens, so light, dark and theme mods all apply. The app's
+ * script still sizes the field (its height is at least 40 px and grows with the text up to 240 px); the field's own
+ * padding centres one line in that, which is what makes the bar 44 px tall.
+ */
+
+#composer {
+  /* columns: attach | field (also under the chips) | model | mode | send and meter */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: end;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  isolation: isolate; /* the surface below sits behind the children, not behind the page */
+}
+/* The app's own focus ring and drop highlight are drawn on the surface instead (below) */
+#composer:focus-within, #composer.dragging { box-shadow: none; }
+
+/* ---------- The bar's surface ---------- */
+#composer::before {
+  content: '';
+  grid-column: 1 / -1;
+  grid-row: 1 / 4;
+  align-self: stretch;
+  z-index: -1;
+  pointer-events: none; /* a click on it reaches #composer, which puts the caret in the field */
+  background: var(--bg-000);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+/* The ring shows while the field has focus, not while a chip under the bar has it */
+#composer:has(#input:focus)::before { border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--field-ring); }
+#composer.dragging::before { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ---------- Rows inside the bar ---------- */
+#composer > #attachments { grid-column: 1 / -1; grid-row: 1; padding: 12px 12px 4px; }
+#composer > #attach-note { grid-column: 1 / -1; grid-row: 2; margin: 0; padding: 8px 12px 0; }
+#composer > #input {
+  grid-column: 2 / 5;
+  grid-row: 3;
+  min-height: 40px;
+  margin: 2px 4px;
+  padding: 10px 0; /* one 20 px line centred in the 40 px the script gives the field */
+}
+
+/* The children of the dissolved .composer-bar */
+#composer > .composer-bar { display: contents; }
+#composer .composer-bar > .spacer { display: none; }
+
+#attach-btn {
+  grid-column: 1;
+  grid-row: 3;
+  margin: 0 0 8px 8px;
+  border-radius: 8px;
+  color: var(--text-400);
+  user-select: none;
+}
+#attach-btn:hover { color: var(--text-100); }
+
+/* ---------- Send: a return glyph; filled in the accent once there is something to send ---------- */
+#send-btn {
+  grid-column: 5;
+  grid-row: 3;
+  justify-self: end;
+  width: 28px;
+  height: 28px;
+  margin: 0 8px 8px 0;
+  border-radius: 8px;
+}
+#send-btn:not(.stop) > svg { display: none; }
+#send-btn:not(.stop)::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  /* the corner-down-left ("return") glyph, drawn in the button's own colour */
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12.75 3.5v4.25a2 2 0 0 1-2 2H3.5'/%3E%3Cpath d='M6.25 6.75 3.25 9.75l3 3'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12.75 3.5v4.25a2 2 0 0 1-2 2H3.5'/%3E%3Cpath d='M6.25 6.75 3.25 9.75l3 3'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+/* Nothing to send: a quiet glyph instead of a faded accent button */
+#send-btn:disabled { background: transparent; color: var(--text-400); opacity: 1; }
+#send-btn.stop { color: var(--bg-100); }
+
+/* ---------- The quiet line under the bar: model, mode, context ---------- */
+#composer #model-btn, #composer #mode-btn, #composer #context-meter {
+  grid-row: 4;
+  justify-self: end;
+  height: 24px;
+  margin-top: 6px;
+  padding: 0 6px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-400);
+  user-select: none;
+  cursor: default;
+}
+#composer #model-btn { grid-column: 3; }
+#composer #mode-btn { grid-column: 4; margin-left: 2px; }
+#composer #context-meter { grid-column: 5; margin-left: 2px; margin-right: 2px; padding-right: 7px; }
+/* Without the meter the mode chip takes its place at the right edge */
+#composer:has(#context-meter[hidden]) #mode-btn { grid-column: 4 / 6; margin-right: 2px; }
+#composer #model-btn:hover, #composer #mode-btn:hover, #composer #context-meter:hover,
+#composer #model-btn[aria-expanded="true"], #composer #mode-btn[aria-expanded="true"], #composer #context-meter[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text-100);
+}
+#composer .chip .chev { display: none; }
+#composer #mode-btn > svg { width: 14px; height: 14px; }
+/* The mode keeps its colour (Auto, Plan, Bypass are worth noticing), without the tinted pill around it */
+#composer #mode-btn.auto { color: var(--accent); }
+#composer #mode-btn.plan { color: var(--success); }
+#composer #mode-btn.bypass { color: var(--danger); }
+#composer #context-meter.warn { color: var(--git-mod); }
+#composer #context-meter.danger { color: var(--danger); }

@@ -24,6 +24,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const r2 = await tm.run(t.id, 'printf "no newline"; false', 10000);
   check('exit code 1 and the EOL mark stripped', r2.finished && r2.exitCode === 1 && r2.output === 'no newline', JSON.stringify(r2));
   const r3 = await tm.run(t.id, 'cd /tmp && pwd', 10000);
+  // The folder is reported by the prompt that follows the command, which can arrive a moment after the command's end mark.
+  for (let i = 0; i < 80 && !['/tmp', '/private/tmp'].includes(tm.get(t.id).cwd); i++) await new Promise((r) => setTimeout(r, 25));
   check('cwd follows cd (OSC 7)', ['/tmp', '/private/tmp'].includes(tm.get(t.id).cwd), tm.get(t.id).cwd + ' | ' + JSON.stringify(r3.output));
   const r4 = await tm.run(t.id, 'for i in 1 2 3 4 5 6 7 8; do echo tick $i; sleep 1; done', 2500);
   check('long command reports still running with partial output', !r4.finished && /tick 1/.test(r4.output) && r4.integration, JSON.stringify(r4));

@@ -1,0 +1,410 @@
+// MCP servers (the existing panel), History, Appearance, Configuration files and About.
+
+import type { ModInfo, ModLayout } from '../../shared/mods';
+import type { AppInfo, SettingsFileInfo, SettingsInfo } from '../../shared/settings-info';
+import type { HistoryStats, TrashEntry } from '../../shared/history';
+import { basename, formatBytes, h } from '../dom.js';
+import { onPush } from '../rpc.js';
+import { fileState, relativeDays, TRASH_DAYS } from './model.js';
+import { button, chip, group, note, row, sectionTitle, selectControl, tildePath, type Row } from './ui.js';
+import type { Ctx, Section } from './ctx.js';
+
+// ---------- MCP servers ----------
+
+export function mcpSection(_ctx: Ctx, panel: HTMLElement): Section {
+  const el = h('section', {}, sectionTitle('MCP servers'));
+  el.append(note('Tools from Model Context Protocol servers. Servers of this Mac are stored in your settings; project servers come from the project’s .mcp.json and start only once you enable them.', 'sp-intro'));
+  const r = row({ id: 'mcp', title: 'Servers', keywords: 'mcp model context protocol server tools add remove connect', full: true }, panel);
+  r.el.classList.add('sp-panel-row');
+  panel.classList.add('sp-embedded');
+  el.append(group(null, r));
+  return { id: 'mcp', el };
+}
+
+// ---------- History ----------
+
+export function historySection(ctx: Ctx): Section {
+  const el = h('section', {}, sectionTitle('History'));
+  const stored = row({ id: 'history-stats', title: 'Stored', desc: '', keywords: 'disk size storage sessions logs' }, button('Reveal folder', () => void ctx.call('history.reveal').catch((err) => stored.problem(ctx.cleanError(err))), { icon: 'folder' }));
+  const keep = ctx.segField({
+    id: 'historyTrashDays',
+    title: 'Keep deleted sessions for',
+    desc: 'A deleted session waits in the trash this long before it is removed for good. Off removes it at once.',
+    keywords: 'trash retention purge delete days',
+    field: 'historyTrashDays',
+    choices: TRASH_DAYS,
+    read: (v) => TRASH_DAYS.reduce((best, c) => (Math.abs(c.value - Number(v)) < Math.abs(best.value - Number(v)) ? c : best), TRASH_DAYS[2]).value,
+  });
+  const trashGroup = group('Trash');
+  const emptyBtn = button('Empty trash', async (b) => {
+    const ok = await ctx.confirm({ title: 'Empty the trash?', description: `${trash.length} deleted session${trash.length === 1 ? ' is' : 's are'} removed for good, with their history. This cannot be undone.`, confirmLabel: 'Empty trash', danger: true });
+    if (!ok) return;
+    b.disabled = true;
+    try {
+      trash = await ctx.call('history.purge');
+      await refreshStats();
+      render();
+    } catch (err) {
+      stored.problem(`Couldn't empty the trash: ${ctx.cleanError(err)}`);
+    } finally {
+      b.disabled = false;
+    }
+  }, { icon: 'trash', danger: true });
+  const emptyRow = row({ id: 'history-empty', title: 'Empty trash', desc: 'Removes every deleted session for good.', keywords: 'purge delete' }, emptyBtn);
+  el.append(group(null, stored, keep), trashGroup);
+
+  let stats: HistoryStats | null = null;
+  let trash: TrashEntry[] = [];
+
+  async function refreshStats(): Promise<void> {
+    stats = await ctx.call('history.stats');
+    stored.setDesc(`${stats.sessions} session${stats.sessions === 1 ? '' : 's'} · ${formatBytes(stats.bytes)} on disk${stats.trash ? ` · ${stats.trash} in the trash (${formatBytes(stats.trashBytes)})` : ''}`);
+  }
+
+  function render(): void {
+    trashGroup.querySelectorAll('.sp-row, .sp-note').forEach((n) => n.remove());
+    if (!trash.length) trashGroup.append(note('The trash is empty.'));
+    for (const t of trash) {
+      const r: Row = row({ id: `trash-${t.id}`, title: t.title || 'Untitled session', desc: `Deleted ${relativeDays(t.deletedAt)} · removed for good ${relativeDays(t.purgeAt)} · ${t.messageCount} message${t.messageCount === 1 ? '' : 's'}, ${formatBytes(t.bytes)}`, keywords: 'trash deleted session restore' });
+      const restore = button('Restore', async (b) => {
+        b.disabled = true;
+        try {
+          await ctx.call('history.restore', t.id);
+          trash = await ctx.call('history.trash');
+          await refreshStats();
+          render();
+        } catch (err) {
+          r.problem(`Couldn't restore it: ${ctx.cleanError(err)}`);
+          b.disabled = false;
+        }
+      }, { icon: 'undo' });
+      const purge = button('Delete now', async (b) => {
+        const ok = await ctx.confirm({ title: `Delete “${t.title || 'Untitled session'}” for good?`, description: 'The session and its history are removed. This cannot be undone.', confirmLabel: 'Delete', danger: true });
+        if (!ok) return;
+        b.disabled = true;
+        try {
+          trash = await ctx.call('history.purge', t.id);
+          await refreshStats();
+          render();
+        } catch (err) {
+          r.problem(`Couldn't delete it: ${ctx.cleanError(err)}`);
+          b.disabled = false;
+        }
+      });
+      r.control.append(h('span', { class: 'sp-control-group' }, restore, purge));
+      trashGroup.append(r.el);
+    }
+    if (trash.length) trashGroup.append(emptyRow.el);
+    ctx.refreshSearch();
+  }
+
+  return {
+    id: 'history',
+    el,
+    async load() {
+      try {
+        await refreshStats();
+        trash = await ctx.call('history.trash');
+      } catch (err) {
+        if (ctx.isUnknown(err)) return 'absent';
+        stored.problem(`Couldn't read the history: ${ctx.cleanError(err)}`);
+        return 'ok';
+      }
+      render();
+      return 'ok';
+    },
+  };
+}
+
+// ---------- Appearance ----------
+
+export function appearanceSection(ctx: Ctx): Section {
+  const el = h('section', {}, sectionTitle('Appearance'));
+  const theme = ctx.segField({
+    id: 'theme',
+    title: 'Theme',
+    desc: 'System follows the light or dark setting of macOS.',
+    keywords: 'dark light mode colour color appearance',
+    field: 'theme',
+    choices: [
+      { value: 'system', label: 'System' },
+      { value: 'light', label: 'Light' },
+      { value: 'dark', label: 'Dark' },
+    ],
+  });
+  theme.control.querySelector('[role=radiogroup]')!.id = 'theme';
+
+  let mods: ModInfo[] = [];
+  let lastImage: string | null = null;
+  const bgSelect = selectControl<string>([{ value: '', label: 'None' }], '', (v) => void setBackground(v), 240);
+  const bgRow = row({ id: 'background', title: 'Background', desc: 'A picture or a mod’s live background behind the window. The app’s surfaces turn translucent over it.', keywords: 'wallpaper image picture mod' }, bgSelect);
+  const pictureName = h('span', { class: 'sp-file-name' });
+  const pictureRow = row(
+    { id: 'background-image', title: 'Your picture', desc: 'A PNG, JPEG, WebP or GIF. Open Harness keeps its own copy.', keywords: 'wallpaper image picture choose' },
+    h('span', { class: 'sp-control-group' }, pictureName, button('Choose image…', () => void chooseImage(), { icon: 'image' })),
+  );
+  const dim = h('input', { type: 'range', min: '0', max: '100', step: '5', class: 'sp-range' });
+  const dimValue = h('span', { class: 'sp-range-value' });
+  dim.addEventListener('input', () => (dimValue.textContent = `${dim.value}%`));
+  dim.addEventListener('change', async () => {
+    try {
+      await ctx.call('mods.setLayout', { backgroundDim: Number(dim.value) / 100 });
+      dimRow.saved();
+      dimRow.problem(null);
+    } catch (err) {
+      dimRow.problem(`Couldn't save: ${ctx.cleanError(err)}`);
+    }
+  });
+  const dimRow = row({ id: 'background-dim', title: 'Dim', desc: 'How strongly the app’s surfaces cover the background.', keywords: 'opacity translucent background' }, h('span', { class: 'sp-control-group' }, dim, dimValue));
+  const bgGroup = group(null, bgRow, pictureRow, dimRow);
+  el.append(group(null, theme), bgGroup);
+
+  function layout(): ModLayout | null {
+    return ctx.config().mods?.layout ?? null;
+  }
+
+  function backgrounds(): { value: string; label: string }[] {
+    const out: { value: string; label: string }[] = [];
+    for (const m of mods) {
+      if (m.state !== 'on') continue;
+      for (const v of m.manifest?.contributes?.views ?? []) if (v.seat === 'background') out.push({ value: `${m.key}/${v.id}`, label: `${m.manifest?.name ?? m.id}: ${v.title}` });
+    }
+    return out;
+  }
+
+  function renderBackground(): void {
+    const l = layout();
+    if (!l) return;
+    if (l.backgroundImage) lastImage = l.backgroundImage;
+    const choices = [{ value: '', label: 'None' }, ...backgrounds(), ...(lastImage ? [{ value: 'image', label: 'Your picture' }] : [])];
+    const sel = bgSelect.select;
+    sel.innerHTML = '';
+    for (const c of choices) sel.append(h('option', { value: c.value }, c.label));
+    const currentValue = l.background ?? (l.backgroundImage ? 'image' : '');
+    if (l.background && !choices.some((c) => c.value === l.background)) sel.append(h('option', { value: l.background }, `${l.background} (off)`));
+    sel.value = currentValue;
+    pictureName.textContent = lastImage ? basename(lastImage).replace(/^\d+-/, '') : 'None chosen';
+    pictureName.title = lastImage ?? '';
+    dim.value = String(Math.round((l.backgroundDim ?? 0.5) * 100));
+    dimValue.textContent = `${dim.value}%`;
+    dimRow.el.classList.toggle('sp-off', !currentValue);
+    dim.disabled = !currentValue;
+  }
+
+  async function setBackground(v: string): Promise<void> {
+    try {
+      if (v === 'image') {
+        if (!lastImage) return void chooseImage();
+        await ctx.call('mods.setLayout', { background: null, backgroundImage: lastImage });
+      } else if (v === '') await ctx.call('mods.setLayout', { background: null, backgroundImage: null });
+      else await ctx.call('mods.setLayout', { background: v });
+      bgRow.saved();
+      bgRow.problem(null);
+    } catch (err) {
+      bgRow.problem(`Couldn't change the background: ${ctx.cleanError(err)}`);
+      renderBackground();
+    }
+  }
+
+  async function chooseImage(): Promise<void> {
+    try {
+      const before = layout()?.backgroundImage ?? null;
+      const l = await ctx.call('mods.chooseBackgroundImage');
+      if (l.backgroundImage && l.backgroundImage !== before) {
+        lastImage = l.backgroundImage;
+        pictureRow.saved();
+      }
+      pictureRow.problem(null);
+      renderBackground();
+    } catch (err) {
+      pictureRow.problem(ctx.cleanError(err));
+    }
+  }
+
+  onPush('mods:changed', (list) => {
+    if (!Array.isArray(list)) return;
+    mods = list;
+    renderBackground();
+  });
+
+  return {
+    id: 'appearance',
+    el,
+    sync: () => renderBackground(),
+    async load() {
+      try {
+        mods = await ctx.call('mods.list');
+        bgGroup.hidden = false;
+      } catch (err) {
+        bgGroup.hidden = ctx.isUnknown(err);
+      }
+      renderBackground();
+      return 'ok';
+    },
+  };
+}
+
+// ---------- Configuration files ----------
+
+export function filesSection(ctx: Ctx, onInfo: (info: SettingsInfo | null) => void): Section {
+  const el = h('section', {}, sectionTitle('Configuration files'));
+  el.append(note('Open Harness also reads settings from settings.json files: yours, then the project’s, which needs your approval first. A field a file sets is read-only on this page; change it in the file.', 'sp-intro'));
+  const filesEl = h('div', {});
+  const reloadRow = row(
+    { id: 'files-reload', title: 'Read the files again', desc: 'After you edit a file outside Open Harness.', keywords: 'reload refresh settings.json' },
+    button('Reload', async (b) => {
+      b.disabled = true;
+      try {
+        render(await ctx.call('settings.reload'));
+        reloadRow.saved();
+      } catch (err) {
+        reloadRow.problem(ctx.cleanError(err));
+      } finally {
+        b.disabled = false;
+      }
+    }, { icon: 'refresh' }),
+  );
+  el.append(filesEl, group(null, reloadRow));
+
+  function fileGroup(f: SettingsFileInfo): HTMLElement {
+    const project = f.scope === 'project';
+    const st = fileState(f);
+    const fileRow = row(
+      { id: `file-${f.scope}`, title: project ? 'Project settings' : 'Your settings', desc: tildePath(f.path), keywords: 'settings.json file path open reveal' },
+      h(
+        'span',
+        { class: 'sp-control-group' },
+        button(f.exists ? 'Open' : 'Create', async () => {
+          try {
+            await ctx.call('settings.open', f.scope);
+          } catch (err) {
+            fileRow.problem(ctx.cleanError(err));
+          }
+        }, { icon: 'external-link', aria: `${f.exists ? 'Open' : 'Create'} ${f.path}` }),
+        button('Reveal', async () => {
+          try {
+            await ctx.call('app.reveal', project ? 'project' : 'configDir');
+          } catch (err) {
+            fileRow.problem(ctx.cleanError(err));
+          }
+        }, { icon: 'folder', aria: `Reveal ${f.path}` }),
+      ),
+    );
+    fileRow.descEl.classList.add('sp-path');
+    fileRow.descEl.title = f.path;
+    fileRow.el.querySelector('.sp-row-title')!.append(chip(st.label, st.tone));
+    if (f.error) fileRow.problem(`It is not a JSON object: ${f.error}`);
+
+    const keys = f.keys.filter((k) => !k.startsWith('env.'));
+    const envs = f.keys.filter((k) => k.startsWith('env.')).map((k) => k.slice(4));
+    const setsRow = row({ id: `file-${f.scope}-keys`, title: 'What it sets', desc: !f.exists ? 'Nothing: the file does not exist.' : [keys.length ? keys.join(', ') : '', envs.length ? `environment: ${envs.join(', ')}` : ''].filter(Boolean).join(' · ') || 'Nothing.', keywords: 'fields' });
+    setsRow.descEl.classList.add('sp-mono-list');
+    const g = group(project ? 'This project' : 'Yours', fileRow, setsRow);
+    if (f.invalid.length) {
+      const skipped = row({ id: `file-${f.scope}-invalid`, title: 'Skipped', desc: '', keywords: 'invalid error skipped' });
+      skipped.descEl.hidden = false;
+      skipped.descEl.append(h('ul', { class: 'sp-detail-list' }, ...f.invalid.map((i) => h('li', {}, h('code', {}, i.key), `: ${i.message}`))));
+      g.append(skipped.el);
+    }
+    if (project && f.exists && !f.error) {
+      const trusted = f.trusted && !f.changed;
+      const trustRow: Row = row(
+        {
+          id: 'file-project-trust',
+          title: trusted ? 'Applied to this project' : f.changed ? 'Changed since you approved it' : 'Apply this file',
+          desc: trusted ? 'Its values are in effect while this project is open.' : 'A project file can change the model, the permission mode and more. Read it, then apply it as it is right now.',
+          keywords: 'trust approve apply project',
+        },
+        button(trusted ? 'Stop applying' : 'Trust and apply', async (b) => {
+          if (!trusted) {
+            const ok = await ctx.confirm({ title: 'Apply the project’s settings.json?', description: `Its values take effect now and every time this project opens, until the file changes. ${keys.length ? `It sets ${keys.join(', ')}.` : ''}`, confirmLabel: 'Trust and apply', icon: 'shield-check' });
+            if (!ok) return;
+          }
+          b.disabled = true;
+          try {
+            render(await ctx.call('settings.trustProject', !trusted));
+          } catch (err) {
+            trustRow.problem(ctx.cleanError(err));
+            b.disabled = false;
+          }
+        }, { primary: !trusted, icon: trusted ? undefined : 'shield-check' }),
+      );
+      g.append(trustRow.el);
+    }
+    return g;
+  }
+
+  function render(info: SettingsInfo): void {
+    filesEl.innerHTML = '';
+    for (const scope of ['user', 'project'] as const) {
+      const f = info.files.find((x) => x.scope === scope);
+      if (f) filesEl.append(fileGroup(f));
+    }
+    onInfo(info);
+    ctx.refreshSearch();
+  }
+
+  onPush('settings:changed', (info) => {
+    if (info && typeof info === 'object' && Array.isArray(info.files)) render(info);
+  });
+
+  return {
+    id: 'files',
+    el,
+    async load() {
+      try {
+        render(await ctx.call('settings.info'));
+      } catch (err) {
+        onInfo(null);
+        if (ctx.isUnknown(err)) return 'absent';
+        filesEl.innerHTML = '';
+        filesEl.append(note(`Couldn't read the files: ${ctx.cleanError(err)}`, 'error'));
+      }
+      return 'ok';
+    },
+  };
+}
+
+// ---------- About ----------
+
+export function aboutSection(ctx: Ctx): Section {
+  const el = h('section', {}, sectionTitle('About'));
+  const app = row({ id: 'about-app', title: 'Open Harness', desc: '', keywords: 'version' });
+  const versions = row({ id: 'about-versions', title: 'Runtime', desc: '', keywords: 'electron chrome node version' });
+  const reveal = (which: 'userData' | 'configDir', r: () => Row) => button('Reveal', async () => {
+    try {
+      await ctx.call('app.reveal', which);
+    } catch (err) {
+      r().problem(ctx.cleanError(err));
+    }
+  }, { icon: 'folder' });
+  const data: Row = row({ id: 'about-data', title: 'Data folder', desc: '', keywords: 'sessions history config.json userdata' }, reveal('userData', () => data));
+  const conf: Row = row({ id: 'about-config', title: 'Config folder', desc: '', keywords: 'settings.json skills mods' }, reveal('configDir', () => conf));
+  data.descEl.classList.add('sp-path');
+  conf.descEl.classList.add('sp-path');
+  const keys = row({ id: 'about-shortcuts', title: 'Keyboard shortcuts', desc: 'Every shortcut in one sheet (⌘/).', keywords: 'keys hotkeys' }, button('Show', () => ctx.openShortcuts(), { icon: 'keyboard' }));
+  el.append(group(null, app, versions, data, conf, keys));
+
+  return {
+    id: 'about',
+    el,
+    async load() {
+      let info: AppInfo;
+      try {
+        info = await ctx.call('app.info');
+      } catch (err) {
+        if (ctx.isUnknown(err)) return 'absent';
+        app.problem(ctx.cleanError(err));
+        return 'ok';
+      }
+      app.el.querySelector('.sp-row-name')!.textContent = info.name || 'Open Harness';
+      app.setDesc(`Version ${info.version} · ${info.platform === 'darwin' ? 'macOS' : info.platform} ${info.arch}`);
+      versions.setDesc(`Electron ${info.electron} · Chrome ${info.chrome} · Node ${info.node}`);
+      data.setDesc(tildePath(info.userData));
+      data.descEl.title = info.userData;
+      conf.setDesc(tildePath(info.configDir));
+      conf.descEl.title = info.configDir;
+      return 'ok';
+    },
+  };
+}

@@ -8,6 +8,7 @@ import type { WebLinksAddon } from '@xterm/addon-web-links';
 import type { TerminalApi, TerminalTabInfo } from '../shared/types';
 import { escapeHtml } from './dom.js';
 import { icon } from './icons.js';
+import { tilde } from './home.js';
 
 export interface TerminalPaneOptions {
   /** #terminal-pane: holds the strip, the host and the empty state */
@@ -197,11 +198,6 @@ function readTheme(): ITheme {
     scrollbarSliderActiveBackground: thumbHover,
     ...(dark ? DARK_ANSI : LIGHT_ANSI),
   };
-}
-
-/** "/Users/me/src/app" → "~/src/app" */
-function tilde(p: string): string {
-  return (p || '').replace(/^\/Users\/[^/]+/, '~');
 }
 
 const domId = (id: string): string => id.replace(/[^\w-]/g, '_');
@@ -786,7 +782,7 @@ export function createTerminalPane(o: TerminalPaneOptions): TerminalPane {
     el.querySelector<HTMLElement>('.term-tab-agent')!.hidden = !info.agent;
     const state = exited ? `exited with code ${info.exitCode}` : busy ? `running ${info.running}` : 'idle';
     el.setAttribute('aria-label', `${title}, ${state}`);
-    el.dataset.tip = [busy ? info.running : title, tilde(info.cwd), exited ? `exited (${info.exitCode})` : '', info.agent ? 'opened by OpenAgent' : '']
+    el.dataset.tip = [busy ? info.running : title, tilde(info.cwd), exited ? `exited (${info.exitCode})` : '', info.agent ? 'opened by Open Harness' : '']
       .filter(Boolean)
       .join(' · ');
     el.querySelector('.term-tab-close')!.setAttribute('aria-label', `Close ${title}`);
@@ -825,9 +821,9 @@ export function createTerminalPane(o: TerminalPaneOptions): TerminalPane {
 
   function render(): void {
     const unavailable = !api
-      ? 'The terminal needs the updated app. Restart OpenAgent to turn it on.'
+      ? 'The terminal needs the updated app. Restart Open Harness to turn it on.'
       : !xtermLib()
-        ? 'The terminal could not load xterm.js. Rebuild OpenAgent (npm run build) and restart it.'
+        ? 'The terminal could not load xterm.js. Rebuild Open Harness (npm run build) and restart it.'
         : null;
     const failed = !unavailable && failure && !order.length ? failure : null;
     const none = !unavailable && !failed && loaded && !order.length && creating === 0;

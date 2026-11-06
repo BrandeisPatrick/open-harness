@@ -3,6 +3,7 @@
 // Usage: npm test            (or: node test/run.js [suite-name-substring])
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
@@ -18,7 +19,11 @@ const suites = fs
 let failed = 0;
 for (const file of suites) {
   const started = Date.now();
-  const r = spawnSync(process.execPath, [path.join(__dirname, file), root], { encoding: 'utf8', timeout: 300_000 });
+  // Each suite gets a temp folder of its own (os.tmpdir() follows TMPDIR), removed when it ends: the suites make
+  // scratch folders by the dozen and most leave them behind.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oh-test-'));
+  const r = spawnSync(process.execPath, [path.join(__dirname, file), root], { encoding: 'utf8', timeout: 300_000, env: { ...process.env, TMPDIR: tmp } });
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 });
   const out = (r.stdout || '') + (r.stderr || '');
   const ok = r.status === 0;
   if (!ok) failed++;

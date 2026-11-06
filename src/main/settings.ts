@@ -1,185 +1,400 @@
 // A Claude Code-style settings.json layer over the GUI's config.json.
 //
-//   ~/.openagent/settings.json              user scope
-//   <workingDirectory>/.openagent/settings.json   project scope, wins over user
+//   <configDir>/settings.json                     user scope, always applied
+//   <workingDirectory>/.open-harness/settings.json   project scope, wins over user, applied only once trusted
 //
 // Precedence: defaults < config.json < user settings.json < project settings.json.
-// `env` is applied to process.env before anything else is read, so a key can live
-// there instead of in plaintext config.json — providers.ts already falls back to
-// process.env.PORTKEY_API_KEY. `${VAR}` and `${VAR:-default}` are expanded in every
-// string, the same way .mcp.json expands them.
 //
-// Fields settings.json sets are treated as read-only: saveConfig restores them to
-// whatever config.json held (see withoutSettings), so the Settings panel can never
-// bake an override — or a secret — into config.json.
+// A project file comes with whatever repository was cloned, so it is not applied until the user approves its exact
+// content (config.settingsTrusted[cwd] holds the SHA-256 of what was approved); an edit withdraws the approval, the
+// same way a project's .mcp.json servers stay off until enabled. Until then it is read and described, nothing more.
+//
+// Every value is validated against its field; a bad one is skipped and reported, the rest of the file still applies.
+// `env` is applied to process.env before the file's strings are expanded (`${VAR}`, `${VAR:-default}`), and every
+// recompute first restores the variables an earlier recompute set, so one project's variables never outlive it.
+//
+// Fields a file sets are owned by it: withoutSettings() puts them back to their stored values before config.json is
+// written, so an override, or a secret, is never baked into config.json. A change made to an owned field while the
+// app runs lives in memory until the next recompute applies the file again.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AppConfig } from '../shared/types';
+import type { SettingsFileInfo, SettingsInfo } from '../shared/settings-info';
 import { expandEnvRefs } from './mcp';
+import { configDir, projectConfigDir } from './paths';
 
-export const USER_SETTINGS = path.join(os.homedir(), '.openagent', 'settings.json');
-export const PROJECT_SETTINGS = path.join('.openagent', 'settings.json');
+type Scope = 'user' | 'project';
+type Check = (v: unknown) => string | null;
 
-/** The subset of AppConfig a settings file may set, plus `env`. */
-export interface Settings {
-  env?: Record<string, string>;
-  provider?: AppConfig['provider'];
-  ollama?: Partial<AppConfig['ollama']>;
-  portkey?: Partial<AppConfig['portkey']>;
-  workingDirectory?: string;
-  permissionMode?: AppConfig['permissionMode'];
-  maxTurns?: number;
-  sendScreenshotsToModel?: boolean;
-  systemPromptExtra?: string;
-  theme?: AppConfig['theme'];
-  autoTitles?: boolean;
-  autoCompact?: boolean;
-  notifications?: boolean;
+/** The user's settings.json (read on every call, so OPEN_HARNESS_CONFIG_DIR may be set late). */
+export function userSettingsPath(): string {
+  return path.join(configDir(), 'settings.json');
 }
 
-/** Scalar AppConfig keys a settings file may set. */
-const SCALARS = [
-  'provider',
-  'workingDirectory',
-  'permissionMode',
-  'maxTurns',
-  'sendScreenshotsToModel',
-  'systemPromptExtra',
-  'theme',
-  'autoTitles',
-  'autoCompact',
-  'notifications',
-] as const;
+/** A project's settings.json, whether or not it exists. */
+export function projectSettingsPath(cwd: string): string {
+  return path.join(projectConfigDir(cwd), 'settings.json');
+}
 
-/** Index-signature view of a typed config object, for the field-by-field copying below. */
+/** The key settingsTrusted is indexed by. */
+export function trustKey(cwd: string): string {
+  return path.resolve(cwd);
+}
+
+export function contentHash(raw: string): string {
+  return crypto.createHash('sha256').update(raw, 'utf8').digest('hex');
+}
+
+// ---------- The schema ----------
+
+const kind = (v: unknown): string => (v === null ? 'null' : Array.isArray(v) ? 'a list' : typeof v === 'object' ? 'an object' : typeof v === 'string' ? 'a string' : typeof v === 'number' ? 'a number' : typeof v === 'boolean' ? 'true/false' : typeof v);
+const str: Check = (v) => (typeof v === 'string' ? null : `expected a string, got ${kind(v)}`);
+const bool: Check = (v) => (typeof v === 'boolean' ? null : `expected true or false, got ${kind(v)}`);
+const oneOf =
+  (...values: string[]): Check =>
+  (v) =>
+    typeof v === 'string' && values.includes(v) ? null : `expected one of ${values.map((x) => `"${x}"`).join(', ')}${typeof v === 'string' ? '' : `, got ${kind(v)}`}`;
+const positiveInt: Check = (v) => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? null : `expected a whole number above 0${typeof v === 'number' ? '' : `, got ${kind(v)}`}`);
+const nonNegative: Check = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? null : `expected a number of 0 or more${typeof v === 'number' ? '' : `, got ${kind(v)}`}`);
+const between =
+  (lo: number, hi: number): Check =>
+  (v) =>
+    typeof v === 'number' && v >= lo && v <= hi ? null : `expected a number from ${lo} to ${hi}${typeof v === 'number' ? '' : `, got ${kind(v)}`}`;
+
+/** Scalar AppConfig fields a settings file may set. */
+const SCALARS: Record<string, Check> = {
+  provider: oneOf('ollama', 'portkey'),
+  permissionMode: oneOf('ask', 'acceptEdits', 'auto', 'plan', 'bypass'),
+  maxTurns: positiveInt,
+  sendScreenshotsToModel: bool,
+  systemPromptExtra: str,
+  theme: oneOf('system', 'light', 'dark'),
+  autoTitles: bool,
+  autoCompact: bool,
+  compactThreshold: between(0.5, 0.95),
+  pruneToolResults: bool,
+  notifications: bool,
+  keepAwake: oneOf('off', 'running', 'always'),
+  toolSet: oneOf('auto', 'all', 'essential'),
+  historyTrashDays: nonNegative,
+};
+
+/** Sections a settings file may set field by field. */
+const SECTIONS: Record<'ollama' | 'portkey', Record<string, Check>> = {
+  ollama: { baseURL: str, model: str, numCtx: positiveInt, think: oneOf('auto', 'on', 'off') },
+  portkey: { baseURL: str, apiKey: str, model: str, virtualKey: str, provider: str, providerApiKey: str, configId: str, contextWindow: positiveInt },
+};
+
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** Keys an editor puts in for itself; ignored without a complaint. */
+const IGNORED = new Set(['$schema']);
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const rec = (o: object): Record<string, unknown> => o as unknown as Record<string, unknown>;
+const expandHome = (p: string): string => p.replace(/^~(?=$|\/)/, os.homedir());
+const isDir = (p: string): boolean => {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+};
 
-/** config.json as it was on disk, before any override — what saves are restored to. */
-let baseline: AppConfig | null = null;
-/** The union of the settings files that were applied, so we know which fields they own. */
-let applied: Settings = {};
-/** Files that exist but could not be parsed, surfaced in Settings rather than failing silently. */
-let problems: { file: string; error: string }[] = [];
-
-export function settingsProblems(): { file: string; error: string }[] {
-  return problems;
+/** Reads a field path ("maxTurns", "portkey.model") of a config. */
+function getPath(cfg: AppConfig, p: string): unknown {
+  const [a, b] = p.split('.');
+  const v = rec(cfg)[a];
+  return b === undefined ? v : isRecord(v) ? v[b] : undefined;
 }
 
-/** Which files are in effect, for display. */
-export function settingsFiles(cwd: string): string[] {
-  return [USER_SETTINGS, path.join(cwd, PROJECT_SETTINGS)].filter((f) => fs.existsSync(f));
+/** A copy of `cfg` with one field path set; sections are copied, never shared. */
+function setPath(cfg: AppConfig, p: string, value: unknown): AppConfig {
+  const [a, b] = p.split('.');
+  const out = { ...cfg };
+  if (b === undefined) rec(out)[a] = value;
+  else rec(out)[a] = { ...(isRecord(rec(cfg)[a]) ? (rec(cfg)[a] as object) : {}), [b]: value };
+  return out;
 }
 
-function read(file: string): Settings | null {
+// ---------- Reading one file ----------
+
+interface Analysis {
+  info: SettingsFileInfo;
+  /** Valid field values, expanded, in file order */
+  values: { path: string; value: unknown }[];
+  /** user scope: the folder to open at launch */
+  workingDirectory?: string;
+}
+
+/**
+ * Reads and validates one file. `applyEnv` receives the valid `env` entries before strings are expanded, so the
+ * expansion sees them (for an untrusted project file it does nothing: its strings expand against the env as it is).
+ */
+function analyse(file: string, scope: Scope, opts: { trustedHash?: string; applyEnv: (entries: [string, string][]) => void; willApply: (hash: string) => boolean }): Analysis {
+  const info: SettingsFileInfo = { scope, path: file, exists: false, applied: false, trusted: scope === 'user', keys: [], invalid: [] };
+  const out: Analysis = { info, values: [] };
   let raw: string;
   try {
     raw = fs.readFileSync(file, 'utf8');
-  } catch {
-    return null; // absent is the normal case
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('expected a JSON object');
-    return parsed as Settings;
   } catch (e) {
-    problems.push({ file, error: e instanceof Error ? e.message : String(e) });
-    return null;
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return out; // absent is the normal case
+    info.exists = true;
+    info.error = `could not be read (${code ?? (e instanceof Error ? e.message : String(e))})`;
+    return out;
   }
-}
+  info.exists = true;
+  const hash = contentHash(raw);
+  if (scope === 'project') {
+    info.trusted = opts.trustedHash === hash;
+    if (opts.trustedHash && !info.trusted) info.changed = true;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    info.error = `is not valid JSON: ${e instanceof Error ? e.message : String(e)}`;
+    return out;
+  }
+  if (!isRecord(parsed)) {
+    info.error = `must hold a JSON object ({ … }), not ${kind(parsed)}`;
+    return out;
+  }
+  const apply = opts.willApply(hash);
+  const bad = (key: string, message: string) => info.invalid.push({ key, message });
 
-/** Sets process.env from an `env` block. Later files win, matching Claude Code. */
-function applyEnv(s: Settings | null): void {
-  if (!s?.env || typeof s.env !== 'object') return;
-  for (const [k, v] of Object.entries(s.env)) {
-    if (typeof v === 'string') process.env[k] = expandEnvRefs(v);
+  // env first: the rest of the file's strings may refer to it.
+  if (parsed.env !== undefined) {
+    if (!isRecord(parsed.env)) bad('env', `expected an object of NAME: "value" pairs, got ${kind(parsed.env)}`);
+    else {
+      const entries: [string, string][] = [];
+      for (const [name, v] of Object.entries(parsed.env)) {
+        if (!ENV_NAME.test(name)) bad(`env.${name}`, 'not a valid variable name (letters, digits and _, not starting with a digit)');
+        else if (typeof v !== 'string') bad(`env.${name}`, `expected a string, got ${kind(v)}`);
+        else {
+          entries.push([name, v]);
+          info.keys.push(`env.${name}`);
+        }
+      }
+      if (apply) opts.applyEnv(entries);
+    }
   }
-}
+  const expand = (v: unknown): unknown => (typeof v === 'string' ? expandEnvRefs(v) : v);
 
-/** Expands `${VAR}` through every string, at any depth. */
-function expand<T>(value: T): T {
-  if (typeof value === 'string') return expandEnvRefs(value) as unknown as T;
-  if (Array.isArray(value)) return value.map(expand) as unknown as T;
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) out[k] = expand(v);
-    return out as T;
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === 'env' || IGNORED.has(key)) continue;
+    if (key === 'workingDirectory') {
+      if (scope === 'project') bad(key, "only your own settings.json can choose the folder the app opens in");
+      else if (typeof value !== 'string') bad(key, `expected a path to a folder, got ${kind(value)}`);
+      else {
+        const dir = path.resolve(expandHome(expandEnvRefs(value)));
+        if (!isDir(dir)) bad(key, 'no such folder');
+        else {
+          out.workingDirectory = dir;
+          info.keys.push(key);
+        }
+      }
+      continue;
+    }
+    if (key in SCALARS) {
+      const v = expand(value);
+      const msg = SCALARS[key](v);
+      if (msg) bad(key, msg);
+      else {
+        out.values.push({ path: key, value: v });
+        info.keys.push(key);
+      }
+      continue;
+    }
+    if (key === 'ollama' || key === 'portkey') {
+      if (!isRecord(value)) {
+        bad(key, `expected an object of ${key} fields, got ${kind(value)}`);
+        continue;
+      }
+      const fields = SECTIONS[key];
+      for (const [field, fv] of Object.entries(value)) {
+        const p = `${key}.${field}`;
+        if (!(field in fields)) {
+          bad(p, `not a ${key} setting (known: ${Object.keys(fields).join(', ')})`);
+          continue;
+        }
+        const v = expand(fv);
+        const msg = fields[field](v);
+        if (msg) bad(p, msg);
+        else {
+          out.values.push({ path: p, value: v });
+          info.keys.push(p);
+        }
+      }
+      continue;
+    }
+    bad(key, 'not a setting settings.json can change');
   }
-  return value;
-}
-
-function merge(cfg: AppConfig, s: Settings | null): AppConfig {
-  if (!s) return cfg;
-  const out: AppConfig = { ...cfg };
-  for (const k of SCALARS) {
-    if (s[k] !== undefined) rec(out)[k] = s[k];
-  }
-  if (s.ollama && typeof s.ollama === 'object') out.ollama = { ...cfg.ollama, ...s.ollama };
-  if (s.portkey && typeof s.portkey === 'object') out.portkey = { ...cfg.portkey, ...s.portkey };
+  info.applied = apply;
   return out;
 }
 
-/** Records which fields a settings file owns, so withoutSettings can restore them. */
-function remember(s: Settings | null): void {
-  if (!s) return;
-  for (const k of SCALARS) if (s[k] !== undefined) rec(applied)[k] = s[k];
-  if (s.ollama) applied.ollama = { ...applied.ollama, ...s.ollama };
-  if (s.portkey) applied.portkey = { ...applied.portkey, ...s.portkey };
+// ---------- The layer ----------
+
+export interface LayerOptions {
+  /** Default: userSettingsPath() at each read */
+  userFile?: string;
 }
 
 /**
- * Applies the user then project settings files over a config loaded from disk.
- * The project file is looked up under the working directory the earlier layers resolved to.
+ * The settings.json layer: what the files set, which fields they own, the stored values of those fields and the
+ * environment variables they changed. One instance serves the app (`settingsLayer`); tests make their own.
  */
-export function applySettings(fromDisk: AppConfig, opts: { userFile?: string } = {}): AppConfig {
-  const userFile = opts.userFile ?? USER_SETTINGS;
-  baseline = structuredClone(fromDisk);
-  applied = {};
-  problems = [];
+export class SettingsLayer {
+  /** The config without the layer: owned fields hold the values config.json keeps for them */
+  private baseline: AppConfig | null = null;
+  private ownedBy: Record<string, Scope> = {};
+  private fileInfo: SettingsFileInfo[] = [];
+  /** Variables a file set, with the value each had before any file touched it (undefined: it did not exist) */
+  private envSaved = new Map<string, string | undefined>();
+  private cwd = '';
 
-  const user = read(userFile);
-  applyEnv(user);
-  let cfg = merge(fromDisk, expand(user));
-  remember(user);
+  constructor(private readonly opts: LayerOptions = {}) {}
 
-  const projectFile = path.join(cfg.workingDirectory, PROJECT_SETTINGS);
-  // Guard against a user-scope file whose workingDirectory points back at its own location.
-  if (path.resolve(projectFile) !== path.resolve(userFile)) {
-    const project = read(projectFile);
-    applyEnv(project);
-    cfg = merge(cfg, expand(project));
-    remember(project);
+  userFile(): string {
+    return this.opts.userFile ?? userSettingsPath();
   }
-  return cfg;
+
+  /** The project file of a folder (default: the folder of the last recompute). */
+  projectFile(cwd = this.cwd): string {
+    return projectSettingsPath(cwd);
+  }
+
+  /** The folder the layer was last computed for. */
+  folder(): string {
+    return this.cwd;
+  }
+
+  /** At launch: config.json as stored, with the files applied. The user file's workingDirectory applies here only. */
+  load(fromDisk: AppConfig): AppConfig {
+    this.baseline = null;
+    this.ownedBy = {};
+    return this.compute(fromDisk, true);
+  }
+
+  /**
+   * The current config with owned fields put back to their stored values and the files applied again for its
+   * folder. Non-owned fields keep whatever they hold now.
+   */
+  recompute(current: AppConfig): AppConfig {
+    return this.compute(current, false);
+  }
+
+  private compute(current: AppConfig, launch: boolean): AppConfig {
+    const base = structuredClone(this.withoutSettings(current));
+    this.restoreEnv();
+    this.ownedBy = {};
+    const applyEnv = (entries: [string, string][]) => {
+      for (const [name, v] of entries) {
+        if (!this.envSaved.has(name)) this.envSaved.set(name, process.env[name]);
+        process.env[name] = expandEnvRefs(v);
+      }
+    };
+
+    const userFile = this.userFile();
+    const user = analyse(userFile, 'user', { applyEnv, willApply: () => true });
+    let cfg: AppConfig = base;
+    for (const { path: p, value } of user.values) {
+      cfg = setPath(cfg, p, value);
+      this.ownedBy[p] = 'user';
+    }
+    if (launch && user.workingDirectory) cfg = { ...cfg, workingDirectory: user.workingDirectory };
+
+    this.cwd = trustKey(cfg.workingDirectory);
+    const files = [user.info];
+    const projectFile = this.projectFile();
+    // A user file whose workingDirectory is its own config folder's parent would otherwise be read twice.
+    if (path.resolve(projectFile) !== path.resolve(userFile)) {
+      const trustedHash = (cfg.settingsTrusted ?? {})[this.cwd];
+      const project = analyse(projectFile, 'project', { trustedHash, applyEnv, willApply: (hash) => trustedHash === hash });
+      if (project.info.applied) {
+        for (const { path: p, value } of project.values) {
+          cfg = setPath(cfg, p, value);
+          this.ownedBy[p] = 'project';
+        }
+      }
+      files.push(project.info);
+    }
+    this.fileInfo = files;
+    this.baseline = base;
+    return cfg;
+  }
+
+  /** Puts every variable a file set back to what it was before. */
+  restoreEnv(): void {
+    for (const [name, prev] of this.envSaved) {
+      if (prev === undefined) delete process.env[name];
+      else process.env[name] = prev;
+    }
+    this.envSaved.clear();
+  }
+
+  /**
+   * `current` with every owned field put back to its stored value: what config.json may hold. Returns `current`
+   * itself when nothing is owned.
+   */
+  withoutSettings(current: AppConfig): AppConfig {
+    const baseline = this.baseline;
+    const paths = Object.keys(this.ownedBy);
+    if (!baseline || !paths.length) return current;
+    let out = current;
+    for (const p of paths) out = setPath(out, p, getPath(baseline, p));
+    return out;
+  }
+
+  /** `current` with the project file of its folder approved as it is on disk now (or the approval removed). */
+  withTrust(current: AppConfig, trust: boolean): AppConfig {
+    const key = trustKey(current.workingDirectory);
+    const trusted = { ...(current.settingsTrusted ?? {}) };
+    if (!trust) {
+      delete trusted[key];
+      return { ...current, settingsTrusted: trusted };
+    }
+    const file = projectSettingsPath(key);
+    let raw: string;
+    try {
+      raw = fs.readFileSync(file, 'utf8');
+    } catch {
+      throw new Error(`This project has no settings file (${file}).`);
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = null;
+    }
+    if (!isRecord(parsed)) throw new Error(`${file} is not a JSON object; fix it before approving it.`);
+    trusted[key] = contentHash(raw);
+    return { ...current, settingsTrusted: trusted };
+  }
+
+  /** The files and the fields they own. Keys only, never a value. */
+  info(): SettingsInfo {
+    return { files: this.fileInfo.map((f) => ({ ...f, keys: [...f.keys], invalid: f.invalid.map((i) => ({ ...i })) })), owned: { ...this.ownedBy } };
+  }
+
+  /** Field paths owned now, e.g. ["portkey.model"]. */
+  owned(): string[] {
+    return Object.keys(this.ownedBy);
+  }
 }
 
-/**
- * Strips settings-owned fields back to their config.json values, so writing the
- * Settings panel never persists an override. Returns `current` unchanged when no
- * settings file is in play.
- */
+/** The app's layer: config.ts loads and saves through it, settings-service.ts recomputes it. */
+export const settingsLayer = new SettingsLayer();
+
+/** config.json as stored, with the settings files applied (launch). */
+export function applySettings(fromDisk: AppConfig): AppConfig {
+  return settingsLayer.load(fromDisk);
+}
+
+/** What config.json may hold for `current`: owned fields restored. */
 export function withoutSettings(current: AppConfig): AppConfig {
-  if (!baseline) return current;
-  const out: AppConfig = { ...current };
-  for (const k of SCALARS) {
-    if (applied[k] !== undefined) rec(out)[k] = rec(baseline)[k];
-  }
-  if (applied.ollama) {
-    out.ollama = { ...current.ollama };
-    for (const k of Object.keys(applied.ollama)) rec(out.ollama)[k] = rec(baseline.ollama)[k];
-  }
-  if (applied.portkey) {
-    out.portkey = { ...current.portkey };
-    for (const k of Object.keys(applied.portkey)) rec(out.portkey)[k] = rec(baseline.portkey)[k];
-  }
-  return out;
-}
-
-/** Field paths settings.json currently owns, e.g. ["portkey.model"]. For the Settings panel. */
-export function settingsOwned(): string[] {
-  const out: string[] = [];
-  for (const k of SCALARS) if (applied[k] !== undefined) out.push(k);
-  for (const k of Object.keys(applied.ollama ?? {})) out.push(`ollama.${k}`);
-  for (const k of Object.keys(applied.portkey ?? {})) out.push(`portkey.${k}`);
-  return out;
+  return settingsLayer.withoutSettings(current);
 }

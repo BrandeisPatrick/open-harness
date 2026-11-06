@@ -42,6 +42,20 @@ export function defaultConfig(): AppConfig {
     notifications: true,
     allowRules: {},
     recentDirs: [],
+    keepAwake: 'running',
+    compactThreshold: 0.8,
+    pruneToolResults: true,
+    toolSet: 'auto',
+    historyTrashDays: 30,
+    mods: {
+      enabled: {},
+      disabledBundled: [],
+      settings: {},
+      layout: { railOpen: true, railWidth: 300, collapsed: [], background: null, backgroundImage: null, backgroundDim: 0.82 },
+      safeMode: false,
+    },
+    remote: { enabled: false, bind: 'lan', port: 0 },
+    settingsTrusted: {},
   };
 }
 
@@ -64,6 +78,10 @@ export function withRecentDir(list: string[] | undefined, dir: string, previous?
     }
   }
   return out.slice(0, MAX_RECENT);
+}
+
+function isRecord(v: unknown): v is Record<string, any> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
 function normalizeOllamaHost(host: string): string {
@@ -105,6 +123,10 @@ function storedConfig(): AppConfig {
       mcpTrusted: raw.mcpTrusted && typeof raw.mcpTrusted === 'object' && !Array.isArray(raw.mcpTrusted) ? raw.mcpTrusted : {},
       ollama: { ...d.ollama, ...(raw.ollama ?? {}) },
       portkey: { ...d.portkey, ...(raw.portkey ?? {}) },
+      // Sections added after 0.1: an older file has none of them, a hand-edited one may have part of one.
+      mods: { ...d.mods, ...(isRecord(raw.mods) ? raw.mods : {}), layout: { ...d.mods.layout, ...(isRecord(raw.mods) && isRecord(raw.mods.layout) ? raw.mods.layout : {}) } },
+      remote: { ...d.remote, ...(isRecord(raw.remote) ? raw.remote : {}) },
+      settingsTrusted: isRecord(raw.settingsTrusted) ? (raw.settingsTrusted as Record<string, string>) : {},
     });
   } catch {
     return d;
@@ -112,9 +134,9 @@ function storedConfig(): AppConfig {
 }
 
 /**
- * config.json with ~/.openagent/settings.json and then the project's .openagent/settings.json
- * applied over it. Fields a settings file owns are restored before writing, so the Settings
- * panel can never bake an override into config.json.
+ * config.json with the user's settings.json and then the project's (when trusted) applied over it, at launch.
+ * Afterwards settings-service.ts recomputes the layer; saveConfig restores the fields a file owns before writing,
+ * so neither the Settings panel nor a recompute can bake an override into config.json.
  */
 export function loadConfig(): AppConfig {
   return normalizeConfig(applySettings(storedConfig()));

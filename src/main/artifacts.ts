@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ArtifactInfo, ArtifactKind } from '../shared/types';
+import { localImageFile } from './images/local';
+import { servableImage } from './images/sniff';
 import type { Session } from './sessions';
 
 export const ARTIFACT_SCHEME = 'artifact';
@@ -157,6 +159,9 @@ export class ArtifactStore {
    *   artifact://view/_app/<module>            renderer module or stylesheet for the viewer
    *   artifact://view/<session>/<id>           the artifact: the HTML page itself, or a viewer for the other kinds
    *   artifact://view/<session>/files/<name>   a raw stored file (the viewer's <img> for SVG)
+   *   artifact://view/<session>/images/<file>  an image the model showed (show_image): img-<n>.<ext> in that session's images folder
+   *   artifact://view/_local/<token>/<name>    a local image a Markdown reply named (images.resolve made the token)
+   * Images are only served when their content is an image.
    */
   resolve(url: string): Resolved | null {
     let u: URL;
@@ -177,8 +182,13 @@ export class ArtifactStore {
       const file = path.join(this.opts.rendererDir, parts[1]);
       return fs.existsSync(file) ? { kind: 'file', path: file } : null;
     }
+    if (parts[0] === '_local' && parts.length === 3) {
+      const file = localImageFile(parts[1]);
+      return file ? { kind: 'file', path: file } : null;
+    }
     const sessionId = parts[0] && safeId(parts[0]);
     if (!sessionId) return null;
+    if (parts[1] === 'images') return parts.length === 3 ? this.storedImage(sessionId, parts[2]) : null;
     const meta = this.readMeta(sessionId);
     if (parts[1] === 'files' && parts.length === 3) {
       const name = path.basename(parts[2]);
@@ -240,6 +250,22 @@ body { margin: 0; background: var(--bg-100); color: var(--text-100); font: 16px/
   }
 
   // ---- internals ----
+
+  /** A show_image copy: only the img-<n>.<ext> names, only inside the session's images folder, only image content. */
+  private storedImage(sessionId: string, name: string): Resolved | null {
+    if (!/^img-\d+\.(png|jpg|webp|gif|svg)$/.test(name)) return null;
+    const dir = path.join(this.dirFor(sessionId), 'images');
+    const file = path.join(dir, name);
+    if (path.dirname(file) !== dir) return null;
+    try {
+      // A link planted in the folder does not lead out of it
+      if (fs.lstatSync(file).isSymbolicLink()) return null;
+    } catch {
+      return null;
+    }
+    const kind = servableImage(file);
+    return kind && name.endsWith(`.${kind.ext}`) ? { kind: 'file', path: file } : null;
+  }
 
   private must(session: Session, id: string): ArtifactInfo {
     const info = this.get(session, id);

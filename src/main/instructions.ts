@@ -1,21 +1,25 @@
 // Project instructions: a Markdown file at the root of the working directory that the system prompt includes on
-// every run (Claude Code's CLAUDE.md; AGENTS.md is the cross-tool name), plus a user-level one in ~/.openagent.
+// every run (Claude Code's CLAUDE.md; AGENTS.md is the cross-tool name), plus a user-level one in ~/.open-harness.
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { configDir } from './paths';
 
 /** Checked in this order; the first that exists is used. */
-export const INSTRUCTION_FILES = ['OPENAGENT.md', 'OPENCODER.md', 'AGENTS.md', 'CLAUDE.md'];
-export const USER_INSTRUCTIONS = path.join(os.homedir(), '.openagent', 'OPENAGENT.md');
-/** The file from before the app was renamed, still honoured */
-const USER_INSTRUCTIONS_OLD = path.join(os.homedir(), '.opencoder', 'OPENCODER.md');
+export const INSTRUCTION_FILES = ['OPENHARNESS.md', 'OPENAGENT.md', 'OPENCODER.md', 'AGENTS.md', 'CLAUDE.md'];
+export const USER_INSTRUCTIONS = path.join(configDir(), 'OPENHARNESS.md');
+/** The files from before the app was renamed (it was OpenAgent, and OpenCoder before that), still honoured */
+const USER_INSTRUCTIONS_OLD: [file: string, label: string][] = [
+  [path.join(os.homedir(), '.openagent', 'OPENAGENT.md'), '~/.openagent/OPENAGENT.md'],
+  [path.join(os.homedir(), '.opencoder', 'OPENCODER.md'), '~/.opencoder/OPENCODER.md'],
+];
 const MAX_CHARS = 24_000;
 
 export interface InstructionFile {
   /** Absolute path */
   path: string;
-  /** How the prompt names it: "OPENAGENT.md" or "~/.openagent/OPENAGENT.md" */
+  /** How the prompt names it: "OPENHARNESS.md" or "~/.open-harness/OPENHARNESS.md" */
   label: string;
   text: string;
   truncated: boolean;
@@ -39,7 +43,8 @@ function read(file: string, label: string): InstructionFile | null {
 /** The user-level file first, then the project's; either may be missing. */
 export function loadInstructions(cwd: string): InstructionFile[] {
   const out: InstructionFile[] = [];
-  const user = read(USER_INSTRUCTIONS, '~/.openagent/OPENAGENT.md') ?? read(USER_INSTRUCTIONS_OLD, '~/.opencoder/OPENCODER.md');
+  let user = read(USER_INSTRUCTIONS, '~/.open-harness/OPENHARNESS.md');
+  for (const [file, label] of USER_INSTRUCTIONS_OLD) user ??= read(file, label);
   if (user) out.push(user);
   for (const name of INSTRUCTION_FILES) {
     const hit = read(path.join(cwd, name), name);
@@ -52,7 +57,7 @@ export function loadInstructions(cwd: string): InstructionFile[] {
 }
 
 /**
- * Appends one bullet to the project's instructions file (the first existing of INSTRUCTION_FILES; OPENAGENT.md is
+ * Appends one bullet to the project's instructions file (the first existing of INSTRUCTION_FILES; OPENHARNESS.md is
  * created when none exists), for the composer's "#" shortcut. Returns the file and its label.
  */
 export function appendInstruction(cwd: string, text: string): { path: string; label: string } {

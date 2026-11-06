@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  /* In a narrow rail the total ("None used") moves under the switch, to the right, instead of wrapping onto two lines */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin-bottom: 6px; }
+  #total { margin-left: auto; white-space: nowrap; }
+  .rows { margin: 0; padding: 0; list-style: none; }
+  .row { display: flex; align-items: center; gap: 8px; min-height: 24px; color: var(--text-100); }
+  .row .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .count { flex: none; color: var(--text-200); font-variant-numeric: tabular-nums; }
+  .row .src { flex: none; }
+  .row.unused { color: var(--text-400); }
+  .row.unused .count { color: var(--text-400); }
+  .rule { height: 1px; margin: 4px 0; background: var(--border-subtle); }
+</style>
+</head>
+<body>
+<div id="root" hidden>
+  <div class="bar">
+    <div class="h-segmented" role="group" aria-label="Count uses in">
+      <button data-scope="session" aria-pressed="true">This session</button>
+      <button data-scope="all" aria-pressed="false">All time</button>
+    </div>
+    <span class="h-muted" id="total"></span>
+  </div>
+  <ul class="rows" id="rows"></ul>
+</div>
+<p class="h-empty" id="empty" hidden>No skills installed. Add one to ~/.open-harness/skills or the project's .open-harness/skills.</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let skills = [];
+  let usage = [];
+  let scope = 'session';
+  let seq = 0;
+
+  function render() {
+    const list = Array.isArray(skills) ? skills : [];
+    $('root').hidden = !list.length;
+    $('empty').hidden = !!list.length;
+    document.querySelectorAll('[data-scope]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.scope === scope)));
+    const counts = new Map((Array.isArray(usage) ? usage : []).map((u) => [u.name, u]));
+    const rows = list.map((s) => ({ s, u: counts.get(s.name) }));
+    rows.sort((a, b) => ((b.u ? b.u.count : 0) - (a.u ? a.u.count : 0)) || ((b.u ? b.u.lastUsedAt : 0) - (a.u ? a.u.lastUsedAt : 0)) || a.s.name.localeCompare(b.s.name));
+    const used = rows.filter((r) => r.u && r.u.count > 0).length;
+    const uses = rows.reduce((n, r) => n + (r.u ? r.u.count : 0), 0);
+    $('total').textContent = used ? `${uses} use${uses === 1 ? '' : 's'}` : 'None used';
+    const ul = $('rows');
+    ul.textContent = '';
+    let ruled = false;
+    for (const { s, u } of rows) {
+      const unused = !(u && u.count > 0);
+      if (unused && used && !ruled) { const r = document.createElement('li'); r.className = 'rule'; r.setAttribute('aria-hidden', 'true'); ul.appendChild(r); ruled = true; }
+      const li = document.createElement('li');
+      li.className = 'row' + (unused ? ' unused' : '');
+      li.title = s.description || s.name;
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = s.name;
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = unused ? '–' : `${u.count}×`;
+      li.append(name, count);
+      ul.appendChild(li);
+    }
+  }
+
+  async function loadUsage() {
+    const mine = ++seq;
+    let r;
+    try { r = await harness.skills.usage({ scope }); } catch (e) { r = null; }
+    if (mine !== seq) return;
+    usage = (r && r.items) || [];
+    render();
+  }
+
+  async function load() {
+    try { skills = await harness.skills.list(); } catch (e) { skills = []; }
+    await loadUsage();
+  }
+
+  document.querySelectorAll('[data-scope]').forEach((b) => b.addEventListener('click', () => {
+    if (scope === b.dataset.scope) return;
+    scope = b.dataset.scope;
+    harness.storage.set('scope', scope).catch(() => {});
+    render();
+    loadUsage();
+  }));
+
+  harness.on('skills.used', () => loadUsage());
+  // session.switched needs no permission, so "This session" follows the user to another session without session:read
+  harness.on('session.switched', () => { if (scope === 'session') loadUsage(); });
+  harness.on('visibility.changed', (v) => { if (v && v.visible) loadUsage(); });
+  harness.ready.then(async () => {
+    scope = (await harness.storage.get('scope', 'session')) === 'all' ? 'all' : 'session';
+    load();
+  });
+</script>
+</body>
+</html>

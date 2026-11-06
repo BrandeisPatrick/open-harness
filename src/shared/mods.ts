@@ -1,0 +1,424 @@
+// The mod protocol's types: the manifest, what the app knows about an installed mod, and the bridge between a mod
+// page and the app. docs/mods.md is the reference for authors; this file is the same contract for the code.
+// Types only (like every file in src/shared): it is compiled for both the main process and the renderer.
+
+import type { PermissionMode, PlanInfo, SendResult, SessionOrigin, SkillInfo, TaskItem } from './types';
+import type { ContextBreakdown } from './context';
+import type { Schedule, ScheduleInput, SchedulePatch } from './schedules';
+import type { RemoteStatus } from './remote';
+import type { SearchHit } from './history';
+
+export type ModProtocolVersion = 1;
+
+/** bundled: ships in the app's mods/ folder. user: <configDir>/mods. project: <project>/.open-harness/mods. */
+export type ModScope = 'bundled' | 'user' | 'project';
+
+export type ModPermission =
+  | 'session:read'
+  | 'session:send'
+  | 'session:control'
+  | 'sessions:read'
+  | 'model'
+  | 'skills:read'
+  | 'config:read'
+  | 'config:write'
+  | 'schedules'
+  | 'remote'
+  | 'network';
+
+/** rail: a section in the right-hand rail. tab: a tab in the side pane. composer: a strip above the composer. background: behind the window. */
+export type ModSeat = 'rail' | 'tab' | 'composer' | 'background';
+
+export interface ModViewManifest {
+  /** Unique within the mod */
+  id: string;
+  title: string;
+  /** An HTML file in the mod's folder */
+  entry: string;
+  seat: ModSeat;
+  /** rail: sections sort by this, lower first (default 100) */
+  order?: number;
+  /** rail: the tallest the section grows before it scrolls (default 360) */
+  maxHeight?: number;
+  /** A built-in icon name or an SVG file in the mod (default: the mod's icon) */
+  icon?: string;
+}
+
+export interface ModCommandManifest {
+  /** Without the slash; lower-case letters, digits and - */
+  name: string;
+  description: string;
+  /** A view to bring to the front when the command runs */
+  view?: string;
+}
+
+export type ModSettingField =
+  | { key: string; type: 'boolean'; title: string; description?: string; default?: boolean }
+  | { key: string; type: 'string'; title: string; description?: string; default?: string; placeholder?: string }
+  | { key: string; type: 'number'; title: string; description?: string; default?: number; min?: number; max?: number; step?: number }
+  | { key: string; type: 'select'; title: string; description?: string; default?: string; options: string[] };
+
+/** mod.json */
+export interface ModManifest {
+  protocol: ModProtocolVersion;
+  /** ^[a-z][a-z0-9-]{1,39}$ and equal to the folder name */
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  author?: string;
+  homepage?: string;
+  license?: string;
+  icon?: string;
+  permissions?: ModPermission[];
+  contributes?: {
+    views?: ModViewManifest[];
+    /** CSS files applied to the app's own page */
+    styles?: string[];
+    commands?: ModCommandManifest[];
+    settings?: ModSettingField[];
+  };
+}
+
+export interface ModProblem {
+  /** manifest: mod.json is missing, unreadable or invalid. file: something it names does not exist. runtime: a page threw. */
+  kind: 'manifest' | 'file' | 'runtime';
+  message: string;
+  /** runtime: the view that reported it */
+  view?: string;
+  at?: number;
+}
+
+/**
+ * on: loaded. off: the user has not turned it on (or turned it off). paused: it was on, then its manifest asked for
+ * more than was granted (a permission, styles or a background) and it waits for approval. invalid: no usable manifest.
+ */
+export type ModState = 'on' | 'off' | 'paused' | 'invalid';
+
+/** One installed mod, as Settings and the host see it. */
+export interface ModInfo {
+  /** Stable handle across scopes: "<id>" for bundled and user mods, "<id>@<project folder>" for project mods */
+  key: string;
+  id: string;
+  scope: ModScope;
+  /** Absolute folder */
+  dir: string;
+  /** The last manifest that validated (null when there never was one) */
+  manifest: ModManifest | null;
+  state: ModState;
+  /** What the user granted when turning it on */
+  granted: ModPermission[];
+  /** Asked for by the manifest and not granted: what turning it on (or resuming it) would add */
+  wants: ModPermission[];
+  /** True when the manifest contributes styles or a background that were not part of what was approved */
+  wantsStyles: boolean;
+  problems: ModProblem[];
+  /** Changes whenever a file of the mod changes; views reload when it does */
+  rev: string;
+  /** The origin its pages are served from, e.g. "mod://word-count.user" */
+  origin: string;
+  /** A user mod that hides a bundled one with the same id */
+  overrides?: boolean;
+  /** Values of its settings (defaults filled in) */
+  settings: Record<string, unknown>;
+}
+
+/** How the rail, the tabs and the background are arranged; stored in the config. */
+export interface ModLayout {
+  /** Whether the right-hand rail is showing */
+  railOpen: boolean;
+  /** Rail width in px */
+  railWidth: number;
+  /** "<mod key>/<view id>" of rail sections the user collapsed */
+  collapsed: string[];
+  /** "<mod key>/<view id>" of the active background, or null */
+  background: string | null;
+  /** A picture of the user's own as the background (absolute path), used when `background` is null */
+  backgroundImage: string | null;
+  /** 0 to 1: how strongly the app's surfaces cover the background */
+  backgroundDim: number;
+}
+
+/** The part of the config that belongs to mods (AppConfig.mods). */
+export interface ModsConfig {
+  /** By mod key: what was granted when it was turned on. A missing entry means off (bundled mods: on with their manifest's permissions). */
+  enabled: Record<string, { permissions: ModPermission[]; styles: boolean; at: number }>;
+  /** Bundled mod ids the user turned off */
+  disabledBundled: string[];
+  /** By mod key */
+  settings: Record<string, Record<string, unknown>>;
+  layout: ModLayout;
+  /** Every user and project mod is off while this is set */
+  safeMode: boolean;
+}
+
+// ---------- What a mod page sees ----------
+
+export interface ModTheme {
+  scheme: 'light' | 'dark';
+  /** The app's design tokens as they are right now (--bg-100: "#faf9f5", …), including a theme mod's changes */
+  tokens: Record<string, string>;
+}
+
+export interface ModHello {
+  protocol: ModProtocolVersion;
+  mod: { id: string; name: string; version: string; scope: ModScope };
+  view: { id: string; seat: ModSeat; title: string };
+  app: { name: string; version: string };
+  granted: ModPermission[];
+  theme: ModTheme;
+  settings: Record<string, unknown>;
+  visible: boolean;
+}
+
+/** A session as mods see it. */
+export interface ModSession {
+  id: string;
+  title: string;
+  cwd: string;
+  origin: SessionOrigin;
+  parentId?: string;
+  forkedFrom?: string;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+  running: boolean;
+  attention?: 'approval' | 'plan';
+}
+
+export interface ModTranscriptItem {
+  role: 'user' | 'assistant' | 'tool' | 'plan' | 'artifact' | 'image' | 'compaction';
+  /** The message text, the tool's result, the plan's Markdown, the artifact's or image's title, or the compaction summary (long texts are cut) */
+  text: string;
+  /** tool: the tool's name */
+  name?: string;
+  /** tool: its arguments as JSON text */
+  args?: string;
+  ok?: boolean;
+  /** user: how many images were attached (the images themselves are not passed to mods) */
+  images?: number;
+}
+
+export interface OutputItem {
+  kind: 'artifact' | 'image' | 'file';
+  id: string;
+  title: string;
+  /** "HTML · v2", "PNG · 1280×720", "+12 −3" */
+  detail: string;
+  updatedAt: number;
+}
+
+/** The settings a mod may read. Never contains keys or other secrets. */
+export interface PublicConfig {
+  provider: string;
+  model: string;
+  /** The folder of the session on screen */
+  workingDirectory: string;
+  /** The user's home folder, for showing paths as ~/… */
+  home: string;
+  permissionMode: PermissionMode;
+  theme: 'system' | 'light' | 'dark';
+  autoCompact: boolean;
+  compactThreshold: number;
+  keepAwake: 'off' | 'running' | 'always';
+  notifications: boolean;
+  /** "<mod key>/<view id>", "image" for the user's own picture, or null */
+  background: string | null;
+  contextLimit: number;
+}
+
+/** What config.set accepts from a mod. */
+export type PublicConfigPatch = Partial<Pick<PublicConfig, 'theme' | 'autoCompact' | 'compactThreshold' | 'keepAwake' | 'notifications' | 'background'>>;
+
+export interface SkillUsage {
+  name: string;
+  count: number;
+  lastUsedAt: number;
+}
+
+export interface ModelRequest {
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  system?: string;
+  /** At most 4000 (default 1000) */
+  maxTokens?: number;
+  /** session: the open session's conversation goes in front of `messages`, read-only */
+  context?: 'none' | 'session';
+  /** Chosen by the page; deltas and cancel refer to it */
+  requestId?: string;
+}
+
+/**
+ * Every bridge method: params → result. A method is `namespace.name`; the permission each needs is in
+ * MOD_METHOD_PERMISSIONS (main process) and in docs/mods.md.
+ */
+export interface ModBridge {
+  hello: (p: { protocol: number }) => ModHello;
+  'events.subscribe': (p: { events: string[] }) => void;
+  'events.unsubscribe': (p: { events: string[] }) => void;
+  'log.error': (p: { message: string; stack?: string }) => void;
+
+  'ui.theme': () => ModTheme;
+  'ui.resize': (p: { height: number }) => void;
+  'ui.setTitle': (p: { title: string }) => void;
+  'ui.setBadge': (p: { badge: string | number | null }) => void;
+  'ui.toast': (p: { text: string; kind?: 'info' | 'error' }) => void;
+  'ui.open': (p: { view?: string }) => void;
+  'ui.copy': (p: { text: string }) => boolean;
+  'ui.openExternal': (p: { url: string }) => void;
+  'ui.markdown': (p: { text: string }) => { html: string };
+
+  'storage.get': (p: { key: string; scope?: 'mod' | 'session' }) => { value: unknown };
+  'storage.set': (p: { key: string; value: unknown; scope?: 'mod' | 'session' }) => void;
+  'storage.remove': (p: { key: string; scope?: 'mod' | 'session' }) => void;
+  'storage.keys': (p: { scope?: 'mod' | 'session' }) => { keys: string[] };
+  'settings.get': () => Record<string, unknown>;
+
+  'session.get': () => ModSession;
+  'session.transcript': (p: { limit?: number }) => { items: ModTranscriptItem[] };
+  'session.tasks': () => { tasks: TaskItem[] };
+  'session.plan': () => { plan: PlanInfo | null };
+  'session.outputs': () => { outputs: OutputItem[] };
+  'session.context': () => ContextBreakdown;
+  'session.related': () => { parent: ModSession | null; children: ModSession[]; forks: ModSession[] };
+  'outputs.open': (p: { kind: OutputItem['kind']; id: string }) => void;
+
+  'session.send': (p: { text: string }) => SendResult;
+  'composer.insert': (p: { text: string }) => void;
+
+  'session.stop': () => void;
+  'session.compact': (p: { focus?: string }) => { ok: boolean; error?: string };
+  'sessions.open': (p: { id: string }) => void;
+  'sessions.create': () => ModSession;
+  'sessions.spawn': (p: { title: string; prompt: string }) => ModSession;
+  'sessions.merge': (p: { id: string }) => { ok: boolean; error?: string };
+
+  'sessions.list': () => { sessions: ModSession[] };
+  'sessions.search': (p: { query: string; limit?: number }) => { hits: SearchHit[] };
+
+  /** After model.cancel the call still resolves, with what had arrived and `stopped: true` */
+  'model.complete': (p: ModelRequest) => { text: string; usage?: { promptTokens: number; completionTokens: number }; stopped?: boolean };
+  'model.cancel': (p: { requestId?: string }) => void;
+
+  'skills.list': () => { skills: SkillInfo[] };
+  'skills.usage': (p: { scope: 'session' | 'all' }) => { items: SkillUsage[] };
+
+  'config.get': () => PublicConfig;
+  'config.set': (p: { patch: PublicConfigPatch }) => PublicConfig;
+
+  'schedules.list': () => { schedules: Schedule[] };
+  'schedules.create': (p: { input: ScheduleInput }) => Schedule;
+  'schedules.update': (p: { id: string; patch: SchedulePatch }) => Schedule;
+  'schedules.remove': (p: { id: string }) => void;
+  'schedules.runNow': (p: { id: string }) => void;
+
+  'remote.status': () => RemoteStatus;
+  'remote.start': () => RemoteStatus;
+  'remote.stop': () => RemoteStatus;
+}
+
+export type ModMethod = keyof ModBridge;
+
+/** Events the app sends to a view that subscribed (and has the permission). */
+export interface ModEvents {
+  'theme.changed': ModTheme;
+  'settings.changed': Record<string, unknown>;
+  'visibility.changed': { visible: boolean };
+  command: { name: string; args: string };
+  /** Another session came on screen. Needs no permission (it carries only the id), so any view can reset itself. */
+  'session.switched': { id: string };
+
+  /** The session on screen changed: its title, its state, or which session it is */
+  'session.changed': ModSession;
+  /** A sub-session, fork or the parent of the session on screen changed state: read session.related() again */
+  'related.changed': Record<string, never>;
+  'run.started': { sessionId: string };
+  'run.ended': { sessionId: string; reason: string; text?: string };
+  'message.user': { text: string; origin: string };
+  'message.assistant': { text: string };
+  'message.delta': { text: string };
+  'tool.started': { id: string; name: string; args: unknown };
+  'tool.ended': { id: string; name: string; ok: boolean; durationMs?: number };
+  'tasks.changed': { tasks: TaskItem[] };
+  'plan.changed': { plan: PlanInfo | null };
+  'outputs.changed': Record<string, never>;
+  'context.changed': { tokens: number; limit: number };
+
+  'model.delta': { requestId: string; text: string };
+  'skills.used': { name: string };
+  'config.changed': PublicConfig;
+  'schedules.changed': { schedules: Schedule[] };
+  'remote.changed': RemoteStatus;
+}
+
+export type ModEventName = keyof ModEvents;
+
+/** JSON-RPC 2.0 over postMessage */
+export interface ModRpcRequest {
+  jsonrpc: '2.0';
+  id: number | string;
+  method: string;
+  params?: unknown;
+}
+export interface ModRpcResponse {
+  jsonrpc: '2.0';
+  id: number | string;
+  result?: unknown;
+  error?: { code: number; message: string; data?: unknown };
+}
+export interface ModRpcEvent {
+  jsonrpc: '2.0';
+  method: 'event';
+  params: { name: string; data: unknown };
+}
+
+// ---------- Between the window and the main process ----------
+
+/** What the main process needs to know about the frame a request came from; the renderer fills it in from the iframe, never from the message. */
+export interface ModCaller {
+  /** ModInfo.key */
+  mod: string;
+  view: string;
+}
+
+/**
+ * A bridge call the renderer cannot answer by itself is forwarded with mods.call. Main checks the permission again
+ * and either answers or returns { error }. The ui.*, composer.* and events.* methods are the renderer's own.
+ */
+export interface ModsRpc {
+  'mods.list': () => ModInfo[];
+  /** The permission each bridge method and each event needs (null: always available), so the window enforces the same table as the main process */
+  'mods.permissions': () => { methods: Record<string, ModPermission | null>; events: Record<string, ModPermission | null> };
+  /** Turns a mod on with the permissions its manifest asks for right now (also resumes a paused one), or off */
+  'mods.setEnabled': (key: string, on: boolean) => ModInfo[];
+  'mods.setSetting': (key: string, setting: string, value: unknown) => ModInfo[];
+  'mods.setLayout': (patch: Partial<ModLayout>) => ModLayout;
+  'mods.setSafeMode': (on: boolean) => ModInfo[];
+  /** Re-reads every mod folder now */
+  'mods.reload': () => ModInfo[];
+  /** Copies a bundled mod into the user folder so it can be edited; returns the new list */
+  'mods.customise': (key: string) => ModInfo[];
+  /** Writes a starter mod into the user folder (or the project's) and returns it */
+  'mods.create': (input: { id: string; name: string; seat: ModSeat; scope: 'user' | 'project' }) => ModInfo;
+  /** Installs from a folder (copied) or a Git URL (cloned) into the user folder */
+  'mods.install': (source: string) => ModInfo;
+  /** Moves a user mod's folder to the Trash */
+  'mods.remove': (key: string) => ModInfo[];
+  'mods.reveal': (key: string) => void;
+  /** Lets the user pick a picture for the background; returns the layout (unchanged when cancelled) */
+  'mods.chooseBackgroundImage': () => ModLayout;
+  /** A bridge call from a mod page */
+  'mods.call': (caller: ModCaller, method: string, params: unknown) => { result?: unknown; error?: { code: number; message: string; data?: unknown } };
+  /** A page reported an uncaught error */
+  'mods.report': (caller: ModCaller, problem: { message: string; stack?: string }) => void;
+  /** The CSS text of every enabled mod's styles, in load order */
+  'mods.styles': () => { key: string; css: string }[];
+}
+
+export interface ModsEvents {
+  /** The list changed: a mod appeared, went away, was edited, turned on or off */
+  'mods:changed': ModInfo[];
+  /** An event for mod views, already filtered by permission: the renderer hands it to the views of `mod` that subscribed (all mods when `mod` is absent) */
+  'mods:event': { mod?: string; name: string; data: unknown };
+  /** A mod the user has not turned on appeared or wants more than it has: show the card */
+  'mods:offer': ModInfo;
+}

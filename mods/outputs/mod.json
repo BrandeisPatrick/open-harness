@@ -1,0 +1,14 @@
+{
+  "protocol": 1,
+  "id": "outputs",
+  "name": "Outputs",
+  "version": "1.0.0",
+  "description": "What the session produced: artifacts, images and changed files, newest first.",
+  "author": "Open Harness",
+  "license": "MIT",
+  "icon": "files",
+  "permissions": ["session:read"],
+  "contributes": {
+    "views": [{ "id": "main", "title": "Outputs", "entry": "panel.html", "seat": "rail", "order": 40 }]
+  }
+}

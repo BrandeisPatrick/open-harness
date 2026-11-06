@@ -10,7 +10,7 @@ import { terminalTools } from './terminal';
 import { createArtifact } from './artifact';
 import { updateTasks } from './tasks';
 
-export type { Tool, ToolContext, ToolResult, ApprovalResult } from './types';
+export type { Tool, ToolContext, ToolResult, ApprovalResult, ApproveOptions } from './types';
 
 /** The tools offered to the model. Plan mode swaps the file-changing tools for submit_plan. */
 export function allTools(mode: PermissionMode = 'ask'): Tool[] {

@@ -75,6 +75,34 @@ const ICONS = {
   // Setup strip: the model server (two stacked units with their lights) and a download (arrow into a tray)
   server: `<rect x="2.25" y="2.5" width="11.5" height="4.75" rx="1.25"/><rect x="2.25" y="8.75" width="11.5" height="4.75" rx="1.25"/>${dot(4.75, 4.875, 0.8)}${dot(4.75, 11.125, 0.8)}`,
   download: '<path d="M8 2.25v8M4.75 7L8 10.25 11.25 7M2.75 11.25v1c0 .83.67 1.5 1.5 1.5h7.5c.83 0 1.5-.67 1.5-1.5v-1"/>',
+  // sidebar
+  // Navigation rows: Scheduled (a clock), Customize (two sliders); row glyphs: a sub-session (an arrow turning into
+  // an indented line), Merge (two branches joining); export (a page with an arrow out). Task card: to do (a dashed
+  // circle), done (a filled circle with the tick cut out in the card's colour).
+  clock: '<circle cx="8" cy="8" r="6"/><path d="M8 4.75V8l2.25 1.5"/>',
+  sliders: `<path d="M2.5 5h4.25M10.25 5h3.25M2.5 11h1.75M7.75 11h5.75"/><circle cx="8.5" cy="5" r="1.75"/><circle cx="6" cy="11" r="1.75"/>`,
+  'sub-session': '<path d="M4 2.5v5.25c0 1.1.9 2 2 2h6.5M10 7.25l2.5 2.5-2.5 2.5"/>',
+  'git-merge': '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="9" r="1.5"/><path d="M4.5 5v6M4.5 5.5c0 2 1.5 3.5 3.5 3.5h2"/>',
+  'file-export': `<path d="${PAGE}"/><path d="M9 1.75V6h4.25M8 13V8.5M6 10.25L8 8.25l2 2"/>`,
+  'circle-dashed': '<circle cx="8" cy="8" r="5.5" stroke-dasharray="2.4 2.2"/>',
+  'circle-check-filled': '<circle cx="8" cy="8" r="6.25" fill="currentColor" stroke="none"/><path d="M5.5 8.25l1.75 1.75 3.25-3.5" style="stroke: var(--task-check, #fff)"/>',
+  // mods: the rail toggle (panel-left mirrored), icons a manifest may name (gauge, message, clock) and the default
+  // for a mod without one (four blocks, one of them round)
+  'panel-right': '<rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M9.75 2.75v10.5"/>',
+  gauge: `<path d="M2.25 11.75a5.75 5.75 0 1 1 11.5 0"/><path d="M8 11.75l2.75-3.25"/>${dot(8, 11.75, 1.1)}`,
+  message: '<path d="M4.25 2.75h7.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5H7.5l-3.25 2.5v-2.5c-.83 0-1.5-.67-1.5-1.5v-5.5c0-.83.67-1.5 1.5-1.5z"/>',
+  blocks: '<rect x="2.25" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="9" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="2.25" y="9" width="4.75" height="4.75" rx="1.25"/><circle cx="11.375" cy="11.375" r="2.375"/>',
+  // settings
+  // Settings navigation: a gauge (context), a puzzle piece (mods), a clock (scheduled), a phone (remote control),
+  // an archive box (history), a palette (appearance); and the API key's "hide" eye
+  puzzle:
+    '<path d="M3 4.75c0-.41.34-.75.75-.75H6a1.25 1.25 0 1 1 2.5 0h2.25c.41 0 .75.34.75.75V7a1.25 1.25 0 1 1 0 2.5v2.75c0 .41-.34.75-.75.75H8.5a1.25 1.25 0 1 0-2.5 0H3.75a.75.75 0 0 1-.75-.75V9.5a1.25 1.25 0 1 0 0-2.5V4.75z"/>',
+  smartphone: '<rect x="4.25" y="1.75" width="7.5" height="12.5" rx="1.75"/><path d="M7.25 12h1.5"/>',
+  archive: '<rect x="1.75" y="2.75" width="12.5" height="3.25" rx="1"/><path d="M2.75 6v6.25c0 .55.45 1 1 1h8.5c.55 0 1-.45 1-1V6M6.5 8.75h3"/>',
+  palette:
+    '<path d="M8 1.75a6.25 6.25 0 0 0 0 12.5c.83 0 1.25-.5 1.25-1.13 0-.33-.13-.6-.32-.84-.2-.24-.33-.51-.33-.86 0-.69.56-1.17 1.25-1.17h1.4a3.5 3.5 0 0 0 3-3.5C14.25 4.16 11.45 1.75 8 1.75z"/>' +
+    dot(5, 7, 0.9) + dot(7, 4.5, 0.9) + dot(10.25, 5, 0.9),
+  'eye-off': '<path d="M6.3 3.95A6.4 6.4 0 0 1 8 3.75C12 3.75 14.25 8 14.25 8a11 11 0 0 1-1.6 2.15M4.2 4.95C2.6 6.1 1.75 8 1.75 8S4 12.25 8 12.25c1.1 0 2.05-.3 2.9-.8M6.6 6.6a2 2 0 0 0 2.8 2.8M2.25 2.25l11.5 11.5"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -99,7 +127,7 @@ export function hydrateIcons(root: ParentNode = document): void {
   });
 }
 
-/** The OpenAgent mark (prompt chevron and cursor on the accent tile), drawn from build/icon.svg's proportions. */
+/** The Open Harness mark (prompt chevron and cursor on the accent tile), drawn from build/icon.svg's proportions. */
 export function brandMark(size = 40): string {
   // The open ring from build/icon.svg at 40 px: an O with a gap at the top right and the agent as the point in it.
   return `<svg class="brand-mark" width="${size}" height="${size}" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="var(--accent)"/><path d="M20 11 A9 9 0 1 0 29 20" fill="none" stroke="#fbf5ec" stroke-width="3.1" stroke-linecap="round"/><circle cx="27.4" cy="12.9" r="2.4" fill="#fbf5ec"/></svg>`;

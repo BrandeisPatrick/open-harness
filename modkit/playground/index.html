@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mod playground</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/@harness/harness.css">
+<link rel="stylesheet" href="/playground/playground.css">
+</head>
+<body class="pg">
+<div class="pg-bg" id="seat-background"></div>
+
+<aside class="pg-side" id="side">
+  <header class="pg-side-head">
+    <div class="pg-brand">Mod playground</div>
+    <div class="pg-dir h-muted" id="mods-dir"></div>
+  </header>
+
+  <section class="pg-block">
+    <h3 class="h-title">Mods</h3>
+    <ul class="pg-mods" id="mod-list"></ul>
+    <div class="pg-problems" id="problems"></div>
+  </section>
+
+  <section class="pg-block">
+    <h3 class="h-title">World</h3>
+    <div class="pg-field-row">
+      <span class="pg-field-label">Fixture</span>
+      <div class="h-segmented" id="state-seg"></div>
+    </div>
+    <div class="pg-field-row">
+      <span class="pg-field-label">Theme</span>
+      <div class="h-segmented" id="scheme-seg"></div>
+    </div>
+    <div class="pg-field-row">
+      <span class="pg-field-label">Model</span>
+      <div class="h-segmented" id="model-seg"></div>
+    </div>
+    <div class="pg-field-row">
+      <span class="pg-field-label">Tab width</span>
+      <div class="h-segmented" id="pane-seg"></div>
+    </div>
+    <div class="pg-actions">
+      <button class="h-btn sm" id="act-run">Simulate a run</button>
+      <button class="h-btn sm" id="act-stop">Stop</button>
+      <button class="h-btn sm" id="act-plan">Propose a plan</button>
+      <button class="h-btn sm" id="act-approve">Approve plan</button>
+      <button class="h-btn sm" id="act-output">Add an output</button>
+      <button class="h-btn sm" id="act-switch">Switch session</button>
+      <button class="h-btn sm" id="act-related">Sub-session changes</button>
+      <button class="h-btn sm" id="act-fire">Fire a schedule</button>
+      <button class="h-btn sm" id="act-skill">Use a skill</button>
+      <button class="h-btn sm" id="act-device">Connect a device</button>
+      <button class="h-btn sm" id="act-command">Run a /command</button>
+      <button class="h-btn sm ghost" id="act-reload">Reload views</button>
+    </div>
+  </section>
+
+  <section class="pg-block">
+    <h3 class="h-title">Tasks</h3>
+    <textarea class="h-input h-mono pg-tasks" id="tasks-edit" spellcheck="false" placeholder="[x] done&#10;[~] in progress&#10;[ ] pending"></textarea>
+    <div class="pg-actions"><button class="h-btn sm" id="tasks-apply">Apply tasks</button><button class="h-btn sm ghost" id="tasks-clear">Clear</button></div>
+  </section>
+
+  <section class="pg-block" id="settings-block">
+    <h3 class="h-title">Settings of this mod</h3>
+    <div id="settings-form" class="pg-form"></div>
+  </section>
+
+  <section class="pg-block" id="perms-block">
+    <h3 class="h-title">Permissions granted</h3>
+    <div id="perms" class="pg-perms"></div>
+  </section>
+
+  <section class="pg-block">
+    <h3 class="h-title">Fixture JSON</h3>
+    <details class="pg-json">
+      <summary class="h-muted">Edit the whole world</summary>
+      <textarea class="h-input h-mono" id="world-json" spellcheck="false"></textarea>
+      <div class="pg-actions"><button class="h-btn sm" id="world-apply">Apply and reload</button></div>
+    </details>
+  </section>
+</aside>
+
+<main class="pg-main">
+  <div class="pg-chat">
+    <div class="pg-chat-head"><span id="session-title">Session</span><span class="h-muted" id="session-cwd"></span></div>
+    <div class="pg-transcript" id="transcript"></div>
+    <div class="pg-composer-wrap">
+      <div class="pg-composer-seat" id="seat-composer"></div>
+      <div class="pg-composer">
+        <textarea id="composer-text" rows="2" placeholder="Describe a task, / for skills"></textarea>
+        <div class="pg-composer-bar"><span class="pg-chip" id="mode-chip">Ask before actions</span><span class="pg-chip" id="model-chip">model</span><span class="pg-spacer"></span><button class="h-btn sm primary" id="composer-send">Send</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pg-rail" id="seat-rail"></div>
+
+  <div class="pg-pane">
+    <div class="pg-tabs" id="tabs"></div>
+    <div class="pg-tab-body" id="seat-tab"></div>
+  </div>
+</main>
+
+<section class="pg-log" id="log-panel">
+  <div class="pg-log-head">
+    <button class="pg-log-toggle" id="log-toggle" aria-expanded="true">Bridge log</button>
+    <select class="h-input pg-log-filter" id="log-filter"><option value="">All views</option></select>
+    <label class="pg-check"><input type="checkbox" id="log-deltas"> deltas</label>
+    <span class="pg-spacer"></span>
+    <span class="h-muted" id="log-stats"></span>
+    <button class="h-btn sm ghost" id="log-clear">Clear</button>
+  </div>
+  <div class="pg-log-body" id="log"></div>
+</section>
+
+<div class="pg-toasts" id="toasts"></div>
+
+<script src="/playground/fixture.js"></script>
+<script src="/playground/host.js"></script>
+<script src="/playground/validate.js"></script>
+<script src="/playground/playground.js"></script>
+</body>
+</html>

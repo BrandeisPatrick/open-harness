@@ -6,14 +6,18 @@ import type {
   ChangeDiff,
   ChangeEntry,
   ChangesApi,
+  CommandInfo,
+  CommandResult,
   CompactionInfo,
   ContextInfo,
   FileHit,
   ImageAttachment,
+  LiveState,
   McpApi,
   McpServerInfo,
+  MessageOrigin,
   ModelCapabilities,
-  OpenAgentApi,
+  OpenHarnessApi,
   PermissionMode,
   PlanInfo,
   ProjectRules,
@@ -22,6 +26,7 @@ import type {
   RulesApi,
   SendResult,
   SessionMeta,
+  SessionStatus,
   SkillInfo,
   TaskItem,
   TerminalApi,
@@ -47,6 +52,7 @@ import { createMcpPanel, mcpCardHtml, mockMcpSource, type MockMcpSource } from '
 import { appendWithMentions, createMentionPicker, normalizeMention } from './mentions.js';
 import { createRulesPanel, mockRulesSource } from './rules.js';
 import { cleanTasks, createTaskList } from './tasks.js';
+import { createSidebar, type SidebarView } from './sidebar.js';
 import { createComposerHistory, createDoublePress, createInstructionFiles, memoryText, oneLine } from './composer.js';
 import { createRecentRow, dirName, recentChoices } from './recent.js';
 import {
@@ -62,10 +68,20 @@ import {
   type SetupId,
   type SetupLine,
 } from './setup.js';
+import type { SettingsInfo } from '../shared/settings-info';
+import type { Schedule } from '../shared/schedules';
+import { bus } from './bus.js';
+import { onPush, rpc } from './rpc.js';
+import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } from './transcript-items.js';
+import { createModsHost, type ModPaneTabs } from './mods-host.js';
+import { createSettingsPage } from './settings-page.js';
+import { agentApproval, setNameLookup } from './tool-labels.js';
+import { unframe } from './origin.js';
+import { tilde } from './home.js';
 
 declare global {
   interface Window {
-    oc: OpenAgentApi;
+    oc: OpenHarnessApi;
     __oc_debug?: {
       /**
        * A user bubble, optionally with images (data: URLs), the mentioned paths a reloaded transcript would carry and
@@ -148,15 +164,10 @@ const modelBtn = $<HTMLButtonElement>('model-btn');
 const cwdBtn = $<HTMLButtonElement>('cwd-btn');
 const cwdLabel = $('cwd-label');
 const sessionTitle = $('session-title');
-const sessionList = $('session-list');
-const sessionSearch = $<HTMLInputElement>('session-search');
 const newSessionBtn = $<HTMLButtonElement>('new-session-btn');
 const slashMenu = $('slash-menu');
 const mentionMenu = $('mention-menu');
 const settingsDialog = $<HTMLDialogElement>('settings');
-const settingsForm = $<HTMLFormElement>('settings-form');
-const settingsBody = $('settings-body');
-const settingsStatus = $('settings-status');
 const shortcutsDialog = $<HTMLDialogElement>('shortcuts');
 const sidePane = $('side-pane');
 const browserPane = $('browser-pane');
@@ -200,12 +211,14 @@ let config: AppConfig;
 let running = false;
 let runStartedAt = 0;
 let timer: number | undefined;
+/** The session on screen. Other sessions may be running too: their events only update `statuses`. */
 let currentSessionId = '';
-let runningSessionId = '';
 let sessions: SessionMeta[] = [];
+/** Per session: running, waiting for the user, unread (from the session list, kept current by every session's events) */
+const statuses = new Map<string, SessionStatus>();
 const toolCards = new Map<string, ToolCard>();
 let lastToolCard: ToolCard | null = null;
-let pendingApproval: { name: string; cancel: (reason: string) => void; allow: () => void } | null = null;
+let pendingApproval: { name: string; cancel: (reason: string) => void; allow: () => void; dispose: () => void } | null = null;
 let stick = true;
 let runOutputTokens = 0;
 /** From a confirmed Rewind until the transcript is back: sending and other rewinds wait */
@@ -245,8 +258,8 @@ const queueList = createQueueList({
   onChange: () => syncQueueHeight(),
 });
 
-/** The agent's task list, pinned above the queue and the status line (tasks_updated, SessionMeta.tasks) */
-const taskList = createTaskList({ root: taskListEl, onChange: () => syncTaskHeight() });
+/** The agent's task list, a card that is always last in the conversation (tasks_updated, SessionMeta.tasks) */
+const taskList = createTaskList({ root: taskListEl, home: messagesEl, after: emptyState, onChange: () => scrollToBottom() });
 
 /** A task list from an event or the debug hook. */
 function showTasks(tasks: unknown): void {
@@ -275,7 +288,7 @@ function composerEmpty(): boolean {
 function cleanError(err: unknown): string {
   let msg = err instanceof Error ? err.message : String(err);
   msg = msg.replace(/^Error invoking remote method '[^']+':\s*/, '').replace(/^(?:Error:\s*)+/, '');
-  if (/No handler registered/.test(msg)) return 'this needs the updated app. Restart OpenAgent and try again.';
+  if (/No handler registered/.test(msg)) return 'this needs the updated app. Restart Open Harness and try again.';
   return msg;
 }
 
@@ -371,6 +384,10 @@ interface UserMessageOptions {
   turn?: number;
   /** A command handled here (/compact, /mcp, …) or a message the main process did not take: no transcript item matches it */
   local?: boolean;
+  /** Where the message came from when it was not typed here ("from schedule", …), shown above the bubble */
+  originLabel?: string;
+  /** The text was written by a model (another session's report or message, a merged summary): drawn as Markdown */
+  markdown?: boolean;
 }
 
 const REWIND_BUTTON = `<button type="button" class="icon-btn sm msg-rewind" aria-label="Rewind to this message" data-tip="Rewind">${icon('rotate-ccw', 14)}</button>`;
@@ -430,11 +447,21 @@ function addUserMessage(text: string, images: BubbleImage[] = [], mentions?: str
     });
     bubble.appendChild(grid);
   }
-  if (text) appendWithMentions(bubble, text, { mentions: Array.isArray(mentions) ? mentions : null, known: pickedPaths, cwd: config?.workingDirectory ?? '' });
+  if (text && opts.markdown) {
+    bubble.classList.add('rich');
+    bubble.insertAdjacentHTML('beforeend', `<div class="md">${renderMarkdown(text)}</div>`);
+  } else if (text) appendWithMentions(bubble, text, { mentions: Array.isArray(mentions) ? mentions : null, known: pickedPaths, cwd: config?.workingDirectory ?? '' });
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
   // An images-only message has no text to copy (the row stays empty, and hidden, unless it gets Rewind)
   if (text) actions.innerHTML = `<button type="button" class="icon-btn sm msg-copy" aria-label="Copy message" data-tip="Copy">${icon('copy', 14)}</button>`;
+  if (opts.originLabel) {
+    const label = document.createElement('div');
+    label.className = 'msg-origin';
+    el.classList.add('has-origin');
+    label.textContent = opts.originLabel;
+    el.appendChild(label);
+  }
   el.append(bubble, actions);
   userTextByMessage.set(el, text);
   if (opts.local) el.dataset.local = 'true';
@@ -715,7 +742,10 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const reason = typeof ev.reason === 'string' ? ev.reason.trim() : '';
   el.className = 'approval' + (reason ? ' flagged' : '');
   const mcp = mcpParts(ev.name);
-  const iconName: IconName = mcp ? 'plug' : ev.name === 'bash' || ev.name === 'terminal_run' ? 'terminal' : ev.name === 'edit_file' ? 'pencil' : ev.name === 'write_file' ? 'file-plus' : 'shield-check';
+  // A tool's own question (sub-sessions, messages, schedules): its wording comes from the detail the main process sent
+  const agent = mcp ? null : agentApproval(ev.name, ev.detail);
+  if (agent) card?.noteApproval(ev.detail);
+  const iconName: IconName = mcp ? 'plug' : agent ? agent.icon : ev.name === 'bash' || ev.name === 'terminal_run' ? 'terminal' : ev.name === 'edit_file' ? 'pencil' : ev.name === 'write_file' ? 'file-plus' : 'shield-check';
   if (mcp) el.classList.add('mcp');
   const reasonHtml = reason
     ? `<div class="reason">${icon('triangle-alert', 14)}<span>${escapeHtml(`${ev.mode === 'auto' ? 'Auto mode paused' : 'Paused'}: ${reason}`)}</span></div>`
@@ -726,7 +756,16 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const body = document.createElement('div');
   body.className = 'approval-body';
   let subject = ev.name;
-  if (mcp) {
+  /** The decided line names the action in words rather than a tool name or a path */
+  let prose = false;
+  if (agent) {
+    subject = agent.subject;
+    prose = true;
+    const pre = document.createElement('pre');
+    pre.className = 'args prose';
+    pre.textContent = ev.detail;
+    body.appendChild(pre);
+  } else if (mcp) {
     // The arguments, pretty-printed by the main process, in the same mono block as a command.
     subject = `${mcp.tool} · ${mcp.server}`;
     const json = typeof ev.detail === 'string' ? ev.detail.trim() : '';
@@ -767,6 +806,9 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     b.innerHTML = `<span>${escapeHtml(label)}</span><kbd>${key}</kbd>`;
     return b;
   };
+  // An empty label (a tool's own question) means the card has no such answer: only Allow and Deny.
+  const noAlways = typeof ev.alwaysLabel === 'string' && !ev.alwaysLabel.trim();
+  const noProject = typeof ev.projectLabel === 'string' && !ev.projectLabel.trim();
   const alwaysLabel = typeof ev.alwaysLabel === 'string' && ev.alwaysLabel.trim() ? ev.alwaysLabel.trim() : 'Allow for this session';
   const projectLabel = typeof ev.projectLabel === 'string' && ev.projectLabel.trim() ? ev.projectLabel.trim() : 'Always allow for this project';
   const deny = button('Deny', 'n', 'btn');
@@ -786,7 +828,9 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   }
   const remember = document.createElement('div');
   remember.className = 'row-always';
-  remember.append(always, project);
+  if (!noAlways) remember.append(always);
+  if (!noProject) remember.append(project);
+  if (noAlways && noProject) remember.hidden = true;
   const decision = document.createElement('div');
   decision.className = 'row-main';
   decision.append(deny, allow);
@@ -799,7 +843,7 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const collapse = (text: string, ok: boolean) => {
     el.classList.add('done');
     el.innerHTML = `<div class="decided"><span class="${ok ? 'ok' : 'no'}">${icon(ok ? 'check' : 'x')}</span><span>${escapeHtml(text)}</span>${
-      subject ? `<span>·</span><code>${escapeHtml(subject)}</code>` : ''
+      subject ? `<span>·</span>${prose ? `<span class="subject">${escapeHtml(subject)}</span>` : `<code>${escapeHtml(subject)}</code>`}` : ''
     }</div>`;
   };
   const decide = async (ok: boolean, answer: Answer = 'once') => {
@@ -835,8 +879,8 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     let action: (() => void) | null = null;
     if (k === 'y' || k === 'Y' || k === 'Enter') action = () => void decide(true);
     else if (k === 'n' || k === 'N' || k === 'Escape') action = () => void decide(false);
-    else if (k === 'a' || k === 'A') action = () => void decide(true, 'session');
-    else if (k === 'p' || k === 'P') action = () => void decide(true, 'project');
+    else if ((k === 'a' || k === 'A') && !noAlways) action = () => void decide(true, 'session');
+    else if ((k === 'p' || k === 'P') && !noProject) action = () => void decide(true, 'project');
     if (!action) return;
     e.preventDefault();
     e.stopPropagation();
@@ -853,6 +897,13 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
       collapse(why, false);
     },
     allow: () => void decide(true),
+    // The card left the screen with its session (a switch): it stays unanswered for when the session comes back.
+    dispose: () => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener('keydown', onKey, true);
+      pendingApproval = null;
+    },
   };
   allow.onclick = () => void decide(true);
   always.onclick = () => void decide(true, 'session');
@@ -863,7 +914,7 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
 }
 
 // Plan cards: the newest proposed plan has the buttons; Enter builds and Esc keeps planning while it is the last card.
-const KEEP_PLACEHOLDER = 'Tell OpenAgent what to change in the plan…';
+const KEEP_PLACEHOLDER = 'Tell Open Harness what to change in the plan…';
 const DEFAULT_PLACEHOLDER = inputEl.placeholder;
 const RUNNING_PLACEHOLDER = 'Send a message — it reaches the agent after its current step';
 /** The placeholder while no run is going (the default, or the "keep planning" prompt) */
@@ -926,7 +977,7 @@ async function respondPlan(card: PlanCard, decision: PlanDecision, btn: HTMLElem
     }
     if (currentMode() === 'plan' && before === 'plan') {
       // An older main process does not switch modes itself.
-      showInlineError(modeBtn, 'Still in Plan mode: switch the mode to let OpenAgent make changes.');
+      showInlineError(modeBtn, 'Still in Plan mode: switch the mode to let Open Harness make changes.');
     }
   }
   return true;
@@ -1005,6 +1056,7 @@ document.addEventListener(
 );
 
 function clearMessages(): void {
+  pendingApproval?.dispose();
   showJump(false);
   messagesEl.querySelectorAll(':scope > :not(#empty-state)').forEach((n) => n.remove());
   emptyState.hidden = false;
@@ -1039,7 +1091,8 @@ function renderTranscript(items: TranscriptItem[]): void {
   items.forEach((item, i) => {
     if (item.role === 'user') {
       const images = Array.isArray(item.images) ? item.images.filter((src): src is string => typeof src === 'string' && Boolean(src)) : [];
-      addUserMessage(item.text ?? '', images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn });
+      const shown = unframe(item.origin, item.text ?? '');
+      addUserMessage(shown.text, images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn, originLabel: item.origin ? originLabel(item.origin, item.from, shown.note) : undefined, markdown: writtenByModel(item.origin) });
     } else if (item.role === 'assistant') {
       appendAssistantText(item.text);
       endAssistant();
@@ -1053,9 +1106,48 @@ function renderTranscript(items: TranscriptItem[]): void {
       if (item.name === 'submit_plan' && item.ok) return;
       const card = addToolCard(item.name, item.args);
       finishToolCard({ name: item.name, result: item.result, ok: item.ok }, card);
+    } else {
+      // A role a feature registered (transcript-items.ts)
+      const extra = item as unknown as ExtraTranscriptItem;
+      const el = transcriptItemRenderer(extra.role)?.(extra);
+      if (el) appendExtraNode(el);
     }
   });
   scrollToBottom(true);
+}
+
+/** A feature's transcript row: after the streaming reply and the thinking block are closed. */
+function appendExtraNode(el: HTMLElement): void {
+  endAssistant();
+  finishThinking();
+  addNode(el);
+}
+setTranscriptSink(appendExtraNode);
+
+/** A message another session sent, or a summary a merge wrote: a model's words, which come as Markdown. */
+function writtenByModel(origin: MessageOrigin | undefined): boolean {
+  return origin === 'session' || origin === 'command';
+}
+
+/**
+ * "from schedule", "from session Fix the tests", … for a user message that was not typed here. `note` is what the
+ * message's frame said about the sender (a sub-session "finished a turn", "was stopped").
+ */
+function originLabel(origin: MessageOrigin, from?: string, note?: string): string | undefined {
+  if (origin === 'user' || origin === 'queue') return undefined;
+  if (origin === 'session') {
+    const title = from ? sessions.find((m) => m.id === from)?.title : undefined;
+    return `from session ${title ?? from ?? 'another session'}${note ? ` · ${note}` : ''}`;
+  }
+  if (origin === 'mod') return from ? `from mod ${from}` : 'from a mod';
+  if (origin === 'schedule') return from ? `scheduled: ${from}` : 'scheduled';
+  if (origin === 'remote') return 'from remote control';
+  // A slash command put this into the conversation; with a session behind it, it is that session's merged summary.
+  if (origin === 'command') {
+    const title = from ? sessions.find((m) => m.id === from)?.title : undefined;
+    return title ? `merged from ${title}` : from ? 'merged' : 'from a command';
+  }
+  return `from ${origin}`;
 }
 
 // ---------- Rewind: user bubbles carry their checkpoint (turn); Rewind goes back to it ----------
@@ -1090,10 +1182,11 @@ function applyTurns(items: TranscriptItem[]): void {
 async function syncTurns(): Promise<void> {
   const my = ++turnSync;
   const id = currentSessionId;
-  if (!id || running || typeof oc.sessions?.switch !== 'function') return;
+  if (!id || running) return;
   let items: TranscriptItem[];
   try {
-    items = await oc.sessions.switch(id);
+    // Read without bringing it on screen: the user may switch away while this is in flight.
+    items = await rpc('sessions.transcript', id);
   } catch {
     return; // a new run started meanwhile; its end syncs again
   }
@@ -1179,7 +1272,7 @@ async function rewindTo(msg: HTMLElement, button: HTMLElement): Promise<void> {
   };
   if (busy()) return;
   if (typeof oc.sessions?.rewind !== 'function') {
-    addSystemMessage('Rewinding needs the updated app. Restart OpenAgent and try again.', 'error');
+    addSystemMessage('Rewinding needs the updated app. Restart Open Harness and try again.', 'error');
     return;
   }
   const ok = await confirmAction({ title: 'Rewind to this message?', quote: rewindQuote(msg), description: REWIND_DESCRIPTION, confirmLabel: 'Rewind', danger: true });
@@ -1287,16 +1380,18 @@ function syncSpin(): void {
   }
 }
 
-function setRunning(v: boolean): void {
+/** The session on screen started or stopped running; `startedAt` is when a run this window joined late began. */
+function setRunning(v: boolean, startedAt = Date.now()): void {
   running = v;
   updateSendButton();
   syncPlaceholder();
   syncBusyUi();
   syncSpin();
+  if (currentSessionId) statuses.set(currentSessionId, { ...statusOf(currentSessionId), running: v });
   if (v) {
-    runStartedAt = Date.now();
+    runStartedAt = startedAt;
     setStatus('run', baseVerb());
-    statusTime.textContent = '0s';
+    statusTime.textContent = elapsed(Date.now() - runStartedAt);
     statusTokens.hidden = true;
     runOutputTokens = 0;
     window.clearInterval(timer);
@@ -1368,7 +1463,7 @@ function endCompaction(): void {
 /** /compact and the context meter's "Compact now": failures show as an error notice in the transcript. */
 async function compactNow(focus?: string): Promise<void> {
   if (typeof oc.compact !== 'function') {
-    addSystemMessage('Compacting needs the updated app. Restart OpenAgent and try again.', 'error');
+    addSystemMessage('Compacting needs the updated app. Restart Open Harness and try again.', 'error');
     return;
   }
   compactErrorShown = false;
@@ -1468,7 +1563,6 @@ async function queueMessage(text: string, images: ImageAttachment[]): Promise<vo
     // The run ended in the meantime, so the message started a new one.
     endAssistant();
     addUserMessage(text, images.map(bubbleImage));
-    runningSessionId = currentSessionId;
     tray.clear(sent);
   } else {
     restoreComposerText(text);
@@ -1491,7 +1585,7 @@ async function addToInstructions(memory: string): Promise<void> {
   mentionPicker.close();
   const api = oc.instructions;
   if (!api || typeof api.append !== 'function') {
-    addSystemMessage("Adding to the project's instructions needs the updated app. Restart OpenAgent and try again.", 'error');
+    addSystemMessage("Adding to the project's instructions needs the updated app. Restart Open Harness and try again.", 'error');
     return;
   }
   const typed = inputEl.value;
@@ -1504,7 +1598,7 @@ async function addToInstructions(memory: string): Promise<void> {
   const ok = await confirmAction({
     title: "Add to the project's instructions?",
     quote: { label: file, text: `- ${oneLine(memory)}`, mono: true },
-    description: `OpenAgent reads ${file} at the start of every run in this project.${imageNote}`,
+    description: `Open Harness reads ${file} at the start of every run in this project.${imageNote}`,
     confirmLabel: 'Add',
     icon: 'file-plus',
   });
@@ -1571,9 +1665,19 @@ async function sendComposer(): Promise<void> {
     addNoticeCard(
       list.length
         ? `**Skills**\n\n${list.map((sk) => `- \`/${sk.name}\` ${sk.description || 'No description'} *(${sk.source})*`).join('\n')}`
-        : 'No skills found. Add a folder with a `SKILL.md` under `.openagent/skills` in your project or `~/.openagent/skills`.',
+        : 'No skills found. Add a folder with a `SKILL.md` under `.open-harness/skills` in your project or `~/.open-harness/skills`.',
     );
     return;
+  }
+  const cmd = images.length ? null : /^\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(text);
+  if (cmd && !commandSend) {
+    const registered = await registeredCommand(cmd[1]);
+    if (registered) {
+      endAssistant();
+      addUserMessage(text, [], null, { local: true });
+      await runCommand(registered, cmd[2]?.trim() ?? '');
+      return;
+    }
   }
   if (running) return queueMessage(text, images);
   // Replying instead of approving sends the plan back, with this message as the feedback (as in Claude Code).
@@ -1582,7 +1686,6 @@ async function sendComposer(): Promise<void> {
   if (statusState !== 'run') setStatus('off');
   const bubble = addUserMessage(text, images.map(bubbleImage));
   endAssistant();
-  runningSessionId = currentSessionId;
   const res = await sendToAgent(text, images);
   const sent = images.map((a) => a.id);
   if (res.ok && res.queued && res.id) {
@@ -1596,6 +1699,52 @@ async function sendComposer(): Promise<void> {
     // Not in the conversation, so there is nothing to rewind to
     bubble.dataset.local = 'true';
     addSystemMessage(res.error ?? 'Could not start the run.', 'error');
+  }
+}
+
+// ---------- Registered slash commands (app.commands in the main process) ----------
+
+/** Set while a command's `send` text goes out, so it is sent as a message and never run as a command again */
+let commandSend = false;
+
+async function registeredCommands(): Promise<CommandInfo[]> {
+  try {
+    const list = await rpc('commands.list');
+    return Array.isArray(list) ? list.filter((c) => c && typeof c.name === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+async function registeredCommand(name: string): Promise<CommandInfo | undefined> {
+  return (await registeredCommands()).find((c) => c.name === name);
+}
+
+/** Runs a registered command and applies what it asks for: a notice or error row, a message to send, composer text. */
+async function runCommand(cmd: CommandInfo, args: string): Promise<void> {
+  let res: CommandResult;
+  try {
+    res = (await rpc('commands.run', cmd.name, args)) ?? {};
+  } catch (err) {
+    res = { error: cleanError(err) };
+  }
+  if (typeof res.notice === 'string' && res.notice) addSystemMessage(res.notice, 'notice');
+  if (typeof res.error === 'string' && res.error) addSystemMessage(res.error, 'error');
+  if (typeof res.insert === 'string' && res.insert) {
+    restoreComposerText(res.insert);
+    if (!dialogOpen()) inputEl.focus();
+  }
+  if (typeof res.send === 'string' && res.send.trim()) {
+    const typed = inputEl.value;
+    inputEl.value = res.send;
+    commandSend = true;
+    try {
+      await sendComposer();
+    } finally {
+      commandSend = false;
+    }
+    // Whatever was in the composer before stays there.
+    if (typed && !inputEl.value) restoreComposerText(typed);
   }
 }
 
@@ -1613,9 +1762,18 @@ const CARD_TOOLS = new Set(['submit_plan', 'create_artifact']);
 function handleEvent(ev: AgentEvent, synthetic = false): void {
   switch (ev.type) {
     case 'run_start':
-      runningSessionId = currentSessionId;
       setRunning(true);
       break;
+    case 'user_message': {
+      // A message typed here (or queued from here) already has its bubble; one from elsewhere gets one now, labelled.
+      const shown = unframe(ev.origin, String(ev.text ?? ''));
+      const label = originLabel(ev.origin, ev.from, shown.note);
+      if (!label) break;
+      finishThinking();
+      endAssistant();
+      addUserMessage(shown.text, [], null, { turn: ev.turn, originLabel: label, markdown: writtenByModel(ev.origin) });
+      break;
+    }
     case 'thinking_delta':
       setStatusText('Thinking…');
       appendThinking(ev.text);
@@ -1707,8 +1865,9 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       endCompaction();
       if (ev.compaction && typeof ev.compaction === 'object') {
         addCompaction(ev.compaction);
-        // The checkpoints pointed into the folded messages
+        // Checkpoints in the folded part are gone and the kept ones were renumbered: read them back (a run does at its end).
         clearTurns();
+        void syncTurns();
       } else if (ev.error) {
         compactErrorShown = true;
         addSystemMessage(String(ev.error), 'error');
@@ -1775,7 +1934,38 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       break;
   }
 }
-oc.onAgentEvent((ev) => handleEvent(ev));
+/** Set from a switch's transcript until its LiveState is applied: the session's events wait here meanwhile */
+let syncing: { id: string; buffer: AgentEvent[] } | null = null;
+
+function statusOf(id: string): SessionStatus {
+  return statuses.get(id) ?? sessions.find((m) => m.id === id)?.status ?? { running: false };
+}
+
+/** Keeps the sidebar's status of a session current from its events (the main process's next list push confirms it). */
+function trackStatus(id: string, ev: AgentEvent, onScreen: boolean): void {
+  const before = statusOf(id);
+  let next: SessionStatus | null = null;
+  if (ev.type === 'run_start') next = { running: true, unread: onScreen ? undefined : before.unread };
+  else if (ev.type === 'run_end') next = { running: false, attention: ev.reason === 'plan' ? 'plan' : undefined, unread: onScreen ? undefined : true };
+  else if (ev.type === 'approval_request') next = { ...before, attention: 'approval' };
+  else if (ev.type === 'approval_resolved' && before.attention === 'approval') next = { ...before, attention: undefined };
+  if (!next) return;
+  statuses.set(id, next);
+  renderSessionList();
+}
+
+oc.onAgentEvent((ev, sessionId) => {
+  const id = typeof sessionId === 'string' && sessionId ? sessionId : currentSessionId;
+  const onScreen = id === currentSessionId;
+  bus.emit('agent-event', ev, id, onScreen);
+  trackStatus(id, ev, onScreen);
+  if (syncing && syncing.id === id) {
+    syncing.buffer.push(ev);
+    return;
+  }
+  if (onScreen) handleEvent(ev);
+  else if (ev.type === 'session_changed') onSessionChanged(ev.session);
+});
 
 // ---------- Composer ----------
 
@@ -2009,18 +2199,9 @@ function syncQueueHeight(): void {
 }
 new ResizeObserver(() => syncQueueHeight()).observe(queueEl);
 
-/** The task card floats above the queue and the status line; the transcript leaves room for it too. */
-function syncTaskHeight(): void {
-  const h = taskListEl.hidden ? 0 : Math.ceil(taskListEl.getBoundingClientRect().height);
-  transcriptWrap.style.setProperty('--tasks-h', `${h}px`);
-  if (stick) scrollToBottom();
-}
-new ResizeObserver(() => syncTaskHeight()).observe(taskListEl);
-
+/** ⌘F: the sidebar's Search row turns into the field (the sidebar opens first when collapsed). */
 function focusSearch(): void {
-  if (shell.classList.contains('sidebar-collapsed')) toggleSidebar();
-  sessionSearch.focus();
-  sessionSearch.select();
+  sidebarView?.openSearch();
 }
 
 // Esc Esc between runs opens the rewind confirmation. Every Esc is seen here first; only the ones that reach the
@@ -2145,7 +2326,7 @@ async function setMode(mode: PermissionMode): Promise<void> {
     return;
   }
   applyConfigToUi();
-  if (currentMode() !== mode) showInlineError(modeBtn, `${MODES[mode].label} needs the updated app. Restart OpenAgent and try again.`);
+  if (currentMode() !== mode) showInlineError(modeBtn, `${MODES[mode].label} needs the updated app. Restart Open Harness and try again.`);
   if (currentMode() === 'bypass') pendingApproval?.allow();
   announceMode(before);
 }
@@ -2216,9 +2397,9 @@ modelBtn.onclick = async () => {
 
 // ---------- Header / config ----------
 
-/** "~/Documents/openagent"; long paths keep the root and the last two folders: "~/…/audit/playground". */
+/** "~/Documents/open-harness"; long paths keep the root and the last two folders: "~/…/audit/playground". */
 function shortPath(p: string): string {
-  const home = p.replace(/^\/Users\/[^/]+/, '~');
+  const home = tilde(p);
   if (home.length <= 40) return home;
   const parts = home.split('/');
   return parts.length > 4 ? `${parts[0]}/…/${parts.slice(-2).join('/')}` : home;
@@ -2249,7 +2430,21 @@ function applyConfigToUi(): void {
   // The folder line follows the working directory; the provider decides which lines can show at all.
   syncConnection();
   void refreshVisionNote();
+  bus.emit('config', config);
 }
+
+/**
+ * The main process changed the config (another feature, a folder that followed a session, an approval that switched
+ * the mode): the window follows the way a Settings save does.
+ */
+onPush('config:changed', (next) => {
+  if (!next || typeof next !== 'object') return;
+  const prev = config;
+  config = next;
+  applyConfigToUi();
+  if (prev && prev.workingDirectory !== next.workingDirectory) void changesPane.refresh();
+  void refreshContext();
+});
 
 // ---------- Provider connection: the banner above the composer and the welcome screen's setup strip ----------
 
@@ -2354,7 +2549,7 @@ function setupLines(): SetupLine[] {
     if (!checks.ollama) lines.push(ollamaLine());
     if (!checks.model) lines.push(modelLine());
   }
-  if (!checks.folder) lines.push({ id: 'folder', icon: 'folder', title: 'Working in your home folder', action: 'Choose folder', actionTip: 'Choose the project folder OpenAgent works in' });
+  if (!checks.folder) lines.push({ id: 'folder', icon: 'folder', title: 'Working in your home folder', action: 'Choose folder', actionTip: 'Choose the project folder Open Harness works in' });
   return lines;
 }
 
@@ -2538,7 +2733,7 @@ let titleEditing = false;
 
 function setTitle(text: string): void {
   if (!titleEditing) sessionTitle.textContent = text;
-  document.title = text && text !== 'New session' ? `${text} — OpenAgent` : 'OpenAgent';
+  document.title = text && text !== 'New session' ? `${text} — Open Harness` : 'Open Harness';
 }
 
 async function renameSession(id: string, title: string, anchor: HTMLElement): Promise<boolean> {
@@ -2610,26 +2805,40 @@ sessionTitle.addEventListener('keydown', (e) => {
 
 // ---------- Sessions ----------
 
-function groupLabel(ts: number): string {
-  const d = new Date(ts);
-  const today = new Date();
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  if (ts >= startOfToday) return 'Today';
-  if (ts >= startOfToday - 86_400_000) return 'Yesterday';
-  if (ts >= startOfToday - 6 * 86_400_000) return 'Previous 7 days';
-  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+/** The sidebar's list (sidebar.ts); set up under // [feature:sidebar]. */
+let sidebarView: SidebarView | null = null;
+
+function renderSessionList(): void {
+  sidebarView?.render();
 }
 
-/** Re-reads the session list and the current session; returns the current session's meta. */
+/** Re-reads the session list; returns the meta of the session on screen. */
 async function refreshSessions(): Promise<SessionMeta | null> {
   const [list, current] = await Promise.all([oc.sessions.list(), oc.sessions.current()]);
-  if (!current) return null;
-  currentSessionId = current.id;
-  sessions = list.some((m) => m.id === current.id) ? list : [current, ...list];
-  setTitle(current.title);
+  applySessionList(list, current);
+  return sessions.find((m) => m.id === currentSessionId) ?? null;
+}
+
+/**
+ * Takes a session list from the main process (a refresh or a 'sessions:changed' push). The session on screen stays
+ * the one this window shows (a list that was read before a switch must not switch back); `current` only seeds it at
+ * start-up and stands in for it while it has no messages yet (the store lists those only once they have some).
+ */
+function applySessionList(list: SessionMeta[], current?: SessionMeta | null): void {
+  if (!Array.isArray(list)) return;
+  if (!currentSessionId && current) currentSessionId = current.id;
+  const mine = list.find((m) => m.id === currentSessionId) ?? (current?.id === currentSessionId ? current : sessions.find((m) => m.id === currentSessionId));
+  sessions = mine && !list.some((m) => m.id === mine.id) ? [mine, ...list] : list;
+  statuses.clear();
+  for (const m of sessions) if (m.status) statuses.set(m.id, { ...m.status });
+  // The window knows best whether the session on screen runs (its own events), and it is being read.
+  if (currentSessionId) statuses.set(currentSessionId, { ...statusOf(currentSessionId), running, unread: undefined });
+  if (mine) {
+    setTitle(mine.title);
+    applySessionPlan(mine);
+  }
   renderSessionList();
-  applySessionPlan(current);
-  return current;
+  bus.emit('sessions', sessions);
 }
 
 /** The session's newest plan may have been decided in the main process (e.g. by a build run): update its card. */
@@ -2648,236 +2857,122 @@ function onSessionChanged(meta: SessionMeta): void {
   void refreshSessions();
 }
 
-// Inline rename in the sidebar survives list re-renders (e.g. the switch triggered by the first click of a double-click).
-let rowRename: { id: string; value: string; fresh: boolean } | null = null;
+/** Bumped by every showSession, so the slower of two quick switches gives way */
+let showSeq = 0;
 
-function mountRowRename(row: HTMLElement): void {
-  if (!rowRename) return;
-  const state = rowRename;
-  const label = row.querySelector('.label');
-  if (!label) return;
-  row.classList.add('renaming');
-  const input = document.createElement('input');
-  input.className = 'rename-input';
-  input.value = state.value;
-  input.setAttribute('aria-label', 'Session title');
-  input.spellcheck = false;
-  label.replaceWith(input);
-  row.querySelector('.trail')?.setAttribute('hidden', '');
-  input.focus();
-  if (state.fresh) input.select();
-  state.fresh = false;
-  const done = async (save: boolean) => {
-    if (rowRename !== state) return;
-    rowRename = null;
-    const next = input.value.replace(/\s+/g, ' ').trim();
-    const before = sessions.find((s) => s.id === state.id)?.title ?? '';
-    renderSessionList();
-    if (save && next && next !== before) {
-      const fresh = sessionList.querySelector<HTMLElement>(`.session-item[data-id="${CSS.escape(state.id)}"]`);
-      await renameSession(state.id, next, fresh ?? sessionList);
-    }
-  };
-  input.addEventListener('input', () => (state.value = input.value));
-  input.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      void done(true);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      void done(false);
-    }
-  });
-  input.addEventListener('blur', () =>
-    setTimeout(() => {
-      if (input.isConnected) void done(true);
-    }, 0),
-  );
-  input.addEventListener('click', (e) => e.stopPropagation());
-  input.addEventListener('dblclick', (e) => e.stopPropagation());
-}
-
-function startRowRename(id: string): void {
-  const meta = sessions.find((s) => s.id === id);
-  if (!meta) return;
-  rowRename = { id, value: meta.title, fresh: true };
-  renderSessionList();
-}
-
-function openSessionMenu(m: SessionMeta, anchor: HTMLElement | { x: number; y: number }, row: HTMLElement): void {
-  row.classList.add('menu-open');
-  openMenu(
-    [
-      {
-        items: [
-          { label: 'Rename', icon: 'pencil', hint: 'F2', onSelect: () => startRowRename(m.id) },
-          { label: 'Fork', icon: 'git-branch', disabled: running, onSelect: () => void forkSession(m.id) },
-        ],
-      },
-      { items: [{ label: 'Delete', icon: 'trash', danger: true, disabled: running, onSelect: () => void deleteSession(m.id) }] },
-    ],
-    { anchor, placement: 'bottom-start', minWidth: 200, onClose: () => row.classList.remove('menu-open') },
-  );
-}
-
-function renderSessionList(): void {
-  const q = sessionSearch.value.trim().toLowerCase();
-  sessionList.innerHTML = '';
-  let lastGroup = '';
-  let shown = 0;
-  for (const m of sessions) {
-    if (q && !m.title.toLowerCase().includes(q)) continue;
-    shown++;
-    const group = groupLabel(m.updatedAt);
-    if (group !== lastGroup) {
-      const g = document.createElement('div');
-      g.className = 'session-group';
-      g.textContent = group;
-      sessionList.appendChild(g);
-      lastGroup = group;
-    }
-    const isRunning = running && m.id === runningSessionId;
-    const row = document.createElement('div');
-    row.className = 'session-item' + (m.id === currentSessionId ? ' active' : '') + (isRunning ? ' running' : '');
-    row.dataset.id = m.id;
-    row.tabIndex = 0;
-    row.setAttribute('role', 'button');
-    if (m.id === currentSessionId) row.setAttribute('aria-current', 'true');
-    const meta = isRunning
-      ? '<span class="trail-meta"><span class="spinner sm" aria-label="Running"></span></span>'
-      : m.forkedFrom
-        ? `<span class="trail-meta fork-mark" data-tip="Forked session">${icon('git-branch', 14)}</span>`
-        : '';
-    row.innerHTML =
-      `<span class="label">${escapeHtml(m.title)}</span>` +
-      `<span class="trail">${meta}<button type="button" class="icon-btn sm row-more" aria-label="Session actions" aria-haspopup="menu" data-tip="More">${icon('more')}</button></span>`;
-    row.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('.row-more, .rename-input')) return;
-      void switchSession(m.id);
-    });
-    row.addEventListener('dblclick', (e) => {
-      if ((e.target as HTMLElement).closest('.row-more, .rename-input')) return;
-      e.preventDefault();
-      startRowRename(m.id);
-    });
-    row.addEventListener('keydown', (e) => {
-      if (e.target !== row) return;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        void switchSession(m.id);
-      } else if (e.key === 'F2') {
-        e.preventDefault();
-        e.stopPropagation();
-        startRowRename(m.id);
-      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const rows = [...sessionList.querySelectorAll<HTMLElement>('.session-item')];
-        rows[rows.indexOf(row) + (e.key === 'ArrowDown' ? 1 : -1)]?.focus();
-      }
-    });
-    row.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      openSessionMenu(m, { x: e.clientX, y: e.clientY }, row);
-    });
-    const more = row.querySelector<HTMLButtonElement>('.row-more')!;
-    more.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (menuAnchoredTo(more)) return closeMenu();
-      openSessionMenu(m, more, row);
-    });
-    sessionList.appendChild(row);
-    if (rowRename?.id === m.id) mountRowRename(row);
+/**
+ * Brings a session on screen, running or not: its transcript, then what is in flight (LiveState: the streaming reply,
+ * running tools, waiting approval cards, the queue, the status line), then the events that arrived in between.
+ * The main process takes the transcript and the live state at the same moment and sends every later event after its
+ * reply, so the result is what a window that had watched from the start would show.
+ */
+async function showSession(id: string): Promise<boolean> {
+  const my = ++showSeq;
+  const epoch = tasksEpoch;
+  let items: TranscriptItem[];
+  try {
+    items = await oc.sessions.switch(id);
+  } catch (err) {
+    if (my === showSeq) addSystemMessage(cleanError(err), 'error');
+    return false;
   }
-  if (!shown) {
-    const empty = document.createElement('div');
-    empty.className = 'session-empty';
-    empty.textContent = q ? 'No sessions match.' : 'Sessions you start appear here.';
-    sessionList.appendChild(empty);
+  if (my !== showSeq) return false;
+  syncing = { id, buffer: [] };
+  currentSessionId = id;
+  statuses.set(id, { ...statusOf(id), unread: undefined });
+  // What belonged to the session shown before: its compaction status and queue rows go with it.
+  if (compacting) {
+    compacting = null;
+    statusLine.classList.remove('compacting');
   }
+  queueList.clear();
+  renderTranscript(items);
+  let live: LiveState | null = null;
+  try {
+    live = await rpc('sessions.live', id);
+  } catch {
+    /* an older main process: the session shows as idle */
+  }
+  if (my !== showSeq) return false;
+  const buffered = syncing?.id === id ? syncing.buffer : [];
+  syncing = null;
+  applyLive(live);
+  for (const ev of buffered) handleEvent(ev);
+  showSessionTasks(await refreshSessions(), epoch);
+  if (my !== showSeq) return false;
+  changesPane.reset();
+  void refreshContext();
+  scrollToBottom(true);
+  bus.emit('session-shown', id);
+  return true;
 }
-sessionSearch.addEventListener('input', renderSessionList);
-sessionSearch.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    e.stopPropagation();
-    if (sessionSearch.value) {
-      sessionSearch.value = '';
-      renderSessionList();
-    } else inputEl.focus();
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    sessionList.querySelector<HTMLElement>('.session-item')?.focus();
+
+/** Shows what is in flight in the session just rendered, through the same paths its events take. */
+function applyLive(live: LiveState | null): void {
+  const on = Boolean(live?.running);
+  if (on !== running || on) setRunning(on, live?.startedAt ?? Date.now());
+  if (!live || !on) {
+    syncPlanStatus();
+    return;
   }
-});
+  // Queued messages from elsewhere (a schedule, another session) get their bubble when delivered (user_message).
+  for (const m of live.queue ?? []) if (!m.origin || m.origin === 'user' || m.origin === 'queue') queueList.add(m);
+  for (const t of live.tools ?? []) handleEvent({ type: 'tool_start', id: t.id, name: t.name, args: t.args });
+  for (const a of live.approvals ?? []) handleEvent(a);
+  if (live.thinking) handleEvent({ type: 'thinking_delta', text: live.thinking });
+  if (live.text) handleEvent({ type: 'text_delta', text: live.text });
+}
 
 async function switchSession(id: string): Promise<void> {
   if (id === currentSessionId) return;
-  if (running) {
-    addSystemMessage('Stop the current run before switching sessions.', 'error');
-    return;
-  }
-  try {
-    const epoch = tasksEpoch;
-    const items = await oc.sessions.switch(id);
-    renderTranscript(items);
-    showSessionTasks(await refreshSessions(), epoch);
-    changesPane.reset();
-    scrollToBottom(true);
-    void refreshContext();
-  } catch (err) {
-    addSystemMessage(cleanError(err), 'error');
-  }
+  await showSession(id);
 }
 
 async function newSession(): Promise<void> {
-  if (running) return;
-  const epoch = tasksEpoch;
-  await oc.sessions.create();
-  clearMessages();
-  showSessionTasks(await refreshSessions(), epoch);
-  changesPane.reset();
-  void refreshContext();
+  let meta: SessionMeta;
+  try {
+    meta = await oc.sessions.create();
+  } catch (err) {
+    addSystemMessage(cleanError(err), 'error');
+    return;
+  }
+  await showSession(meta.id);
   inputEl.focus();
 }
 newSessionBtn.onclick = () => void newSession();
 
 async function deleteSession(id: string): Promise<void> {
-  if (running) return;
+  if (statusOf(id).running) return;
   const meta = id === currentSessionId ? await oc.sessions.current() : sessions.find((s) => s.id === id);
   if (meta?.messageCount && !window.confirm(`Delete "${meta.title}"? This cannot be undone.`)) return;
   try {
     const wasCurrent = id === currentSessionId;
-    const epoch = tasksEpoch;
-    await oc.sessions.delete(id);
-    if (wasCurrent) clearMessages();
-    const current = await refreshSessions();
-    if (wasCurrent) showSessionTasks(current, epoch);
-    if (wasCurrent) changesPane.reset();
-    if (wasCurrent) void refreshContext();
+    const next = await oc.sessions.delete(id);
+    if (wasCurrent) await showSession(next.id);
+    else await refreshSessions();
   } catch (err) {
     addSystemMessage(cleanError(err), 'error');
   }
 }
 
 async function forkSession(id: string): Promise<void> {
-  if (running) return;
+  if (statusOf(id).running) return;
   try {
     const source = sessions.find((s) => s.id === id);
-    const wasCurrent = id === currentSessionId;
-    const epoch = tasksEpoch;
     const fork = await oc.sessions.fork(id);
-    if (!wasCurrent) renderTranscript(await oc.sessions.switch(fork.id));
-    showSessionTasks(await refreshSessions(), epoch);
-    // The fork keeps its own checkpoints (if any): the bubbles on screen follow it
-    if (wasCurrent) void syncTurns();
-    changesPane.reset();
-    void refreshContext();
+    await showSession(fork.id);
     addSystemMessage(`Forked "${source?.title ?? 'session'}". You are now in the fork; the original is unchanged.`, 'notice');
   } catch (err) {
     addSystemMessage(cleanError(err), 'error');
   }
 }
 
+// The main process keeps the list current for every session (status changes, new and removed sessions).
+onPush('sessions:changed', (list) => applySessionList(list));
+// A notification was clicked: its session comes on screen.
+onPush('sessions:show', (id) => {
+  if (typeof id === 'string' && id && id !== currentSessionId) void showSession(id);
+});
 
 // ---------- Slash menu (skills) ----------
 
@@ -2900,9 +2995,14 @@ async function updateSlashMenu(): Promise<void> {
   const m = /^\/([\w-]*)$/.exec(value);
   if (!m) return hideSlashMenu();
   const prefix = m[1].toLowerCase();
-  const skills = (await oc.skills.list()).filter((sk) => sk.name.toLowerCase().startsWith(prefix));
+  const [allSkills, registered] = await Promise.all([oc.skills.list(), registeredCommands()]);
+  const skills = allSkills.filter((sk) => sk.name.toLowerCase().startsWith(prefix));
   if (inputEl.value !== value) return;
-  const commands = BUILTINS.filter((sk) => sk.name.startsWith(prefix));
+  // The window's own commands first, then the app's registered ones (app.commands), tagged with where they come from.
+  const extra: SkillInfo[] = registered
+    .filter((c) => c.name.toLowerCase().startsWith(prefix) && !BUILTINS.some((b) => b.name === c.name))
+    .map((c) => ({ name: c.name, description: c.argsHint ? `${c.argsHint} · ${c.description}` : c.description, path: '', source: c.source === 'mod' ? 'user' : 'bundled', tag: c.source === 'mod' ? 'mod' : 'command' }) as SkillInfo & { tag: string });
+  const commands = [...BUILTINS.filter((sk) => sk.name.startsWith(prefix)), ...extra];
   slashItems = [...skills, ...commands];
   if (!slashItems.length) return hideSlashMenu();
   slashIndex = 0;
@@ -2917,7 +3017,8 @@ async function updateSlashMenu(): Promise<void> {
       const row = document.createElement('div');
       row.className = 'slash-item' + (i === slashIndex ? ' active' : '');
       row.setAttribute('role', 'option');
-      row.innerHTML = `<span class="name">/${escapeHtml(sk.name)}</span><span class="desc">${escapeHtml(sk.description)}</span><span class="src">${builtin ? 'command' : escapeHtml(sk.source)}</span>`;
+      const tag = (sk as SkillInfo & { tag?: string }).tag;
+      row.innerHTML = `<span class="name">/${escapeHtml(sk.name)}</span><span class="desc">${escapeHtml(sk.description)}</span><span class="src">${tag ? escapeHtml(tag) : builtin ? 'command' : escapeHtml(sk.source)}</span>`;
       row.onmousedown = (e) => {
         e.preventDefault();
         slashIndex = i;
@@ -2960,9 +3061,10 @@ function acceptSlashSelection(): void {
   inputEl.focus();
 }
 
-// ---------- Side pane: Browser, Diff and Terminal tabs ----------
+// ---------- Side pane: Browser, Diff and Terminal tabs, then the mods' tabs ----------
 
-type PaneTab = 'browser' | 'diff' | 'terminal';
+/** A built-in tab, or a mod's tab view as 'mod:<mod key>/<view id>' (mods-host.ts makes those). */
+type PaneTab = 'browser' | 'diff' | 'terminal' | `mod:${string}`;
 let paneVisible = true;
 let paneTab: PaneTab = 'browser';
 const PANE_TABS: readonly (readonly [PaneTab, HTMLButtonElement])[] = [
@@ -2970,32 +3072,68 @@ const PANE_TABS: readonly (readonly [PaneTab, HTMLButtonElement])[] = [
   ['diff', paneTabDiff],
   ['terminal', paneTabTerminal],
 ];
+/** The mod tabs, once the mod host is up (feature wiring below) */
+let paneMods: ModPaneTabs | null = null;
+/** A mod tab that was in front at the last quit: it comes back once its mod has loaded, unless another tab was chosen first */
+let pendingModTab: PaneTab | null = null;
+try {
+  const saved = localStorage.getItem('paneTab');
+  if (saved?.startsWith('mod:')) pendingModTab = saved as PaneTab;
+} catch {
+  /* ignore */
+}
+
+const modTabKey = (tab: PaneTab): string | null => (tab.startsWith('mod:') ? tab.slice(4) : null);
+
+/** Every tab in strip order with its button: the built-in ones, then the mods'. */
+function paneTabList(): (readonly [PaneTab, HTMLButtonElement])[] {
+  return [...PANE_TABS, ...(paneMods?.buttons() ?? []).map(({ key, el }) => [`mod:${key}` as PaneTab, el] as const)];
+}
 
 function browserShown(): boolean {
   return paneVisible && paneTab === 'browser';
 }
 
+/** What was last sent to the native browser view (for the live checks: __oc_debug.mods.browser()) */
+const browserSent = { bounds: null as { x: number; y: number; width: number; height: number } | null, visible: false };
+
 function reportBounds(): void {
   if (shell.classList.contains('browser-hidden')) return;
   const r = browserView.getBoundingClientRect();
-  oc.browser.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
+  browserSent.bounds = { x: r.left, y: r.top, width: r.width, height: r.height };
+  oc.browser.setBounds(browserSent.bounds);
 }
 new ResizeObserver(reportBounds).observe(browserView);
+
+function setBrowserVisible(v: boolean): void {
+  browserSent.visible = v;
+  oc.browser.setVisible(v);
+}
 
 /** The native browser view floats above the page: it is shown only while its tab is on screen and no dialog is open. */
 function syncBrowserView(): void {
   if (browserShown() && !dialogOpen()) {
     reportBounds();
-    oc.browser.setVisible(true);
+    setBrowserVisible(true);
     requestAnimationFrame(reportBounds);
-  } else oc.browser.setVisible(false);
+  } else setBrowserVisible(false);
+}
+
+// A dialog's own 'close' event is delivered with the next painted frame, and a window that is hidden or covered
+// may not paint one for a long time: the view it hid would stay hidden. The attribute change is reported at once.
+for (const d of [settingsDialog, shortcutsDialog, confirmDialog, lightbox]) {
+  new MutationObserver(() => {
+    if (!d.open) syncBrowserView();
+  }).observe(d, { attributes: true, attributeFilter: ['open'] });
 }
 
 function applyPane(persist = true): void {
+  // A mod tab whose mod went off or away: back to the Browser.
+  if (modTabKey(paneTab) && !paneMods?.has(modTabKey(paneTab)!)) paneTab = 'browser';
   const showBrowser = browserShown();
   const showDiff = paneVisible && paneTab === 'diff';
   const showTerminal = paneVisible && paneTab === 'terminal';
-  if (!showBrowser) oc.browser.setVisible(false);
+  if (!showBrowser) setBrowserVisible(false);
   // Focus would be lost with a hidden terminal: hand it back to the composer.
   if (!showTerminal && terminalPaneEl.contains(document.activeElement)) inputEl.focus();
   shell.classList.toggle('pane-hidden', !paneVisible);
@@ -3008,6 +3146,7 @@ function applyPane(persist = true): void {
     el.setAttribute('aria-selected', String(paneTab === tab));
     el.tabIndex = paneTab === tab ? 0 : -1;
   }
+  paneMods?.apply(modTabKey(paneTab), paneVisible);
   browserToggle.classList.toggle('active', showBrowser);
   browserToggle.setAttribute('aria-pressed', String(showBrowser));
   diffToggle.classList.toggle('active', showDiff);
@@ -3029,6 +3168,7 @@ function applyPane(persist = true): void {
 
 /** The top-bar toggles: show the pane on that tab, or hide it when that tab is already showing. */
 function togglePane(tab: PaneTab): void {
+  pendingModTab = null;
   if (paneVisible && paneTab === tab) paneVisible = false;
   else {
     paneVisible = true;
@@ -3038,10 +3178,30 @@ function togglePane(tab: PaneTab): void {
 }
 
 function showPaneTab(tab: PaneTab): void {
+  pendingModTab = null;
   if (paneVisible && paneTab === tab) return;
+  if (modTabKey(tab) && !paneMods?.has(modTabKey(tab)!)) return;
   paneVisible = true;
   paneTab = tab;
   applyPane();
+}
+
+/** The mod tabs changed: a tab remembered from the last run comes back once it exists; a vanished one falls back. */
+function paneTabsChanged(): void {
+  const key = pendingModTab ? modTabKey(pendingModTab) : null;
+  if (key && paneMods?.has(key)) {
+    paneTab = pendingModTab!;
+    pendingModTab = null;
+  }
+  applyPane(false);
+}
+
+/** The rail between the transcript and the pane opened, closed or was resized. */
+function paneLayoutChanged(): void {
+  const stored = sidePane.style.getPropertyValue('--browser-w');
+  if (stored) setBrowserWidth(parseFloat(stored));
+  reportBounds();
+  requestAnimationFrame(reportBounds);
 }
 
 browserToggle.onclick = () => togglePane('browser');
@@ -3054,17 +3214,17 @@ $('pane-close').onclick = () => {
   paneVisible = false;
   applyPane();
 };
-// ←/→ move between the pane tabs, wrapping around.
-for (const [, tabEl] of PANE_TABS) {
-  tabEl.addEventListener('keydown', (e) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const at = PANE_TABS.findIndex(([tab]) => tab === paneTab);
-    const [next, nextEl] = PANE_TABS[(at + (e.key === 'ArrowRight' ? 1 : -1) + PANE_TABS.length) % PANE_TABS.length];
-    showPaneTab(next);
-    nextEl.focus();
-  });
-}
+// ←/→ move between the pane tabs (the mods' ones too), wrapping around.
+sidePane.querySelector('.pane-tabs')!.addEventListener('keydown', (e) => {
+  const ke = e as KeyboardEvent;
+  if ((ke.key !== 'ArrowLeft' && ke.key !== 'ArrowRight') || !(ke.target as HTMLElement).matches('[role="tab"]')) return;
+  ke.preventDefault();
+  const list = paneTabList();
+  const at = Math.max(0, list.findIndex(([tab]) => tab === paneTab));
+  const [next, nextEl] = list[(at + (ke.key === 'ArrowRight' ? 1 : -1) + list.length) % list.length];
+  showPaneTab(next);
+  nextEl.focus();
+});
 
 // Diff tab
 let debugChanges: ChangesApi | null = null;
@@ -3201,7 +3361,10 @@ function openNewTerminal(): void {
 const BROWSER_MIN = 360;
 const TRANSCRIPT_MIN = 320;
 function clampBrowserWidth(px: number): number {
-  return Math.round(Math.max(BROWSER_MIN, Math.min(px, contentEl.clientWidth - TRANSCRIPT_MIN - resizer.offsetWidth)));
+  // The mods' rail sits between the transcript and the pane: what it takes is not the pane's to have.
+  const rail = document.getElementById('mod-rail');
+  const railW = rail && !rail.hidden ? rail.offsetWidth : 0;
+  return Math.round(Math.max(BROWSER_MIN, Math.min(px, contentEl.clientWidth - TRANSCRIPT_MIN - resizer.offsetWidth - railW)));
 }
 function setBrowserWidth(px: number | null): void {
   if (px === null) sidePane.style.removeProperty('--browser-w');
@@ -3296,162 +3459,7 @@ openExternalBtn.onclick = async () => {
 
 // ---------- Settings ----------
 
-const field = <T extends HTMLElement = HTMLInputElement>(id: string) => $<T>(id);
-let showOtherProvider = false;
-let settingsScroll = 0;
-
-function selectedProvider(): AppConfig['provider'] {
-  return (settingsForm.querySelector<HTMLInputElement>('input[name=provider]:checked')?.value ?? 'ollama') as AppConfig['provider'];
-}
-
-function fillSettings(): void {
-  settingsForm.querySelectorAll<HTMLInputElement>('input[name=provider]').forEach((r) => (r.checked = r.value === config.provider));
-  field('ollama-baseURL').value = config.ollama.baseURL;
-  field('ollama-model').value = config.ollama.model;
-  field('ollama-numCtx').value = String(config.ollama.numCtx || 16384);
-  field<HTMLSelectElement>('ollama-think').value = config.ollama.think || 'auto';
-  field('portkey-baseURL').value = config.portkey.baseURL;
-  field('portkey-apiKey').value = config.portkey.apiKey;
-  field('portkey-model').value = config.portkey.model;
-  field('portkey-contextWindow').value = String(config.portkey.contextWindow || 128000);
-  field('portkey-virtualKey').value = config.portkey.virtualKey;
-  field('portkey-provider').value = config.portkey.provider;
-  field('portkey-providerApiKey').value = config.portkey.providerApiKey;
-  field('portkey-configId').value = config.portkey.configId;
-  field('maxTurns').value = String(config.maxTurns);
-  field<HTMLSelectElement>('theme').value = config.theme || 'system';
-  field('sendScreenshots').checked = config.sendScreenshotsToModel;
-  field('autoTitles').checked = config.autoTitles !== false;
-  field('autoCompact').checked = config.autoCompact !== false;
-  field('notifications').checked = config.notifications !== false;
-  field<HTMLTextAreaElement>('systemPromptExtra').value = config.systemPromptExtra;
-  mcpPanel.resetMessages();
-  rulesPanel.resetMessages();
-  settingsStatus.textContent = '';
-  settingsStatus.classList.remove('error');
-  showOtherProvider = false;
-  toggleProviderFields();
-}
-
-function toggleProviderFields(): void {
-  const provider = selectedProvider();
-  const otherName = provider === 'ollama' ? 'Portkey' : 'Ollama';
-  $('ollama-fields').hidden = provider !== 'ollama' && !showOtherProvider;
-  $('portkey-fields').hidden = provider !== 'portkey' && !showOtherProvider;
-  $('other-provider-text').textContent = showOtherProvider ? `${otherName} settings are shown so you can fill them in ahead of time.` : `${otherName} settings are hidden.`;
-  $('show-other-provider').textContent = showOtherProvider ? 'Hide' : 'Show';
-}
-settingsForm.querySelectorAll('input[name=provider]').forEach((r) => r.addEventListener('change', toggleProviderFields));
-$('show-other-provider').onclick = () => {
-  showOtherProvider = !showOtherProvider;
-  toggleProviderFields();
-};
-
-/** The form's values over the loaded config (mcpServers, mcpTrusted, allowRules and recentDirs belong to the main process and pass through as loaded). */
-function readSettings(): AppConfig {
-  return {
-    ...config,
-    provider: selectedProvider(),
-    ollama: {
-      ...config.ollama,
-      baseURL: field('ollama-baseURL').value.trim() || 'http://localhost:11434/v1',
-      model: field('ollama-model').value.trim(),
-      numCtx: Math.max(2048, Number(field('ollama-numCtx').value) || 16384),
-      think: (field<HTMLSelectElement>('ollama-think').value as 'auto' | 'on' | 'off') || 'auto',
-    },
-    portkey: {
-      ...config.portkey,
-      baseURL: field('portkey-baseURL').value.trim() || 'https://api.portkey.ai/v1',
-      apiKey: field('portkey-apiKey').value.trim(),
-      model: field('portkey-model').value.trim(),
-      virtualKey: field('portkey-virtualKey').value.trim(),
-      provider: field('portkey-provider').value.trim(),
-      providerApiKey: field('portkey-providerApiKey').value.trim(),
-      configId: field('portkey-configId').value.trim(),
-      contextWindow: Math.max(1024, Math.round(Number(field('portkey-contextWindow').value) || 128000)),
-    },
-    maxTurns: Math.max(1, Number(field('maxTurns').value) || 40),
-    theme: (field<HTMLSelectElement>('theme').value as AppConfig['theme']) || 'system',
-    sendScreenshotsToModel: field('sendScreenshots').checked,
-    autoTitles: field('autoTitles').checked,
-    autoCompact: field('autoCompact').checked,
-    notifications: field('notifications').checked,
-    systemPromptExtra: field<HTMLTextAreaElement>('systemPromptExtra').value,
-  };
-}
-
-async function refreshModels(): Promise<void> {
-  const list = $<HTMLDataListElement>('ollama-models');
-  const hint = $('ollama-hint');
-  try {
-    config = { ...config, ollama: { ...config.ollama, baseURL: field('ollama-baseURL').value.trim() || config.ollama.baseURL } };
-    await oc.setConfig(config);
-    const models = await oc.listOllamaModels();
-    list.innerHTML = models.map((m) => `<option value="${escapeHtml(m)}">`).join('');
-    hint.textContent = models.length ? `${models.length} local model${models.length === 1 ? '' : 's'}: ${models.join(', ')}` : 'Ollama is running but has no models. Try: ollama pull qwen3:8b';
-  } catch (err) {
-    hint.textContent = `Could not reach Ollama (${cleanError(err)}). Is it running? Start it with: ollama serve`;
-  }
-}
-$('refresh-models').onclick = () => void refreshModels();
-
-/** Scrolls the open dialog so the section (or the field holding the element) is at the top. */
-function scrollSettingsTo(id: string): void {
-  const el = document.getElementById(id);
-  if (!el || !settingsBody.contains(el)) return;
-  const target = el.matches('.set-section') ? el : el.closest<HTMLElement>('.field, .switch-row') ?? el;
-  // Layout offsets (#settings-body is the offset parent), not client rects: the dialog is still scaling in.
-  let top = 0;
-  for (let n: HTMLElement | null = target; n && n !== settingsBody; n = n.offsetParent as HTMLElement | null) top += n.offsetTop;
-  settingsBody.scrollTop = top - (target.matches('.set-section') ? 0 : 16);
-  settingsScroll = settingsBody.scrollTop;
-}
-
-/** Opens Settings where it was last scrolled, or at `scrollTo` (an element id, e.g. "mcp-section"). */
-function openSettings(scrollTo?: string): void {
-  const target = typeof scrollTo === 'string' ? scrollTo : '';
-  if (settingsDialog.open) {
-    if (target) scrollSettingsTo(target);
-    return;
-  }
-  if (confirmDialog.open) return;
-  closeMenu();
-  if (shortcutsDialog.open) shortcutsDialog.close();
-  fillSettings();
-  oc.browser.setVisible(false);
-  settingsDialog.showModal();
-  settingsDialog.focus({ preventScroll: true });
-  settingsBody.scrollTop = settingsScroll;
-  if (target) scrollSettingsTo(target);
-  void refreshModels();
-  void mcpPanel.refresh();
-  void rulesPanel.refresh();
-}
-/** Closes the dialog, remembering where it was scrolled (a closed dialog no longer has a scroll position). */
-function closeSettings(): void {
-  settingsScroll = settingsBody.scrollTop;
-  settingsDialog.close();
-}
-$('settings-btn').onclick = () => openSettings();
-$('settings-cancel').onclick = closeSettings;
-$('settings-close').onclick = closeSettings;
-settingsBody.addEventListener('scroll', () => (settingsScroll = settingsBody.scrollTop), { passive: true });
-settingsDialog.addEventListener('cancel', () => (settingsScroll = settingsBody.scrollTop));
-settingsDialog.addEventListener('close', syncBrowserView);
-settingsForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try {
-    // MCP and rule changes made while the dialog was open went straight to the main process: pass its current lists through.
-    await syncOwnedConfig();
-    config = await oc.setConfig(readSettings());
-    applyConfigToUi();
-    closeSettings();
-    void refreshContext();
-  } catch (err) {
-    settingsStatus.textContent = `Could not save: ${cleanError(err)}`;
-    settingsStatus.classList.add('error');
-  }
-});
+// The page itself is src/renderer/settings-page.ts; its hookup is under [feature:settings] below.
 
 // ---------- MCP servers (Settings section and /mcp) ----------
 
@@ -3526,7 +3534,7 @@ async function addMcpCard(): Promise<void> {
   const api = mcpSource();
   let servers: McpServerInfo[] = mcpPanel.servers();
   let note: string | undefined;
-  if (!api) note = 'MCP servers need the updated app. Restart OpenAgent and try again.';
+  if (!api) note = 'MCP servers need the updated app. Restart Open Harness and try again.';
   else {
     try {
       servers = await api.list();
@@ -3581,6 +3589,7 @@ const SHORTCUTS: [string, string[], string[]?][] = [
   ['Toggle browser', ['⌘', '⇧', 'B']],
   ['Toggle diff', ['⌘', '⇧', 'D']],
   ['Toggle terminal', ['⌘', '⇧', 'T']],
+  ['Toggle the mods rail', ['⌘', '⇧', 'E']],
   ['New terminal tab', ['⌘', 'T']],
   ['Settings', ['⌘', ',']],
   ['Cycle permission mode', ['⇧', 'Tab']],
@@ -3704,6 +3713,135 @@ window.__oc_debug = {
   },
 };
 
+// ---------- Feature wiring: each feature keeps its code in its own module, only the hookup lives here ----------
+
+// [feature:mods]
+// The mod host: the rail, mod tabs, the composer strip, backgrounds, injected styles and the bridge (mods-host.ts).
+paneMods = createModsHost({
+  currentSessionId: () => currentSessionId,
+  sessions: () => sessions,
+  config: () => config,
+  running: () => running,
+  toast: (text, kind) => flashStatus(text, kind === 'error' ? 'circle-alert' : 'info'),
+  insertText: (text) => insertAtCursor(text),
+  openSettings: (section) => openSettings(section),
+  switchSession,
+  newSession,
+  openLightbox,
+  showPane: (tab) => showPaneTab(tab as PaneTab),
+  paneTabsChanged,
+  paneLayoutChanged,
+  syncBrowserView,
+  browserDebug: () => ({ ...browserSent, bounds: browserSent.bounds && { ...browserSent.bounds }, element: (() => { const r = browserView.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; })(), tab: paneTab, paneVisible, dialog: dialogOpen() }),
+}).pane;
+
+// [feature:settings]
+const settingsPage = createSettingsPage({
+  dialog: settingsDialog,
+  config: () => config,
+  adoptConfig: (next) => {
+    const prev = config;
+    config = next;
+    applyConfigToUi();
+    if (prev && prev.workingDirectory !== next.workingDirectory) void changesPane.refresh();
+    void refreshContext();
+  },
+  mcpPanel,
+  rulesPanel,
+  confirm: confirmAction,
+  cleanError,
+  chooseFolder,
+  openShortcuts,
+  currentSessionId: () => currentSessionId,
+  beforeOpen: () => {
+    if (confirmDialog.open) return false;
+    closeMenu();
+    if (shortcutsDialog.open) shortcutsDialog.close();
+    oc.browser.setVisible(false);
+    return true;
+  },
+  afterClose: syncBrowserView,
+});
+/** Opens Settings at the section last open, or at `section`: a section id ("mods") or the id of a field on the page ("ollama-baseURL", "mcp-section"). */
+function openSettings(section?: string): void {
+  settingsPage.open(typeof section === 'string' ? section : undefined);
+}
+$('settings-btn').onclick = () => openSettings();
+(window.__oc_debug as unknown as Record<string, unknown>).settings = settingsPage.debug;
+
+// A project's settings.json is never applied without the user's say-so. Say once that it is waiting, and where to
+// review it, the way a project's MCP servers are announced.
+const settingsNoticed = new Set<string>();
+function noticeProjectSettings(info: SettingsInfo | null | undefined): void {
+  const f = info?.files?.find((x) => x.scope === 'project');
+  if (!f || !f.exists || f.trusted || f.error || !f.keys.length) return;
+  const key = `${f.path}|${f.changed ? 'changed' : 'new'}|${f.keys.join(',')}`;
+  if (settingsNoticed.has(key)) return;
+  settingsNoticed.add(key);
+  const env = f.keys.filter((k) => k.startsWith('env.')).length;
+  const fields = f.keys.filter((k) => !k.startsWith('env.'));
+  const sets = [fields.slice(0, 4).join(', ') + (fields.length > 4 ? ` and ${fields.length - 4} more` : ''), env ? `${env} environment variable${env === 1 ? '' : 's'}` : ''].filter(Boolean).join(', plus ');
+  addSystemMessage(
+    f.changed
+      ? `This project's settings.json changed since you approved it (it sets ${sets}), so it is no longer applied. Review it in Settings → Configuration files.`
+      : `This project has a settings.json that sets ${sets}. It is not applied until you approve it: Settings → Configuration files.`,
+    'notice',
+  );
+}
+onPush('settings:changed', noticeProjectSettings);
+void rpc('settings.info')
+  .then(noticeProjectSettings)
+  .catch(() => undefined);
+
+// [feature:sidebar]
+sidebarView = createSidebar({
+  root: $('sidebar'),
+  sessions: () => sessions,
+  currentId: () => currentSessionId,
+  status: statusOf,
+  open: switchSession,
+  fork: forkSession,
+  remove: deleteSession,
+  rename: renameSession,
+  refresh: refreshSessions,
+  openSettings,
+  confirm: confirmAction,
+  showError: showInlineError,
+  cleanError,
+  flash: (text) => flashStatus(text),
+  focusComposer: () => inputEl.focus(),
+  expand: () => {
+    if (shell.classList.contains('sidebar-collapsed')) toggleSidebar();
+  },
+});
+Object.assign(window.__oc_debug!, { sidebar: sidebarView.debug });
+
+// [feature:tasks]
+
+// [feature:images]
+import { setupImageView } from './images.js';
+setupImageView({ messages: messagesEl, openLightbox, showError: showInlineError });
+
+// [feature:history]
+
+// [feature:schedules]
+// Schedule names by id, so a tool row that names a schedule by its id shows its name (tool-labels.ts)
+const scheduleNames = new Map<string, string>();
+const keepScheduleNames = (list: Schedule[]) => {
+  scheduleNames.clear();
+  for (const s of list ?? []) scheduleNames.set(s.id, s.name);
+};
+onPush('schedules:changed', keepScheduleNames);
+void rpc('schedules.list').then(keepScheduleNames, () => undefined);
+setNameLookup({
+  session: (ref) => sessions.find((s) => s.id === ref)?.title,
+  schedule: (id) => scheduleNames.get(id),
+});
+
+// [feature:subagents]
+
+// [feature:remote]
+
 // ---------- Init ----------
 
 subscribeMcp();
@@ -3725,23 +3863,16 @@ void mcpPanel.refresh();
     /* ignore */
   }
   applyPane(false);
-  const epoch = tasksEpoch;
-  showSessionTasks(await refreshSessions(), epoch);
-  void changesPane.refresh();
-  // After a reload the main process still holds the current session; show its transcript again.
+  // After a reload the main process still holds the session on screen, possibly mid-run: show it as it stands
+  // (its transcript, what is in flight and its queue).
   try {
     const current = await oc.sessions.current();
-    if (current?.messageCount) renderTranscript(await oc.sessions.switch(current.id));
-  } catch {
-    /* a run is in progress; the transcript stays empty until the next switch */
+    if (current?.id) await showSession(current.id);
+    else await refreshSessions();
+  } catch (err) {
+    addSystemMessage(cleanError(err), 'error');
   }
-  // Messages queued before a reload are still waiting (the run may still be going).
-  try {
-    if (typeof oc.queue === 'function') for (const m of await oc.queue()) queueList.add(m);
-  } catch {
-    /* an older app without a queue */
-  }
-  void refreshContext();
+  void changesPane.refresh();
   reportBounds();
   autosize();
   applyBrowserState(await oc.browser.state());

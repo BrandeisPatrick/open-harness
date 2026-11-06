@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  .info { display: flex; align-items: center; gap: 8px; min-height: 24px; min-width: 0; }
+  .info .h-icon { color: var(--text-400); }
+  .info .main { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-100); }
+  .info .sub { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .info .grow { flex: 1 1 auto; max-width: none; }
+  .rule { height: 1px; margin: 8px 0 6px; background: var(--border-subtle); }
+  .ctl { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+  .ctl > span { color: var(--text-100); white-space: nowrap; }
+  /* Keep awake: when the rail is too narrow for the label and the three choices on one line, the choices move under
+     the label (flex-wrap) instead of pushing the panel wider than the rail. */
+  .ctl.wrap { flex-wrap: wrap; row-gap: 4px; padding: 2px 0; }
+  .ctl.wrap .h-segmented { max-width: 100%; min-width: 0; }
+  .ctl.wrap .h-segmented > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .remote { margin: 2px 0 4px; padding-left: 0; }
+  .link { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .link .url { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-200); }
+  .link .h-btn { margin-right: -6px; }
+  .devices { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
+  .devices .h-dot { --dot: var(--success); width: 6px; height: 6px; }
+  .devices.none .h-dot { --dot: var(--text-400); opacity: 0.6; }
+  .error { color: var(--danger); font-size: 12px; line-height: 16px; }
+</style>
+</head>
+<body>
+<div id="root" hidden>
+  <div class="info" id="folder"></div>
+  <div class="info" id="model"></div>
+  <div class="info" id="mode"></div>
+  <div class="rule"></div>
+  <label class="ctl"><span>Remote control</span><input type="checkbox" class="h-switch" id="remote-switch"></label>
+  <div class="remote" id="remote" hidden>
+    <div class="link" id="link" hidden><span class="url h-mono" id="url"></span><button class="h-btn ghost sm icon" id="copy" title="Copy the link" aria-label="Copy the link"></button></div>
+    <div class="devices h-muted" id="devices"></div>
+    <div class="error" id="remote-error" hidden></div>
+  </div>
+  <div class="ctl wrap"><span>Keep awake</span>
+    <div class="h-segmented" role="group" aria-label="Keep awake" id="awake">
+      <button data-v="off" aria-pressed="false">Off</button>
+      <button data-v="running" aria-pressed="false">While running</button>
+      <button data-v="always" aria-pressed="false">Always</button>
+    </div>
+  </div>
+  <div class="error" id="awake-error" hidden></div>
+</div>
+<p class="h-empty" id="empty" hidden>Loading…</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const svg = (d) => `<svg class="h-icon" viewBox="0 0 16 16" aria-hidden="true">${d}</svg>`;
+  const PAGE = 'M9 1.75H4.25c-.83 0-1.5.67-1.5 1.5v9.5c0 .83.67 1.5 1.5 1.5h7.5c.83 0 1.5-.67 1.5-1.5V6L9 1.75z';
+  const SHIELD = 'M8 1.75l5.25 2v3.75c0 3.05-2.2 5.6-5.25 6.75-3.05-1.15-5.25-3.7-5.25-6.75V3.75L8 1.75z';
+  const ICON = {
+    folder: svg('<path d="M2 4.5C2 3.67 2.67 3 3.5 3h2.67c.4 0 .78.16 1.06.44L8.5 4.75h4c.83 0 1.5.67 1.5 1.5v5.25c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-7z"/>'),
+    model: svg('<path d="M6.5 2.25c.35 2.6 1.65 3.9 4.25 4.25-2.6.35-3.9 1.65-4.25 4.25-.35-2.6-1.65-3.9-4.25-4.25 2.6-.35 3.9-1.65 4.25-4.25z"/><path d="M12 9.75c.15 1.1.65 1.6 1.75 1.75-1.1.15-1.6.65-1.75 1.75-.15-1.1-.65-1.6-1.75-1.75 1.1-.15 1.6-.65 1.75-1.75z"/>'),
+    copy: svg('<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/>'),
+    check: svg('<path d="M3.25 8.25l3 3 6.5-6.5"/>'),
+    ask: svg(`<path d="${SHIELD}"/><path d="M5.75 8l1.5 1.5 3-3"/>`),
+    acceptEdits: svg(`<path d="${PAGE}"/><path d="M9 1.75V6h4.25M5.75 10l1.5 1.5 3-3"/>`),
+    auto: svg('<path d="M9 1.75L3.25 9.25h4.25l-.5 5 5.75-7.5H8.5l.5-5z"/>'),
+    plan: svg('<path d="M5.75 3h-1C3.78 3 3 3.78 3 4.75v7.75c0 .97.78 1.75 1.75 1.75h6.5c.97 0 1.75-.78 1.75-1.75V4.75C13 3.78 12.22 3 11.25 3h-1"/><rect x="5.75" y="1.75" width="4.5" height="2.5" rx="1"/><path d="M5.75 7.5h4.5M5.75 10h4.5M5.75 12.5h2.25"/>'),
+    bypass: svg(`<path d="${SHIELD}"/><path d="M2.25 2.25l11.5 11.5"/>`),
+  };
+  const MODES = { ask: 'Ask before actions', acceptEdits: 'Accept edits', auto: 'Auto', plan: 'Plan', bypass: 'Bypass permissions' };
+  const PROVIDERS = { ollama: 'Ollama', portkey: 'Portkey', openai: 'OpenAI', anthropic: 'Anthropic' };
+
+  let config = null;
+  let remote = null;
+  let remoteBusy = false;
+  let awakeBusy = false;
+  let remoteError = '';
+  let awakeError = '';
+  let copiedTimer = null;
+
+  /** A path under the user's home folder (config.home) becomes ~/… */
+  function tilde(p, home) {
+    p = p || '';
+    home = String(home || '').replace(/\/+$/, '');
+    if (!home) return p;
+    if (p === home) return '~';
+    return p.startsWith(home + '/') ? '~' + p.slice(home.length) : p;
+  }
+  function base(p) {
+    const parts = String(p || '').replace(/\/+$/, '').split('/');
+    return parts[parts.length - 1] || '/';
+  }
+  function info(el, icon, main, sub, title) {
+    el.innerHTML = icon;
+    const a = document.createElement('span');
+    a.className = 'main' + (sub ? '' : ' grow');
+    a.textContent = main;
+    el.appendChild(a);
+    if (sub) { const b = document.createElement('span'); b.className = 'sub h-muted'; b.textContent = sub; el.appendChild(b); }
+    el.title = title || '';
+  }
+
+  function render() {
+    $('root').hidden = !config;
+    $('empty').hidden = !!config;
+    if (!config) return;
+    const dir = config.workingDirectory || '';
+    info($('folder'), ICON.folder, dir ? base(dir) : 'No folder', dir ? tilde(dir, config.home) : '', dir);
+    const provider = PROVIDERS[config.provider] || config.provider || '';
+    info($('model'), ICON.model, [provider, config.model].filter(Boolean).join(' · ') || 'No model', '', `Provider: ${provider || '—'}\nModel: ${config.model || '—'}`);
+    const mode = config.permissionMode;
+    info($('mode'), ICON[mode] || ICON.ask, MODES[mode] || mode || 'Ask before actions', '', 'Permission mode');
+
+    const r = remote;
+    const sw = $('remote-switch');
+    sw.checked = !!(r && r.enabled);
+    sw.disabled = remoteBusy || !r;
+    const url = r && r.running && Array.isArray(r.urls) && r.urls[0];
+    $('remote').hidden = !(r && (r.enabled || remoteError));
+    $('link').hidden = !url;
+    $('url').textContent = url || '';
+    $('url').title = url || '';
+    const n = (r && r.clients) || 0;
+    const dev = $('devices');
+    dev.hidden = !(r && r.enabled);
+    dev.classList.toggle('none', !n);
+    dev.innerHTML = '<span class="h-dot"></span>';
+    dev.appendChild(document.createTextNode(
+      r && r.enabled && !r.running ? (r.error ? 'Not running' : 'Starting…') : n === 0 ? 'No devices connected' : n === 1 ? '1 device connected' : `${n} devices connected`));
+    const err = remoteError || (r && r.enabled && r.error) || '';
+    $('remote-error').hidden = !err;
+    $('remote-error').textContent = err;
+
+    document.querySelectorAll('#awake button').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.v === (config.keepAwake || 'off')));
+      b.disabled = awakeBusy;
+    });
+    $('awake-error').hidden = !awakeError;
+    $('awake-error').textContent = awakeError;
+  }
+
+  $('copy').innerHTML = ICON.copy;
+  $('copy').onclick = async () => {
+    const url = $('url').textContent;
+    if (!url) return;
+    try { await harness.ui.copy(url); } catch (e) { harness.ui.toast(e.message, { kind: 'error' }); return; }
+    $('copy').innerHTML = ICON.check;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => { $('copy').innerHTML = ICON.copy; }, 1500);
+  };
+
+  $('remote-switch').onchange = async (e) => {
+    const on = e.target.checked;
+    remoteBusy = true;
+    remoteError = '';
+    render();
+    try { remote = await (on ? harness.remote.start() : harness.remote.stop()); } catch (err) { remoteError = err.message; }
+    remoteBusy = false;
+    render();
+  };
+
+  document.querySelectorAll('#awake button').forEach((b) => b.addEventListener('click', async () => {
+    if (!config || config.keepAwake === b.dataset.v) return;
+    const before = config.keepAwake;
+    config.keepAwake = b.dataset.v;
+    awakeBusy = true;
+    awakeError = '';
+    render();
+    try { config = await harness.config.set({ keepAwake: b.dataset.v }); } catch (err) { config.keepAwake = before; awakeError = err.message; }
+    awakeBusy = false;
+    render();
+  }));
+
+  harness.on('config.changed', (c) => { if (c) { config = c; render(); } });
+  // workingDirectory is the folder of the session on screen, so read it again when another session comes on screen
+  harness.on('session.switched', async () => {
+    const c = await harness.config.get().catch(() => null);
+    if (c) { config = c; render(); }
+  });
+  harness.on('remote.changed', (r) => { if (r) { remote = r; remoteError = ''; render(); } });
+  harness.ready.then(async () => {
+    const [c, r] = await Promise.all([harness.config.get().catch(() => null), harness.remote.status().catch(() => null)]);
+    config = c || { workingDirectory: '', provider: '', model: '', permissionMode: 'ask', keepAwake: 'off' };
+    remote = r;
+    render();
+  });
+</script>
+</body>
+</html>

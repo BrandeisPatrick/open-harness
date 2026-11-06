@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  .group + .group { margin-top: 6px; }
+  .group > .h-title { margin: 2px 0 2px; }
+  .row { display: flex; align-items: center; gap: 4px; }
+  .row .h-item { flex: 1 1 auto; min-width: 0; }
+  .row .h-item .h-label { color: var(--text-100); }
+  .row.done .h-item .h-label { color: var(--text-200); }
+  .glyph { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; color: var(--text-400); }
+  .glyph .wait { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .row .when { flex: none; }
+  .merge { margin-right: calc(var(--h-inset-x) - 4px - 4px); }
+  .note { padding: 0 0 4px 32px; font-size: 12px; line-height: 16px; }
+  .note.ok { color: var(--success); }
+  .note.err { color: var(--danger); }
+</style>
+</head>
+<body>
+<div id="root" hidden></div>
+<p class="h-empty" id="empty" hidden>No sub-sessions or forks. Sessions the agent starts from this one, and forks of it, show up here.</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const ICON = {
+    up: '<svg class="h-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3.5M4 7.5l4-4 4 4"/></svg>',
+    done: '<svg class="h-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M5.5 8.25l1.75 1.75 3.25-3.5"/></svg>',
+  };
+  let rel = { parent: null, children: [], forks: [] };
+  const notes = {}; // session id → { ok, text }
+  const merging = new Set();
+
+  function status(s) {
+    if (s.running) return { glyph: '<span class="h-spin sm"></span>', label: 'Running' };
+    if (s.attention) return { glyph: '<span class="wait"></span>', label: s.attention === 'approval' ? 'Waiting for an approval' : 'Waiting for its plan to be approved' };
+    return { glyph: ICON.done, label: 'Done' };
+  }
+
+  function row(s, kind) {
+    const wrap = document.createElement('div');
+    const r = document.createElement('div');
+    const st = kind === 'parent' ? { glyph: ICON.up, label: 'Parent session' } : status(s);
+    const finished = kind !== 'parent' && !s.running && !s.attention;
+    r.className = 'row' + (finished ? ' done' : '');
+    const b = document.createElement('button');
+    b.className = 'h-item';
+    b.title = `${s.title} · ${st.label}`;
+    const g = document.createElement('span');
+    g.className = 'glyph';
+    g.innerHTML = st.glyph;
+    g.setAttribute('aria-label', st.label);
+    const name = document.createElement('span');
+    name.className = 'h-label';
+    name.textContent = s.title || 'Untitled';
+    b.append(g, name);
+    if (!finished || kind === 'parent') {
+      const when = document.createElement('span');
+      when.className = 'h-muted when';
+      when.textContent = kind === 'parent' ? '' : s.running ? '' : 'Waiting';
+      if (when.textContent) b.appendChild(when);
+    }
+    b.onclick = () => harness.sessions.open(s.id).catch((e) => harness.ui.toast(e.message, { kind: 'error' }));
+    r.appendChild(b);
+    if (finished) {
+      const m = document.createElement('button');
+      m.className = 'h-btn ghost sm merge';
+      m.textContent = merging.has(s.id) ? 'Merging…' : 'Merge';
+      m.disabled = merging.has(s.id);
+      m.title = `Bring what "${s.title}" did back into this session`;
+      m.onclick = () => merge(s);
+      r.appendChild(m);
+    }
+    wrap.appendChild(r);
+    const n = notes[s.id];
+    if (n) {
+      const p = document.createElement('p');
+      p.className = 'note ' + (n.ok ? 'ok' : 'err');
+      p.textContent = n.text;
+      wrap.appendChild(p);
+    }
+    return wrap;
+  }
+
+  function group(title, list, kind) {
+    const g = document.createElement('section');
+    g.className = 'group';
+    const h = document.createElement('h3');
+    h.className = 'h-title';
+    h.textContent = title;
+    const ul = document.createElement('div');
+    ul.className = 'h-list';
+    list.forEach((s) => ul.appendChild(row(s, kind)));
+    g.append(h, ul);
+    return g;
+  }
+
+  function render() {
+    const parent = rel.parent || null;
+    const children = Array.isArray(rel.children) ? rel.children : [];
+    const forks = Array.isArray(rel.forks) ? rel.forks : [];
+    const any = !!parent || children.length || forks.length;
+    $('root').hidden = !any;
+    $('empty').hidden = !!any;
+    const root = $('root');
+    root.textContent = '';
+    if (parent) root.appendChild(group('Parent', [parent], 'parent'));
+    if (children.length) root.appendChild(group('Sub-sessions', children, 'child'));
+    if (forks.length) root.appendChild(group('Forks', forks, 'fork'));
+    harness.ui.setBadge(children.length + forks.length || null);
+  }
+
+  async function merge(s) {
+    merging.add(s.id);
+    delete notes[s.id];
+    render();
+    try {
+      const r = await harness.sessions.merge(s.id);
+      notes[s.id] = r && r.ok ? { ok: true, text: 'Merged into this session.' } : { ok: false, text: (r && r.error) || 'Could not merge.' };
+    } catch (e) {
+      notes[s.id] = { ok: false, text: e.message };
+    }
+    merging.delete(s.id);
+    await load();
+    const keep = notes[s.id];
+    // A merged session leaves the list: say so once, at the top
+    if (keep && keep.ok && !document.body.textContent.includes(s.title)) harness.ui.toast(`Merged "${s.title}"`);
+  }
+
+  async function load() {
+    try { rel = (await harness.session.related()) || { parent: null, children: [], forks: [] }; } catch (e) { rel = { parent: null, children: [], forks: [] }; }
+    render();
+  }
+
+  let lastId = null;
+  harness.on('session.changed', (s) => {
+    if (s && s.id !== lastId) { lastId = s.id; for (const k in notes) delete notes[k]; }
+    load();
+  });
+  // A sub-session, fork or the parent changed state (finished, waiting for an approval, merged)
+  harness.on('related.changed', load);
+  harness.on('run.ended', load);
+  // Hidden views may have missed nothing, but a collapsed section catches up once when it opens again
+  harness.on('visibility.changed', (v) => { if (v && v.visible) load(); });
+  harness.ready.then(async () => {
+    const s = await harness.session.get().catch(() => null);
+    lastId = s && s.id;
+    load();
+  });
+</script>
+</body>
+</html>

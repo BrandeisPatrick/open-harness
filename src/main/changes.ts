@@ -163,17 +163,33 @@ async function gitHeadContent(top: string, rel: string): Promise<string> {
 }
 
 /** Real path with symlinks resolved; a missing file resolves its parent so /var and /private/var compare equal on macOS. */
+/**
+ * The real path of a file that may not exist yet: the nearest folder that exists is resolved and the rest is kept.
+ * A file about to be written into a new folder then gets the same key as it has once it exists, also when the
+ * project is reached through a symlink (/tmp and /var on macOS).
+ */
 function canon(p: string): string {
   const abs = path.resolve(p);
-  try {
-    return fs.realpathSync.native(abs);
-  } catch {
+  const rest: string[] = [];
+  let head = abs;
+  for (;;) {
     try {
-      return path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs));
+      return path.join(fs.realpathSync.native(head), ...rest);
     } catch {
-      return abs;
+      const up = path.dirname(head);
+      if (up === head) return abs;
+      rest.unshift(path.basename(head));
+      head = up;
     }
   }
+}
+
+/** The snapshot of a file. Sessions saved by earlier versions may hold a key that was never resolved; those match too. */
+function snapshotOf(session: TrackedSession, abs: string): Snapshot | undefined {
+  const direct = session.changes?.[abs];
+  if (direct) return direct;
+  for (const [key, snap] of Object.entries(session.changes ?? {})) if (key !== abs && canon(key) === abs) return snap;
+  return undefined;
 }
 
 function relTo(cwd: string, abs: string): string {
@@ -205,8 +221,9 @@ export async function listChanges(session: TrackedSession, rawCwd: string): Prom
   const cwd = canon(rawCwd);
   const entries: ChangeEntry[] = [];
   const covered = new Set<string>();
-  for (const [abs, snap] of Object.entries(session.changes ?? {})) {
-    covered.add(canon(abs));
+  for (const [key, snap] of Object.entries(session.changes ?? {})) {
+    const abs = canon(key);
+    covered.add(abs);
     const e = sessionEntry(session, cwd, abs, snap);
     if (e) entries.push(e);
   }
@@ -238,14 +255,14 @@ export async function listChanges(session: TrackedSession, rawCwd: string): Prom
 export function changedFileCount(session: TrackedSession, rawCwd: string): number {
   const cwd = canon(rawCwd);
   let n = 0;
-  for (const [abs, snap] of Object.entries(session.changes ?? {})) if (sessionEntry(session, cwd, abs, snap)) n++;
+  for (const [key, snap] of Object.entries(session.changes ?? {})) if (sessionEntry(session, cwd, canon(key), snap)) n++;
   return n;
 }
 
 export async function diffOf(session: TrackedSession, rawCwd: string, absPath: string): Promise<ChangeDiff> {
   const cwd = canon(rawCwd);
   const abs = canon(absPath);
-  const snap = session.changes?.[abs];
+  const snap = snapshotOf(session, abs);
   const current = readText(abs);
   if (snap) {
     const entry = sessionEntry(session, cwd, abs, snap) ?? { path: abs, relPath: relTo(cwd, abs), status: 'modified' as const, additions: 0, deletions: 0, source: 'session' as const };
@@ -267,7 +284,7 @@ export async function diffOf(session: TrackedSession, rawCwd: string, absPath: s
 export async function revertChange(session: TrackedSession, rawCwd: string, absPath: string): Promise<ChangeEntry[]> {
   const cwd = canon(rawCwd);
   const abs = canon(absPath);
-  const snap = session.changes?.[abs];
+  const snap = snapshotOf(session, abs);
   if (snap) {
     if (snap.skipped) throw new Error('This file was too large or not text to snapshot, so it cannot be reverted here.');
     if (snap.original === null) fs.rmSync(abs, { force: true });

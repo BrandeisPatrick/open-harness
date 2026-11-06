@@ -33,12 +33,12 @@ import type {
   TerminalTabInfo,
   TranscriptItem,
 } from '../shared/types';
-import { brandMark, hydrateIcons, icon, type IconName } from './icons.js';
+import { brandMark, hydrateIcons, icon, isIconName, type IconName } from './icons.js';
 import { basename, copyWithFeedback, escapeHtml, formatCount, isTextField, writeClipboard } from './dom.js';
 import { renderMarkdown } from './markdown.js';
-import { lineDiff, numberRows, parseEditPreview, renderDiff, setDiffBaseDir } from './diff.js';
+import { lineDiff, numberRows, parseEditPreview, renderDiff, setDiffBaseDir, statHtml } from './diff.js';
 import { highlight } from './highlight.js';
-import { approvalTitle, asArgs, createToolCard, displayPath, editStartLine, fileLines, forgetFile, groupSummary, linkPath, mcpParts, resetFileCache, setToolCwd, statusVerb, type ToolCard } from './tools.js';
+import { approvalTitle, asArgs, createToolCard, displayPath, editStartLine, fileLines, forgetFile, linkPath, mcpParts, resetFileCache, setToolCwd, statusVerb, type ToolCard } from './tools.js';
 import { closeMenu, initTooltips, isMenuOpen, menuAnchoredTo, openMenu, type MenuItem, type MenuSection } from './popover.js';
 import { MODE_CHIP_CLASSES, MODE_CYCLE, MODES, modeOf, nextMode } from './modes.js';
 import { createPlanCard, type PlanCard, type PlanDecision } from './plan.js';
@@ -77,6 +77,7 @@ import { createModsHost, type ModPaneTabs } from './mods-host.js';
 import { createSettingsPage } from './settings-page.js';
 import { agentApproval, setNameLookup } from './tool-labels.js';
 import { unframe } from './origin.js';
+import { activityWords } from './tool-activity.js';
 import { tilde } from './home.js';
 
 declare global {
@@ -359,6 +360,7 @@ function addNode(el: HTMLElement): void {
   emptyState.hidden = true;
   el.classList.add('fade-in');
   messagesEl.appendChild(el);
+  if (!foldable(el)) endLiveRun();
   scrollToBottom();
 }
 
@@ -667,50 +669,168 @@ function finishThinking(): void {
   currentThinking = null;
 }
 
-// Tool rows, and groups of 3+ consecutive read/search rows.
+// Tool rows, and the runs of them that fold into one line. With Tool activity set to Summary (the default) every run of
+// two or more calls in a turn is one `.tool-group` line ("Read 3 files, ran 2 commands  +49 −2"), with the thinking
+// between the calls and the decided lines of their approvals inside it; with Every call only runs of three or more
+// reads, searches, listings and MCP calls fold, as they always did. A run is whatever stands between two other
+// things (a reply, a waiting approval card, a plan, an image, a notice), so a stored session folds the same way.
+const cardByEl = new WeakMap<HTMLElement, ToolCard>();
+
+function summaryMode(): boolean {
+  return (config?.toolActivity ?? 'summary') !== 'all';
+}
+
+/** Whether a top-level node can be part of a run of calls */
+function foldable(n: Element): boolean {
+  const c = n.classList;
+  if (c.contains('tool-group') || c.contains('thinking')) return true;
+  if (c.contains('tool')) return summaryMode() || c.contains('groupable');
+  // An approval belongs with its call once it is decided; while it waits it stays in the open, under the run
+  return summaryMode() && c.contains('approval') && c.contains('done');
+}
+
+function groupCards(group: Element): ToolCard[] {
+  return [...group.querySelectorAll<HTMLElement>(':scope > .group-body > .tool')].filter((el) => !el.hidden).map((el) => cardByEl.get(el)).filter((c): c is ToolCard => Boolean(c));
+}
+
+/** The group is the run of the turn going on now: nothing but thinking, approval cards or hidden rows came after it */
+function liveGroup(group: Element): boolean {
+  if (!running || !summaryMode()) return false;
+  for (let n = group.nextElementSibling; n; n = n.nextElementSibling) {
+    if (n.classList.contains('thinking') || n.classList.contains('approval') || ((n as HTMLElement).hidden && n.classList.contains('tool'))) continue;
+    return false;
+  }
+  return true;
+}
+
 function updateGroup(group: Element | null): void {
   if (!group) return;
-  const cards = [...group.querySelectorAll<HTMLElement>(':scope > .group-body > .tool')];
-  const names = cards.map((c) => c.dataset.tool ?? '');
-  group.querySelector('.group-verb')!.textContent = groupSummary(names);
-  // A group of MCP calls only shows the plug; anything else the files icon.
-  const kind: IconName = names.length && names.every((n) => mcpParts(n)) ? 'plug' : 'files';
-  const groupIcon = group.querySelector<HTMLElement>('.group-icon')!;
+  const cards = groupCards(group);
+  const live = liveGroup(group);
+  const verb = group.querySelector<HTMLElement>(':scope > summary > .group-verb')!;
+  const arg = group.querySelector<HTMLElement>(':scope > summary > .group-arg')!;
+  const words = activityWords(
+    cards.map((c) => ({
+      name: c.name,
+      path: typeof c.args.path === 'string' ? c.args.path : undefined,
+      created: c.created,
+      url: typeof c.args.url === 'string' ? c.args.url : undefined,
+      denied: c.outcome === 'denied',
+    })),
+  );
+  // While the run goes on, the line reads like the row of the call in flight; once it is over, what the run did
+  const now = live ? (cards.filter((c) => c.running).pop() ?? cards[cards.length - 1]) : undefined;
+  if (now) {
+    const rowVerb = now.el.querySelector<HTMLElement>(':scope > summary > .tool-verb');
+    const rowArg = now.el.querySelector<HTMLElement>(':scope > summary > .tool-arg');
+    verb.textContent = rowVerb?.textContent ?? '';
+    verb.classList.toggle('mono', Boolean(rowVerb?.classList.contains('mono')));
+    arg.textContent = rowArg?.textContent ?? '';
+    arg.classList.toggle('mono', Boolean(rowArg?.classList.contains('mono')));
+  } else {
+    verb.textContent = words.text;
+    verb.classList.remove('mono');
+    arg.textContent = '';
+  }
+  group.classList.toggle('live', live);
+  // One icon the calls share (a run of commands, of MCP calls), otherwise the files
+  const icons = new Set(cards.map((c) => c.el.dataset.icon ?? ''));
+  const kind: IconName = icons.size === 1 && isIconName([...icons][0]) ? ([...icons][0] as IconName) : 'files';
+  const groupIcon = group.querySelector<HTMLElement>(':scope > summary > .group-icon')!;
   if ((groupIcon.dataset.kind ?? 'files') !== kind) {
     groupIcon.dataset.kind = kind;
     groupIcon.innerHTML = icon(kind);
   }
-  const busy = cards.some((c) => c.querySelector('.tool-status.spin'));
-  const failed = cards.filter((c) => c.querySelector('.tool-status.err')).length;
-  group.querySelector('.group-icon')!.className = `group-icon${busy ? ' spin' : failed ? ' err' : ''}`;
-  group.querySelector('.group-meta')!.innerHTML = failed ? `<span class="meta-err">${failed} failed</span>` : '';
+  const busy = live || (!summaryMode() && cards.some((c) => c.running));
+  const failed = cards.filter((c) => c.outcome === 'failed').length;
+  // A folded run says "N failed" in red on its right; a group of reads (Every call) marks its icon, as it always did
+  groupIcon.className = `group-icon${busy ? ' spin' : failed && !summaryMode() ? ' err' : ''}`;
+  // On the right: the lines edits and writes added and removed, then what failed and what was denied
+  let added = 0;
+  let removed = 0;
+  for (const c of cards) {
+    added += c.diff?.added ?? 0;
+    removed += c.diff?.removed ?? 0;
+  }
+  const meta: string[] = [];
+  if (added || removed) meta.push(`<span class="group-stat">${statHtml(added, removed)}</span>`);
+  if (failed) meta.push(`<span class="group-failed meta-err">${failed} failed</span>`);
+  if (words.denied) meta.push(`<span class="group-denied">${words.denied} denied</span>`);
+  group.querySelector(':scope > summary > .group-meta')!.innerHTML = meta.join(' ');
+  const summary = group.querySelector<HTMLElement>(':scope > summary')!;
+  summary.setAttribute('aria-label', [now ? `${verb.textContent} ${arg.textContent}`.trim() : words.text, ...meta.map((m) => m.replace(/<[^>]+>/g, ''))].join(', '));
 }
 
-function maybeGroup(cardEl: HTMLElement): void {
-  if (!cardEl.classList.contains('groupable')) return;
-  const run: HTMLElement[] = [cardEl];
-  let node = cardEl.previousElementSibling as HTMLElement | null;
-  while (node && (node.classList.contains('thinking') || node.classList.contains('groupable'))) {
-    run.unshift(node);
-    node = node.previousElementSibling as HTMLElement | null;
-  }
-  if (node?.classList.contains('tool-group')) {
-    const body = node.querySelector(':scope > .group-body')!;
-    for (const n of run) body.appendChild(n);
-    updateGroup(node);
-    return;
-  }
-  while (run.length && !run[0].classList.contains('tool')) run.shift();
-  if (run.filter((n) => n.classList.contains('tool')).length < 3) return;
+function createGroup(): HTMLDetailsElement {
   const group = document.createElement('details');
   group.className = 'tool-group';
   group.innerHTML =
     `<summary><span class="tool-chevron">${icon('chevron-right')}</span><span class="group-icon">${icon('files')}</span>` +
-    `<span class="tool-verb group-verb"></span><span class="tool-meta group-meta"></span></summary><div class="group-body"></div>`;
-  run[0].before(group);
-  const body = group.querySelector(':scope > .group-body')!;
-  for (const n of run) body.appendChild(n);
+    `<span class="tool-verb group-verb"></span><span class="tool-arg group-arg"></span><span class="tool-meta group-meta"></span></summary><div class="group-body"></div>`;
+  return group;
+}
+
+/** Puts `nodes` in this order right after `after` (or first in `parent`), moving only those that are not there yet. */
+function placeAfter(parent: Element, after: Element | null, nodes: Element[]): void {
+  let cursor = after;
+  for (const n of nodes) {
+    const next = cursor ? cursor.nextElementSibling : parent.firstElementChild;
+    if (next !== n) {
+      if (cursor) cursor.after(n);
+      else parent.prepend(n);
+    }
+    cursor = n;
+  }
+}
+
+/**
+ * Makes the run of calls around `anchor` (a row, a decided approval, a group, a thinking block) look as it should:
+ * one group from its first call to its last call or approval when it has enough calls, the rows in the open when it
+ * has not. Thinking before the first call and after the last stays outside. Only what is out of place moves.
+ */
+function settleRun(anchor: Element): void {
+  const top = anchor.parentElement?.classList.contains('group-body') ? anchor.closest('.tool-group')! : anchor;
+  if (top.parentElement !== messagesEl || !foldable(top)) return;
+  let first = top;
+  let last = top;
+  while (first.previousElementSibling && foldable(first.previousElementSibling)) first = first.previousElementSibling;
+  while (last.nextElementSibling && foldable(last.nextElementSibling)) last = last.nextElementSibling;
+  const tops: Element[] = [];
+  for (let n: Element | null = first; n; n = n === last ? null : n.nextElementSibling) tops.push(n);
+  const groups = tops.filter((n) => n.classList.contains('tool-group'));
+  const items = tops.flatMap((n) => (n.classList.contains('tool-group') ? [...n.querySelector(':scope > .group-body')!.children] : [n]));
+  const before = first.previousElementSibling;
+  const isCall = (n: Element) => n.classList.contains('tool');
+  const from = items.findIndex(isCall);
+  let to = -1;
+  items.forEach((n, i) => {
+    if (isCall(n) || n.classList.contains('approval')) to = i;
+  });
+  const calls = items.filter((n) => isCall(n) && !(n as HTMLElement).hidden).length;
+  if (from < 0 || calls < (summaryMode() ? 2 : 3)) {
+    placeAfter(messagesEl, before, items);
+    for (const g of groups) g.remove();
+    return;
+  }
+  const group = groups[0] ?? createGroup();
+  placeAfter(messagesEl, before, [...items.slice(0, from), group, ...items.slice(to + 1)]);
+  placeAfter(group.querySelector(':scope > .group-body')!, null, items.slice(from, to + 1));
+  for (const g of groups.slice(1)) g.remove();
   updateGroup(group);
+}
+
+/** Folds the whole conversation again (the setting changed): every group opens up, then each run settles. */
+function refoldAll(): void {
+  for (const g of [...messagesEl.querySelectorAll<HTMLElement>(':scope > .tool-group')]) {
+    const body = g.querySelector(':scope > .group-body')!;
+    g.replaceWith(...body.children);
+  }
+  for (const n of [...messagesEl.children]) if (n.isConnected && n.parentElement === messagesEl && (n.classList.contains('tool') || n.classList.contains('approval'))) settleRun(n);
+}
+
+/** Something that is not part of a run went into the transcript: the run before it is over, its line says what it did. */
+function endLiveRun(): void {
+  for (const g of messagesEl.querySelectorAll(':scope > .tool-group.live')) updateGroup(g);
 }
 
 function addToolCard(name: string, args: unknown, id?: string): ToolCard {
@@ -718,18 +838,22 @@ function addToolCard(name: string, args: unknown, id?: string): ToolCard {
   finishThinking();
   const card = createToolCard(name, args);
   if (id) toolCards.set(id, card);
+  cardByEl.set(card.el, card);
   lastToolCard = card;
   addNode(card.el);
-  maybeGroup(card.el);
+  settleRun(card.el);
   return card;
 }
 
 function finishToolCard(ev: { id?: string; name: string; result: string; ok: boolean; image?: string; durationMs?: number }, known?: ToolCard): void {
   const card = known ?? (ev.id ? toolCards.get(ev.id) : undefined);
   if (!card) return;
+  const group = card.el.closest('.tool-group');
   card.finish({ result: ev.result, ok: ev.ok, image: ev.image, durationMs: ev.durationMs });
   if (ev.id) toolCards.delete(ev.id);
-  updateGroup(card.el.closest('.tool-group'));
+  // A row can leave (a shown image) or come out of hiding (an image that could not be shown): the run settles again
+  if (card.el.isConnected) settleRun(card.el);
+  else if (group?.isConnected) settleRun(group);
   scrollToBottom();
 }
 
@@ -846,6 +970,8 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     el.innerHTML = `<div class="decided"><span class="${ok ? 'ok' : 'no'}">${icon(ok ? 'check' : 'x')}</span><span>${escapeHtml(text)}</span>${
       subject ? `<span>·</span>${prose ? `<span class="subject">${escapeHtml(subject)}</span>` : `<code>${escapeHtml(subject)}</code>`}` : ''
     }</div>`;
+    // The decided line belongs with the call it answered: it folds into the run with it
+    settleRun(el);
   };
   const decide = async (ok: boolean, answer: Answer = 'once') => {
     if (settled) return;
@@ -1924,9 +2050,10 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
         statusLine.classList.remove('compacting');
       }
       setRunning(false);
+      endLiveRun();
       for (const card of toolCards.values()) {
         card.interrupt();
-        updateGroup(card.el.closest('.tool-group'));
+        settleRun(card.el);
       }
       toolCards.clear();
       hiddenTools.clear();
@@ -2427,6 +2554,8 @@ function shortPath(p: string): string {
   return parts.length > 4 ? `${parts[0]}/…/${parts.slice(-2).join('/')}` : home;
 }
 
+let lastToolActivity: boolean | undefined;
+
 function applyConfigToUi(): void {
   const model = config.provider === 'ollama' ? config.ollama.model : config.portkey.model;
   // Under the chat bar: the model in the text colour, then a muted word when there is one worth saying
@@ -2446,6 +2575,9 @@ function applyConfigToUi(): void {
   setDiffBaseDir(config.workingDirectory);
   renderRecent();
   document.documentElement.dataset.theme = config.theme === 'system' ? '' : config.theme;
+  // Tool activity: Summary or Every call; the conversation on screen folds again when it changes
+  if (lastToolActivity !== undefined && lastToolActivity !== summaryMode()) refoldAll();
+  lastToolActivity = summaryMode();
   const connKey = `${config.provider}|${config.ollama.baseURL}|${config.ollama.model}`;
   if (connKey !== lastConnKey) {
     lastConnKey = connKey;

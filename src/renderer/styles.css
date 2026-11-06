@@ -518,6 +518,14 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .tool-body { margin: 8px 0 8px 28px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .group-body { margin: 8px 0 0 28px; display: flex; flex-direction: column; gap: 8px; }
 .group-body > .fade-in { animation: none; }
+/* A folded run: the summary takes the room and is cut last; the diff total, failed and denied sit on its right */
+.group-verb { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.group-verb.mono { font-family: var(--mono); font-size: 0.9em; }
+.group-arg:empty { display: none; }
+.group-meta { display: inline-flex; gap: 8px; }
+.group-denied { color: var(--text-400); }
+/* Inside a group the rows and the decided approvals keep the body's own 8px rhythm */
+.group-body > .approval.done { margin: 0; }
 
 .cmd {
   display: flex; gap: 8px; padding: 8px 12px;

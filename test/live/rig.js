@@ -212,6 +212,10 @@ async function launch(opts = {}) {
     waitFor,
     /** PNG of the window's page (2x, or the launch's `scale`). `clip` is { x, y, width, height } in CSS pixels. */
     async screenshot(file, clip) {
+      // In the hidden window, a full-page capture after some changes (seen every time Settings opens or closes) can
+      // come back as a stale surface at half the emulated size, repeated 2 × 2. A tiny clipped capture first makes the compositor draw a fresh frame at the
+      // emulated scale; the real capture after it is whole.
+      if (!clip) await cdp('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 } });
       const r = await cdp('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, Buffer.from(r.data, 'base64'));

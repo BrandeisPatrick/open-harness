@@ -118,7 +118,7 @@ body.has-bg .pg-side, body.has-bg .pg-chat, body.has-bg .pg-rail, body.has-bg .p
 @keyframes pg-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* ---------- shot mode: only the rail, at its real width ---------- */
-body.pg.shot { display: block; width: 300px; height: auto; overflow: visible; background: var(--bg-100); }
+body.pg.shot { display: block; width: 100%; min-width: 0; height: auto; overflow: visible; background: var(--bg-100); }
 body.pg.shot .pg-side, body.pg.shot .pg-chat, body.pg.shot .pg-pane, body.pg.shot .pg-log, body.pg.shot .pg-toasts, body.pg.shot .pg-bg { display: none; }
 body.pg.shot .pg-main { display: block; }
 body.pg.shot .pg-rail { border-left: 0; overflow: visible; }

@@ -359,7 +359,18 @@
       case 'skill': return ['Skill', '/' + s('name'), true];
       case 'update_tasks': return ['Tasks', '', false];
       case 'create_artifact': return ['Artifact', s('title'), false];
-      case 'show_image': return ['Show image', s('path'), true];
+      case 'show_image': return ['Show image', s('path').split(/[\\/]/).pop() || '', true];
+      case 'session_spawn': return ['Sub-session', s('title'), false];
+      case 'session_send': return ['Message', s('to') ? 'to ' + sessionName(s('to')) : '', false];
+      case 'session_list': return ['Sessions', '', false];
+      case 'session_read': return ['Read session', sessionName(s('id')), false];
+      case 'session_merge': return ['Merge', sessionName(s('id')), false];
+      case 'schedule_create': return ['Schedule', s('name'), false];
+      case 'schedule_list': return ['Schedules', '', false];
+      // Without a new name in the call, the id stands in until the result names the schedule (scheduleName).
+      case 'schedule_update': return ['Update schedule', s('name') || s('id'), false];
+      case 'schedule_delete': return ['Delete schedule', s('id'), false];
+      case 'mod_check': return ['Check mod', s('id'), true];
       case 'browser_navigate': return ['Open', s('url'), true];
       case 'browser_click': return ['Click', s('element') || s('text') || s('ref'), false];
       case 'browser_type': return ['Type', s('text'), false];
@@ -371,6 +382,33 @@
     if (mcp) return [mcp[2], short(first(), 80), false, mcp[1]];
     if (name.startsWith('browser_')) return [name.slice(8).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), short(first(), 80), false];
     return [name, short(first(), 80), true];
+  }
+
+  /** A session's title from its id; the session tools also accept the exact title, which comes back as it is. */
+  function sessionName(v) {
+    const m = S.sessions.find((x) => x.id === v) || (S.localMeta && S.localMeta.id === v ? S.localMeta : null);
+    return (m && m.title) || v;
+  }
+
+  /** The schedule a schedule_update / schedule_delete result names ('Deleted schedule "X" (id).', 'Updated: id  "X"  …') */
+  function scheduleName(name, result) {
+    if (name !== 'schedule_update' && name !== 'schedule_delete') return '';
+    const m = /^(?:Deleted schedule|Updated: \S+ ) ?"([^"\n]+)"/.exec(result || '');
+    return m ? m[1] : '';
+  }
+
+  /**
+   * A shell command's exit code that says it failed, or null. Read the way the desktop reads it (src/renderer/tools.ts):
+   * bash ends its result with "[exit code: N]" and any code but 0 is a failure; terminal_run's last line is the same,
+   * and only a numeric code counts (it can also end in "still running", "the shell exited" or "exit code unknown").
+   */
+  function failedExit(name, result) {
+    if (name !== 'bash' && name !== 'terminal_run') return null;
+    const m = /(?:^|\n)\[exit code: ([^\]\n]+)\]\s*$/.exec(result || '');
+    if (!m) return null;
+    const code = m[1].trim();
+    if (code === '0') return null;
+    return name === 'bash' || /^-?\d+$/.test(code) ? code : null;
   }
 
   /** A one-line tool row; expands to the command and the result. ok: true/false, or undefined while it runs. */
@@ -400,13 +438,19 @@
       st.className = 'tool-status';
       st.innerHTML = '<span class="spinner sm"></span>';
     } else {
-      st.className = 'tool-status' + (ok ? '' : ' err');
-      st.innerHTML = icon(ok ? 'check' : 'x', 14);
-      if (!ok) {
+      // A command that ran but exited non-zero failed too, as on the desktop: a red mark and "exit N".
+      const code = ok ? failedExit(d._tool.name, result) : null;
+      const bad = !ok || code !== null;
+      d._tool.bad = bad;
+      st.className = 'tool-status' + (bad ? ' err' : '');
+      st.innerHTML = icon(bad ? 'x' : 'check', 14);
+      if (bad) {
         const meta = d.querySelector('.tool-meta');
         meta.className = 'tool-meta err';
-        meta.textContent = /^User denied/.test(result || '') ? 'denied' : 'failed';
+        meta.textContent = code !== null ? `exit ${short(code, 24)}` : /^User denied/.test(result || '') ? 'denied' : 'failed';
       }
+      const named = scheduleName(d._tool.name, result);
+      if (named) d.querySelector('.tool-arg').textContent = named;
     }
     if (d.open) fillTool(d);
   }
@@ -422,7 +466,7 @@
       /* the path is in the row; the result says what happened */
     } else body.append(h('pre', 'out', `<span class="label">Input</span>${esc(JSON.stringify(t.args, null, 2))}`));
     if (t.ok === undefined) body.append(h('pre', 'out', '<span class="label">Running…</span>'));
-    else body.append(h('pre', 'out' + (t.ok ? '' : ' error'), esc(t.result || '(no output)')));
+    else body.append(h('pre', 'out' + (t.bad ? ' error' : ''), esc(t.result || '(no output)')));
   }
 
   function approvalTitle(name) {
@@ -538,15 +582,8 @@
     const t = el.transcript;
     t.textContent = '';
     const live = data.live;
-    // A tool call in flight can already sit in the stored messages without its result; the live list shows it.
-    let items = data.items;
-    if (live.tools.length) {
-      const inFlight = new Set(live.tools.map((x) => x.name));
-      let end = items.length;
-      while (end > 0 && items[end - 1].role === 'tool' && items[end - 1].result === '(no result)' && inFlight.has(items[end - 1].name)) end--;
-      items = items.slice(0, end);
-    }
-    for (const item of items) {
+    // The server leaves tool calls still in flight out of the items (api.ts); live.tools holds the running ones.
+    for (const item of data.items) {
       const n = itemEl(item);
       if (n) t.append(n);
     }
@@ -563,6 +600,7 @@
       t.append(V.assistant);
     }
     for (const tool of live.tools) {
+      if (tool.name === 'submit_plan') continue; // the plan card stands for it, as with tool_start
       const row = toolEl(tool.name, tool.args, undefined, undefined);
       V.tools.set(tool.id, row);
       t.append(row);

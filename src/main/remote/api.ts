@@ -120,7 +120,10 @@ export class Api {
     if (!id || !s) throw new HttpError(404, 'No such session.');
     // Marked first: the snapshot below then holds every event up to `seq` and none after it.
     const seq = this.hooks.mark(id);
-    return { items: toTranscript(s).map(remoteItem), live: remoteLive(this.app.runtime.live(id)), seq };
+    // A run in progress has its tool calls stored before their results: those are in flight, and `live.tools` (or a
+    // later tool_start) shows them. Left in, they would show twice, once as a finished "(no result)" row.
+    const running = this.app.runtime.isRunning(id);
+    return { items: toTranscript(s, { running }).map(remoteItem), live: remoteLive(this.app.runtime.live(id)), seq };
   }
 
   private known(id: string): string {

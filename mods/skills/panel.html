@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="/@harness/harness.css">
 <style>
-  .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  /* In a narrow rail the total ("None used") moves under the switch, to the right, instead of wrapping onto two lines */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin-bottom: 6px; }
+  #total { margin-left: auto; white-space: nowrap; }
   .rows { margin: 0; padding: 0; list-style: none; }
   .row { display: flex; align-items: center; gap: 8px; min-height: 24px; color: var(--text-100); }
   .row .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

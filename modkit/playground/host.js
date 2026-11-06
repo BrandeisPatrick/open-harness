@@ -757,7 +757,7 @@
   /** The playground's model: a canned Markdown answer that depends a little on the question. */
   function cannedReply(question, session, turns) {
     var q = question.replace(/\s+/g, ' ').trim();
-    var head = '> ' + (q.length > 80 ? q.slice(0, 80) + '…' : q) + '\n\n';
+    var head = '';
     var ctx = session ? 'I can see the main conversation (' + session.transcript.length + ' items, "' + session.session.title + '"), so this answer takes it into account.' : 'I cannot see the main conversation, so this answer stands on its own.';
     if (/error|fail|exception|stack/i.test(q)) {
       return head + 'That error usually means the process tried to read a file that was not there yet. ' + ctx + '\n\nThree things to check:\n\n1. The path is resolved from the **working directory**, not the file.\n2. The build ran: `npm run build` writes `dist/`.\n3. Nothing deleted it in between (a `clean` step).\n\n```sh\nls dist/main && node -e "require(\'./dist/main/agent.js\')"\n```\n\nIf the second command prints nothing, the file is fine and the cause is elsewhere.';

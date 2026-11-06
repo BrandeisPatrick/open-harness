@@ -535,16 +535,18 @@ async function readyPage(hello = HELLO) {
     outputs: { order: 40, permissions: ['session:read'] },
     'sub-sessions': { order: 45, permissions: ['session:read', 'session:control'] },
     skills: { order: 50, permissions: ['skills:read'] },
+    'side-chat': { seat: 'tab', permissions: ['model', 'session:read', 'session:send'] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
-  check('mods/ holds the seven bundled mods', same(mods.map((m) => m.folder).sort(), Object.keys(EXPECTED).sort()), mods.map((m) => m.folder));
+  check('mods/ holds the bundled mods', same(mods.map((m) => m.folder).sort(), Object.keys(EXPECTED).sort()), mods.map((m) => m.folder));
   for (const m of mods) {
     const man = m.manifest || {};
     const exp = EXPECTED[m.folder] || {};
     check(`${m.folder}: mod.json has no problems`, m.valid && m.problems.length === 0, m.problems);
     check(`${m.folder}: metadata`, man.version === '1.0.0' && man.author === 'OpenAgent' && man.license === 'MIT' && typeof man.description === 'string' && man.description.length > 10 && typeof man.icon === 'string');
     const views = (man.contributes && man.contributes.views) || [];
-    check(`${m.folder}: one rail view at order ${exp.order}`, views.length === 1 && views[0].seat === 'rail' && views[0].order === exp.order, views);
+    if (exp.seat === 'tab') check(`${m.folder}: one tab view, with no rail-only fields`, views.length === 1 && views[0].seat === 'tab' && views[0].order === undefined && views[0].maxHeight === undefined, views);
+    else check(`${m.folder}: one rail view at order ${exp.order}`, views.length === 1 && views[0].seat === 'rail' && views[0].order === exp.order, views);
     check(`${m.folder}: permissions`, same((man.permissions || []).slice().sort(), (exp.permissions || []).slice().sort()), man.permissions);
 
     // Every harness call and event in the page is allowed by the manifest
@@ -584,6 +586,19 @@ async function readyPage(hello = HELLO) {
     check('environment: reads the config again when the session switches', /harness\.on\('session\.switched'/.test(env));
     const tasks = src('tasks');
     check('tasks: no paused spinner; a still half-filled circle when no run is going', !/paused/.test(tasks) && /running \? '<span class="h-spin sm"><\/span>' : ICON\.half/.test(tasks));
+  }
+
+  // --- Side chat ------------------------------------------------------------------------------------------
+  {
+    const man = JSON.parse(fs.readFileSync(path.join(ROOT, 'mods/side-chat/mod.json'), 'utf8'));
+    const html = fs.readFileSync(path.join(ROOT, 'mods/side-chat/panel.html'), 'utf8');
+    check('side-chat: the description says it uses the model', /model/i.test(man.description) && /token/i.test(man.description), man.description);
+    check('side-chat: icon is message', man.icon === 'message');
+    check('side-chat: streams with model.complete and an onDelta, cancels with model.cancel', /harness\.model\.complete\(\{[^)]*\}, \(delta\)/.test(html) && /harness\.model\.cancel\(\)/.test(html));
+    check('side-chat: the switch maps to context session or none', /context: include \? 'session' : 'none'/.test(html));
+    check('side-chat: keeps the conversation per session', /harness\.storage\.session\.(get|set)\('chat'/.test(html));
+    check('side-chat: follows session.switched and puts answers in the composer', /harness\.on\('session\.switched'/.test(html) && /harness\.composer\.insert\(/.test(html));
+    check('side-chat: Enter sends unless Shift is held or an IME is composing', /e\.key === 'Enter' && !e\.shiftKey && !e\.isComposing/.test(html));
   }
 
   // --- the manifest rules themselves -----------------------------------------------------------------------

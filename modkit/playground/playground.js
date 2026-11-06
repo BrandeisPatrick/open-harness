@@ -266,6 +266,9 @@
 
     rail.sort(function (a, b) { return (a.v.order === undefined ? 100 : a.v.order) - (b.v.order === undefined ? 100 : b.v.order); });
     rail.forEach(function (x) { mountRail(x.m, x.v); });
+    var mainEl = document.querySelector('.pg-main');
+    mainEl.classList.toggle('no-rail', !SHOT && !rail.length && !!tabs.length);
+    applyPane();
 
     // shot.js and a mod whose only views are tabs: the side pane alone, filling the window
     document.body.classList.toggle('shot-tab', SHOT && !rail.length && !!tabs.length);
@@ -360,7 +363,8 @@
   function applyPane() {
     var main = document.querySelector('.pg-main');
     if (!main || SHOT) return;
-    main.style.gridTemplateColumns = state.pane ? 'minmax(320px, 1fr) 300px ' + state.pane + 'px' : '';
+    var rail = main.classList.contains('no-rail') ? '0' : '300px';
+    main.style.gridTemplateColumns = state.pane ? 'minmax(320px, 1fr) ' + rail + ' ' + state.pane + 'px' : '';
   }
 
   // ---------- side panels ----------

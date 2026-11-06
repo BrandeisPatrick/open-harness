@@ -393,6 +393,24 @@ function cleanCut(msgs, cut) {
   await agent.run('Read a.txt, b.txt and c.txt.');
   check('10: the same conversation at 0.8 does not compact', !agent.session.compactions);
 
+  // ---- 13: one long turn: its old output is shortened first; then its start is folded, the request kept verbatim ----
+  fresh();
+  for (const f of 'abcdef') state.replies.push(read(`${f}.txt`));
+  state.replies.push({ content: 'AWORD BWORD CWORD DWORD EWORD FWORD' });
+  await agent.run('Read a.txt to f.txt, one at a time.');
+  const res13 = agent.session.messages.filter((m) => m.role === 'tool');
+  check('13: a single turn over the limit: old results in it are shortened (heads kept), no summary needed', runEnd().reason === 'done' && !events.some((e) => e.type === 'compact_start') && notices().some((n) => /Cleared .* tokens of old tool output in the current turn/.test(n)) && /^1\| A-START/.test(res13[0].content) && res13[0].content.length < 600 && res13[res13.length - 1].content.length > 5000, { notices: notices(), first: res13[0].content.slice(0, 40), len: res13.map((m) => m.content.length) });
+  fresh({ pruneToolResults: false });
+  const request13 = 'Read a.txt to h.txt, one at a time.';
+  for (const f of 'abcdefgh') state.replies.push(read(`${f}.txt`));
+  state.replies.push({ content: 'all read' });
+  await agent.run(request13);
+  const comps13 = agent.session.compactions || [];
+  check('13: without pruning the start of the turn is summarised, the request kept verbatim in the brief', runEnd().reason === 'done' && comps13.length >= 2 && comps13.every((c) => c.stage === 'summary' && c.kept >= 1), { n: comps13.length, notices: notices() });
+  const verbatim = (m) => typeof m.content === 'string' && m.content.includes(`## The user's latest request, verbatim\n${request13}`);
+  check('13: a later fold of that brief carries the request on', verbatim(agent.session.messages[0]) && comps13[1] && C.isCompactPreamble(comps13[1].folded[0]) && verbatim(comps13[1].folded[0]));
+  check('13: every request stayed well-formed', streams().every((q) => !malformed(q.messages)) && agent.session.messages.length > 1);
+
   // ---- 11: the breakdown ----
   fs.writeFileSync(path.join(cwd, 'AGENTS.md'), '# Rules\n' + 'Be careful. '.repeat(200));
   let mcpConfig = { ...baseConfig, mcpServers: { test: { command: 'node', args: [TEST_SERVER], env: { OC_PROJECT: projectDir } } } };

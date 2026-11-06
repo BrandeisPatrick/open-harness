@@ -139,7 +139,8 @@ function rawCut(messages: Msg[], tailTokens: number, opts: { insideTurn?: boolea
   while (cut > 0 && acc < tailTokens) acc += estimateMessageTokens(messages[--cut]);
   const lastUser = lastUserIndex(messages);
   if (!opts.insideTurn && lastUser >= 0) cut = Math.min(cut, lastUser);
-  if (opts.insideTurn) cut = Math.min(cut, n - 1);
+  // Something is always kept, also when the request itself lives in an earlier brief (no user message is left).
+  cut = Math.min(cut, n - 1);
   while (cut > 0 && !ok[cut]) cut--;
   if (cut > 0) return cut;
   if (!opts.insideTurn && lastUser > 0) return lastUser; // the tail rule took everything: fold what precedes the last request
@@ -324,6 +325,8 @@ export function renderForSummary(messages: Msg[], budgetChars: number): string {
 export interface SummaryExtras {
   /** What the user asked the brief to keep in detail (/compact focus) */
   focus?: string;
+  /** Upper bound for the brief's length; it has to be much smaller than what it replaces */
+  maxWords?: number;
   tasks?: TaskItem[];
   plan?: Pick<PlanInfo, 'title' | 'status'>;
 }
@@ -339,8 +342,9 @@ export function summaryRequest(messages: Msg[], extras: SummaryExtras | string |
   const transcript = renderForSummary(messages, budgetChars);
   const state = `Current task list:\n${tasksText(x.tasks)}\n\nLatest plan: ${x.plan ? `"${x.plan.title}" (${x.plan.status})` : '(none)'}`;
   const focus = x.focus?.trim() ? `\n\nThe user asked the brief to focus on: ${x.focus.trim()}` : '';
+  const words = x.maxWords && x.maxWords > 0 ? `\n- Keep the whole brief under ${Math.max(80, Math.round(x.maxWords))} words: quote only the lines that matter, never whole files or outputs.` : '';
   return [
-    { role: 'system', content: SUMMARY_SYSTEM },
+    { role: 'system', content: SUMMARY_SYSTEM + words },
     { role: 'user', content: `Transcript:\n\n${transcript}\n\n---\n${state}\n\n---\nWrite the handoff brief now, with the eight sections.${focus}` },
   ];
 }
@@ -401,10 +405,23 @@ export function compactedPreamble(summary: string, files?: { read: string[]; edi
 This session was compacted: the earlier conversation was replaced by the brief below, and the messages after this one are kept as they were. Continue from it as if nothing was interrupted. Do not mention the compaction and do not redo work the brief marks as done. If a task was in progress, carry on with its next step; if the user's latest request was already complete, answer their next message.
 
 ${summary.trim()}`;
-  if (request?.trim()) out += `\n\n## The user's latest request, verbatim\n${request.trim()}`;
+  if (request?.trim()) out += `\n\n${REQUEST_HEADING}\n${request.trim()}`;
   const lines = [...(files?.edited ?? []).map((p) => `- edited: ${p}`), ...(files?.read ?? []).map((p) => `- read: ${p}`)];
   if (lines.length) out += `\n\n${FILES_HEADING}\nRe-read these before relying on their contents:\n${lines.slice(0, 40).join('\n')}`;
   return out;
+}
+
+const REQUEST_HEADING = "## The user's latest request, verbatim";
+
+/** The verbatim request an earlier brief carried (when the turn it came from was folded), if any. */
+export function carriedRequest(m: Msg | undefined): string | undefined {
+  if (!m || !isCompactPreamble(m)) return undefined;
+  const body = m.content as string;
+  const at = body.indexOf(REQUEST_HEADING);
+  if (at < 0) return undefined;
+  const rest = body.slice(at + REQUEST_HEADING.length).replace(/^\n/, '');
+  const end = rest.indexOf(`\n\n${FILES_HEADING}`);
+  return (end >= 0 ? rest.slice(0, end) : rest).trim() || undefined;
 }
 
 /** The one-line note that stands in for messages dropped because no summary could be produced. */

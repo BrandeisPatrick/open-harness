@@ -11,6 +11,7 @@ import {
   PRUNE_NORMAL,
   PRUNE_THRESHOLD,
   TAIL_FRACTION,
+  carriedRequest,
   cleanSummary,
   compactThreshold,
   compactedPreamble,
@@ -821,11 +822,17 @@ export class Agent {
     const pruned = cfg.pruneToolResults !== false ? this.prune(PRUNE_NORMAL, true) : 0;
     const tail = limit * TAIL_FRACTION;
     let cut = this.cutFor(tail, limit);
-    let insideTurn = false;
     if (!cut && reason === 'auto' && over()) {
-      // The last turn alone is too big to keep: fold the start of it as well, with the request kept verbatim.
+      // The last turn alone is too big. Shortening its older tool output keeps the most (the heads stay) without a
+      // model call; only if that is not enough is the start of the turn folded, with the request kept verbatim.
+      if (cfg.pruneToolResults !== false) {
+        const cleared = this.prune(PRUNE_HARD, false);
+        if (cleared > 0 && !over()) {
+          this.emit({ type: 'error', kind: 'notice', message: `Cleared ${formatTokens(cleared)} tokens of old tool output in the current turn to stay inside the context window.` });
+          return { ok: true };
+        }
+      }
       cut = findCut(s.messages, tail, { insideTurn: true });
-      insideTurn = cut > 0;
     }
     // A summary failed earlier in this run, or one was just made and the conversation has hardly grown: no new attempt.
     const recent = this.compactedAt >= 0 && s.messages.length < this.compactedAt + 4;
@@ -837,7 +844,7 @@ export class Agent {
         const folded = s.messages.slice(0, cut);
         const summary = await this.summarize(cfg, client, model, folded, focus, signal);
         if (signal.aborted) throw new Error('Compaction was stopped.');
-        const brief = compactedPreamble(summary, filesTouched(folded), insideTurn ? this.lastRequestText(folded) : undefined);
+        const brief = compactedPreamble(summary, filesTouched(folded), this.requestToCarry(folded));
         if (estimateMessageTokens({ role: 'user', content: brief }) >= estimateTokens(folded)) throw new Error('The summary was not smaller than the messages it would replace.');
         const info = this.fold(cut, brief, summary, { reason, before, pruned, stage: 'summary' });
         return { ok: true, info };
@@ -860,14 +867,10 @@ export class Agent {
       return { ok: true };
     }
     let dropAt = this.cutFor(tail, limit);
-    let dropInside = false;
-    if (!dropAt) {
-      dropAt = findCut(s.messages, tail, { insideTurn: true });
-      dropInside = dropAt > 0;
-    }
+    if (!dropAt) dropAt = findCut(s.messages, tail, { insideTurn: true });
     const dropped = s.messages.slice(0, dropAt);
     const count = dropped.filter((m) => !isCompactPreamble(m)).length;
-    const note = droppedPreamble(count, filesTouched(dropped), dropInside ? this.lastRequestText(dropped) : undefined);
+    const note = droppedPreamble(count, filesTouched(dropped), this.requestToCarry(dropped));
     if (!dropAt || estimateMessageTokens({ role: 'user', content: note }) >= estimateTokens(dropped)) {
       // Told once until the conversation has grown: every turn of the run would end up here again.
       if (this.stuckAt < 0 || s.messages.length >= this.stuckAt + 4) {
@@ -894,13 +897,20 @@ export class Agent {
     return cut;
   }
 
-  /** The text of the last request the user sent within `messages` (kept verbatim when the turn itself is folded). */
-  private lastRequestText(messages: Msg[]): string | undefined {
-    const at = lastUserIndex(messages);
-    if (at < 0) return undefined;
-    const c = messages[at].content;
-    if (typeof c === 'string') return c;
-    return Array.isArray(c) ? c.map((p) => ('text' in p ? p.text : '')).join('\n') : undefined;
+  /**
+   * The user's latest request, when `folded` (the start of the conversation) takes it away from the kept part: its
+   * text, or the verbatim copy an earlier brief carried. The new brief keeps it word for word.
+   */
+  private requestToCarry(folded: Msg[]): string | undefined {
+    const all = this.session.messages;
+    const latest = lastUserIndex(all);
+    if (latest >= folded.length) return undefined; // the request is in the kept part
+    if (latest >= 0) {
+      const c = all[latest].content;
+      if (typeof c === 'string') return c;
+      return Array.isArray(c) ? c.map((p) => ('text' in p ? p.text : '')).join('\n') : undefined;
+    }
+    return carriedRequest(folded.find(isCompactPreamble));
   }
 
   /**
@@ -946,7 +956,9 @@ export class Agent {
   private async summarize(cfg: AppConfig, client: OpenAI | null, model: string, folded: Msg[], focus: string | undefined, signal: AbortSignal): Promise<string> {
     const limit = contextLimit(cfg);
     const plan = latestPlan(this.session);
-    const extras = { focus, tasks: this.session.tasks, plan: plan ? { title: plan.title, status: plan.status } : undefined };
+    // Words, not tokens: about three quarters of a token each; the brief has to stay well under what it replaces.
+    const maxWords = Math.round(Math.min(summaryMaxTokens(limit), estimateTokens(folded) * 0.5) * 0.75);
+    const extras = { focus, maxWords, tasks: this.session.tasks, plan: plan ? { title: plan.title, status: plan.status } : undefined };
     const maxTokens = summaryMaxTokens(limit);
     const timeout = AbortSignal.any([signal, AbortSignal.timeout(SUMMARY_TIMEOUT_MS)]);
     const ask = async (budget: number): Promise<string> => {

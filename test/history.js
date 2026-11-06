@@ -127,9 +127,11 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const ud2 = path.join(tmp, 'ud2');
   h = open(ud2, { config: { permissionMode: 'bypass' } });
   const B = h.rt.foregroundId();
+  // Long enough that a brief is smaller than what it folds: compaction refuses a summary that saves nothing.
+  const filler = ' ' + 'The quick brown fox jumps over the lazy dog. '.repeat(40);
   for (const n of [1, 2, 3, 4]) {
-    state.replies.push({ content: `answer ${n}` });
-    h.rt.send(B, `question ${n}`);
+    state.replies.push({ content: `answer ${n}${filler}` });
+    h.rt.send(B, `question ${n}${filler}`);
     await waitFor(() => !h.rt.isRunning(B), 5000, `run ${n}`);
   }
   const before = structuredClone(h.store.get(B).messages);
@@ -145,7 +147,9 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const trunc = recs.find((r) => r.type === 'messages.truncate');
   check('2: the truncate record holds the length and the count removed', trunc && trunc.data.length === 4 && trunc.data.removed === 4, trunc && trunc.data);
   const repl = recs.find((r) => r.type === 'messages.replace');
-  check('2: the replace record holds the reason, the new messages and the count removed', repl && repl.data.reason === 'compaction' && repl.data.removed === 4 && repl.data.messages.length === 1, repl && { ...repl.data, messages: repl.data.messages.length });
+  // A compaction folds the older part into a brief and keeps the last request onward word for word.
+  const kept = repl ? repl.data.messages.slice(1) : [];
+  check('2: the replace record holds the reason, the new messages (the brief, then the kept tail) and the count removed', repl && repl.data.reason === 'compaction' && repl.data.removed === 4 && String(repl.data.messages[0].content).startsWith('[Context compacted]') && kept.length >= 1 && kept.every((m) => before.some((b) => same(b, m))), repl && { ...repl.data, messages: repl.data.messages.length });
   check('2: replaying the log from nothing reproduces the current messages exactly', same(replayConversation(recs).messages, h.store.get(B).messages));
   // A replace with any other reason (the compaction engineer's 'prune') is logged and replayed the same way
   const pruned = h.store.get(B).messages.map((m) => ({ ...m }));

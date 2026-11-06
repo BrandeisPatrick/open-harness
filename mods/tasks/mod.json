@@ -1,0 +1,14 @@
+{
+  "protocol": 1,
+  "id": "tasks",
+  "name": "Tasks",
+  "version": "1.0.0",
+  "description": "The agent's task list for the session on screen, as it works through it.",
+  "author": "OpenAgent",
+  "license": "MIT",
+  "icon": "list-checks",
+  "permissions": ["session:read"],
+  "contributes": {
+    "views": [{ "id": "main", "title": "Tasks", "entry": "panel.html", "seat": "rail", "order": 30 }]
+  }
+}

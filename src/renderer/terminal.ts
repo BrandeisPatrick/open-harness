@@ -8,6 +8,7 @@ import type { WebLinksAddon } from '@xterm/addon-web-links';
 import type { TerminalApi, TerminalTabInfo } from '../shared/types';
 import { escapeHtml } from './dom.js';
 import { icon } from './icons.js';
+import { tilde } from './home.js';
 
 export interface TerminalPaneOptions {
   /** #terminal-pane: holds the strip, the host and the empty state */
@@ -197,11 +198,6 @@ function readTheme(): ITheme {
     scrollbarSliderActiveBackground: thumbHover,
     ...(dark ? DARK_ANSI : LIGHT_ANSI),
   };
-}
-
-/** "/Users/me/src/app" → "~/src/app" */
-function tilde(p: string): string {
-  return (p || '').replace(/^\/Users\/[^/]+/, '~');
 }
 
 const domId = (id: string): string => id.replace(/[^\w-]/g, '_');

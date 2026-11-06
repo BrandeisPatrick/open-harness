@@ -2,6 +2,7 @@
 
 import { basename, dirname, escapeHtml } from './dom.js';
 import { highlight, langFromPath } from './highlight.js';
+import { tilde } from './home.js';
 
 export type DiffKind = 'add' | 'del' | 'ctx';
 export interface DiffRow {
@@ -81,7 +82,7 @@ export function setDiffBaseDir(dir: string): void {
 }
 function displayPath(path: string): string {
   if (baseDir && path.startsWith(baseDir + '/')) return path.slice(baseDir.length + 1);
-  return path.replace(/^\/Users\/[^/]+(?=\/)/, '~');
+  return tilde(path);
 }
 
 /** A file header (dir dim, basename bold) for diffs and file tool rows. */

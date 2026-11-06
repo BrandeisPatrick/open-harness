@@ -6,6 +6,7 @@
 
 import { copyWithFeedback } from './dom.js';
 import { icon, type IconName } from './icons.js';
+import { homeDir } from './home.js';
 
 export type SetupId = 'ollama' | 'model' | 'folder';
 
@@ -59,6 +60,8 @@ export interface SetupStrip {
 /** /Users/me (and /home/me, /root, /var/root): where the working directory starts on a fresh install (os.homedir()). */
 export function isHomeFolder(dir: string): boolean {
   const d = String(dir ?? '').trim().replace(/\/+$/, '');
+  const home = homeDir();
+  if (home) return d === home;
   return /^\/Users\/[^/]+$/.test(d) || /^\/home\/[^/]+$/.test(d) || d === '/root' || d === '/var/root';
 }
 

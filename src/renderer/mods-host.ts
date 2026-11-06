@@ -12,6 +12,7 @@ import { icon, isIconName, type IconName } from './icons.js';
 import { renderMarkdown } from './markdown.js';
 import { closeMenu, openMenu, type MenuSection } from './popover.js';
 import { appendTranscriptItem, registerTranscriptItem } from './transcript-items.js';
+import { homeDir } from './home.js';
 import {
   ERR,
   HELLO_TIMEOUT_MS,
@@ -1179,9 +1180,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
   });
 
   function home(): string {
-    const cwd = deps.config()?.workingDirectory ?? '';
-    const m = /^(\/Users\/[^/]+|\/home\/[^/]+)/.exec(cwd);
-    return m ? m[1] : '';
+    return homeDir(deps.config()?.workingDirectory ?? '');
   }
 
   const SCOPE_WORDS: Record<string, string> = { user: 'your mods folder', project: 'this project', bundled: 'the app' };

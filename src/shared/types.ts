@@ -542,6 +542,8 @@ export interface ArtifactsApi {
 
 /** The API the preload script exposes to the renderer as window.oc */
 export interface OpenHarnessApi {
+  /** The user's home folder: what "~" stands for in the paths the window shows */
+  homeDir: string;
   getConfig(): Promise<AppConfig>;
   setConfig(cfg: AppConfig): Promise<AppConfig>;
   chooseDirectory(): Promise<string | null>;

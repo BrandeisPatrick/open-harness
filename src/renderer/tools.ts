@@ -8,6 +8,7 @@ import { icon, type IconName } from './icons.js';
 import { artifactIcon } from './artifacts.js';
 import { cleanTasks, taskProgress, taskSnapshot, taskSummary } from './tasks.js';
 import { AGENT_TOOLS, agentApproval, agentArgFromApproval, agentArgFromResult, agentBrief, agentStatusVerb, agentToolLabel, agentToolMeta, isDeniedResult } from './tool-labels.js';
+import { homeDir, tilde } from './home.js';
 
 export type Args = Record<string, unknown>;
 
@@ -345,8 +346,6 @@ function cwdVariants(): string[] {
   return v;
 }
 
-const HOME_RE = /^\/Users\/[^/]+/;
-
 /** A path for display: relative to the working directory, ~ for home, middle-truncated past `max` with the file name kept. */
 export function displayPath(p: string, max = 56): string {
   let s = (p ?? '').trim();
@@ -358,7 +357,7 @@ export function displayPath(p: string, max = 56): string {
       break;
     }
   }
-  s = s.replace(HOME_RE, '~');
+  s = tilde(s);
   if (s.length <= max) return s;
   const parts = s.split('/');
   if (parts.length <= 2) return '…' + s.slice(-(max - 1));
@@ -380,9 +379,9 @@ export function stripCwd(text: string): string {
 
 // ---------- Paths that open in the editor ----------
 
-/** /Users/me (or /home/me) when the working directory is inside it: what "~" stands for in a tool's path */
+/** What "~" stands for in a tool's path: the home folder, or the one the working directory sits in when it is not known */
 function homeOf(dir: string): string {
-  return /^\/(?:Users|home)\/[^/]+/.exec(dir)?.[0] ?? '';
+  return homeDir(dir);
 }
 
 /**

@@ -6,6 +6,7 @@
 import type { ProjectRules, RulesApi } from '../shared/types';
 import { escapeHtml } from './dom.js';
 import { icon } from './icons.js';
+import { tilde } from './home.js';
 
 export type RuleKind = 'program' | 'reason' | 'edits' | 'mcp';
 
@@ -29,7 +30,7 @@ export function ruleCount(r: ProjectRules): number {
 }
 
 function shortDir(p: string): string {
-  return p.replace(/^\/Users\/[^/]+/, '~').replace(/(.)\/+$/, '$1');
+  return tilde(p).replace(/(.)\/+$/, '$1');
 }
 
 export interface RulesPanelElements {

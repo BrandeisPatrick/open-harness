@@ -77,6 +77,7 @@ import { createModsHost, type ModPaneTabs } from './mods-host.js';
 import { createSettingsPage } from './settings-page.js';
 import { agentApproval, setNameLookup } from './tool-labels.js';
 import { unframe } from './origin.js';
+import { tilde } from './home.js';
 
 declare global {
   interface Window {
@@ -2398,7 +2399,7 @@ modelBtn.onclick = async () => {
 
 /** "~/Documents/open-harness"; long paths keep the root and the last two folders: "~/…/audit/playground". */
 function shortPath(p: string): string {
-  const home = p.replace(/^\/Users\/[^/]+/, '~');
+  const home = tilde(p);
   if (home.length <= 40) return home;
   const parts = home.split('/');
   return parts.length > 4 ? `${parts[0]}/…/${parts.slice(-2).join('/')}` : home;

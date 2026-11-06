@@ -6,6 +6,7 @@ import type { McpApi, McpScope, McpServerConfig, McpServerInfo, McpStatus, McpTo
 import type { ConfirmOptions } from './changes.js';
 import { escapeHtml } from './dom.js';
 import { icon } from './icons.js';
+import { tilde } from './home.js';
 
 export const MCP_STATUS_LABEL: Record<McpStatus, string> = {
   connected: 'Connected',
@@ -113,7 +114,7 @@ export interface McpPanel {
 const slug = (key: string): string => key.replace(/[^A-Za-z0-9_-]+/g, '-');
 
 function shortDir(p: string): string {
-  return p.replace(/^\/Users\/[^/]+/, '~').replace(/\/+$/, '');
+  return tilde(p).replace(/\/+$/, '');
 }
 
 function toolHtml(t: McpToolInfo): string {

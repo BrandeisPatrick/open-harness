@@ -6,6 +6,7 @@ import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, Bounds, Browse
 ipcRenderer.setMaxListeners(200);
 
 const api: OpenHarnessApi = {
+  homeDir: process.env.HOME ?? '',
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
   setConfig: (cfg: AppConfig): Promise<AppConfig> => ipcRenderer.invoke('config:set', cfg),
   chooseDirectory: (): Promise<string | null> => ipcRenderer.invoke('cwd:choose'),

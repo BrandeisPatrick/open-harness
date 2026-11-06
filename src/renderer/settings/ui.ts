@@ -3,6 +3,7 @@
 
 import { escapeHtml, h } from '../dom.js';
 import { icon, type IconName } from '../icons.js';
+import { tilde } from '../home.js';
 
 export interface RowOptions {
   /** Unique on the page; the row is #sp-row-<id> */
@@ -252,7 +253,7 @@ export function chip(label: string, tone: 'neutral' | 'warn' | 'danger' | 'ok' =
 
 /** "~/Documents/x" for a path under the home folder. */
 export function tildePath(p: string): string {
-  return String(p ?? '').replace(/^\/Users\/[^/]+/, '~');
+  return tilde(String(p ?? ''));
 }
 
 /** Runs an action with the button busy; a failure shows under the row (or is returned). */

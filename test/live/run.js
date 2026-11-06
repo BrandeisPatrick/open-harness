@@ -34,6 +34,7 @@ const SCRIPTS = [
   { name: 'subagents' },
   { name: 'names' },
   { name: 'tool-rows' },
+  { name: 'quiet' },
   { name: 'mods', shots: 'env' },
   { name: 'mods-look', shots: 'env' },
   { name: 'type-scale' },

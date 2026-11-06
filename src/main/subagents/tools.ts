@@ -1,4 +1,5 @@
-// The model's side: start sub-sessions, message other sessions, list and read them, and merge a finished one.
+// The model's side: start sub-sessions, message other sessions, find, list and read them, merge a finished one, and
+// rename this session.
 
 import type { Tool, ToolContext, ToolResult } from '../tools/types';
 import { SubagentError, type Subagents } from './service';
@@ -45,18 +46,18 @@ export function subagentTools(svc: Subagents): Tool[] {
   const send: Tool = {
     name: 'session_send',
     description:
-      'Send a message to another session, named by id or exact title. It starts a turn there, or waits behind the turn in progress. Use it to answer or steer one of your sub-sessions, or to tell your parent session something it needs before you finish. Messages to sessions other than your parent or your own sub-sessions need the user\'s approval.',
+      'Send a message to another session, named by its id or its name (written loosely: case, quotes, punctuation, the start of the name or a small typo are fine). It starts a turn there, or waits behind the turn in progress. Use it to answer or steer one of your sub-sessions, or to tell your parent session something it needs before you finish. Messages to sessions other than your parent or your own sub-sessions need the user\'s approval.',
     parameters: {
       type: 'object',
       properties: {
-        to: { type: 'string', description: 'The session id, or its exact title' },
+        to: { type: 'string', description: 'The session id, or its name' },
         message: { type: 'string', description: 'What to say; the receiving session sees who sent it' },
       },
       required: ['to', 'message'],
     },
     run: (args: { to?: unknown; message?: unknown }, ctx: ToolContext) =>
       guarded(async () => {
-        const target = svc.resolve(String(args?.to ?? ''));
+        const target = svc.resolve(String(args?.to ?? ''), { from: ctx.sessionId });
         const message = String(args?.message ?? '').trim();
         if (!message) throw new SubagentError('the message is empty.');
         if (target.id === ctx.sessionId) throw new SubagentError('that is this session.');
@@ -73,10 +74,16 @@ export function subagentTools(svc: Subagents): Tool[] {
 
   const list: Tool = {
     name: 'session_list',
-    description: 'List the sessions related to this one (parent, sub-sessions, forks), then other recent sessions: id, title, relation, state (running, waiting for the user, idle, merged) and the first line of the last reply.',
-    parameters: { type: 'object', properties: {} },
+    description:
+      'List sessions: id, name, relation, state (running, waiting for the user, idle, merged), folder, last activity and the first line of the last reply. ' +
+      'Without a query: the sessions related to this one (parent, sub-sessions, forks), then the most recent others. With a query: the sessions whose id or name matches it, out of every session, best match first; use it to find a session the user names.',
+    parameters: { type: 'object', properties: { query: { type: 'string', description: 'A session name (or part of it, or an id) to search every session for' } } },
     readOnly: true,
-    run: (_args: unknown, ctx: ToolContext) => guarded(() => ({ content: svc.listText(ctx.sessionId) })),
+    run: (args: { query?: unknown }, ctx: ToolContext) =>
+      guarded(() => {
+        const query = typeof args?.query === 'string' ? args.query.trim() : '';
+        return { content: query ? svc.searchText(ctx.sessionId, query) : svc.listText(ctx.sessionId) };
+      }),
   };
 
   const read: Tool = {
@@ -85,13 +92,14 @@ export function subagentTools(svc: Subagents): Tool[] {
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'The session id (or its exact title)' },
+        id: { type: 'string', description: 'The session id, or its name' },
         last: { type: 'number', description: 'How many of its last messages, default 6, at most 30' },
       },
       required: ['id'],
     },
     readOnly: true,
-    run: (args: { id?: unknown; last?: unknown }) => guarded(() => ({ content: svc.readText(svc.resolve(String(args?.id ?? '')).id, args?.last === undefined ? 6 : Number(args.last)) })),
+    run: (args: { id?: unknown; last?: unknown }, ctx: ToolContext) =>
+      guarded(() => ({ content: svc.readText(svc.resolve(String(args?.id ?? ''), { from: ctx.sessionId }).id, args?.last === undefined ? 6 : Number(args.last)) })),
   };
 
   const merge: Tool = {
@@ -99,16 +107,16 @@ export function subagentTools(svc: Subagents): Tool[] {
     description:
       'Merge a finished sub-session or fork of this session into this one: a summary of what it did (for a fork: since it split off) comes back as the result, and it is marked merged. Merge one before relying on its result. ' +
       'Only the conversation is merged: file changes need no merging, since all sessions work in the same folder (this is not a git merge). Refused while it is running or when it was merged already.',
-    parameters: { type: 'object', properties: { id: { type: 'string', description: 'The sub-session or fork, by id (or exact title)' } }, required: ['id'] },
+    parameters: { type: 'object', properties: { id: { type: 'string', description: 'The sub-session or fork, by id or name' } }, required: ['id'] },
     run: (args: { id?: unknown }, ctx: ToolContext) =>
       guarded(async () => {
         const ref = String(args?.id ?? '');
         const related = [...svc.children(ctx.sessionId), ...svc.forks(ctx.sessionId)];
         let id: string;
         try {
-          id = svc.resolve(ref, related).id;
+          id = svc.resolve(ref, { among: related, from: ctx.sessionId }).id;
         } catch {
-          id = svc.resolve(ref).id; // not related: let the merge say why it is refused
+          id = svc.resolve(ref, { from: ctx.sessionId }).id; // not related: let the merge say why it is refused
         }
         const r = await svc.mergeFull(ctx.sessionId, id, { viaTool: true });
         if (!r.ok) return { content: `Error: ${r.error}` };
@@ -116,5 +124,20 @@ export function subagentTools(svc: Subagents): Tool[] {
       }),
   };
 
-  return [spawn, send, list, read, merge];
+  const rename: Tool = {
+    name: 'session_rename',
+    description:
+      'Rename this session (only this one), when the user asks to call it something. The name shows in the sidebar and the title bar, generated titles no longer replace it, and other sessions can find this one by it. Needs no approval.',
+    parameters: { type: 'object', properties: { name: { type: 'string', description: 'The new name, a few words' } }, required: ['name'] },
+    // Not a change to the project: plan mode offers it too
+    readOnly: true,
+    run: (args: { name?: unknown }, ctx: ToolContext) =>
+      guarded(() => {
+        const { session, namesakes } = svc.rename(ctx.sessionId, String(args?.name ?? ''));
+        const warn = svc.namesakeWarning(namesakes);
+        return { content: `Renamed this session to "${session.title}" (id ${session.id}).${warn ? ` ${warn}` : ' Other sessions can find it by that name.'}` };
+      }),
+  };
+
+  return [spawn, send, list, read, merge, rename];
 }

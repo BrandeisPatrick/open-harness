@@ -1720,7 +1720,7 @@ async function registeredCommand(name: string): Promise<CommandInfo | undefined>
   return (await registeredCommands()).find((c) => c.name === name);
 }
 
-/** Runs a registered command and applies what it asks for: a notice or error row, a message to send, composer text. */
+/** Runs a registered command and applies what it asks for: a notice or error row, composer text, the title edit, a message to send. */
 async function runCommand(cmd: CommandInfo, args: string): Promise<void> {
   let res: CommandResult;
   try {
@@ -1734,6 +1734,7 @@ async function runCommand(cmd: CommandInfo, args: string): Promise<void> {
     restoreComposerText(res.insert);
     if (!dialogOpen()) inputEl.focus();
   }
+  if (res.editTitle === true) startTitleEdit();
   if (typeof res.send === 'string' && res.send.trim()) {
     const typed = inputEl.value;
     inputEl.value = res.send;

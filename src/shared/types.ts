@@ -365,6 +365,8 @@ export interface CommandResult {
   send?: string;
   /** Put this text into the composer */
   insert?: string;
+  /** Start the inline rename of the session's title in the top bar */
+  editTitle?: boolean;
 }
 
 export interface BrowserState {

@@ -8,6 +8,7 @@ import type { Snapshot } from './changes';
 import { isCompactPreamble } from './compact';
 import { imagesByCall } from './images/store';
 import { FILE_BLOCK_RE, mentionedPaths } from './mentions';
+import { PROPOSAL_ID_RE, PROPOSAL_TOOLS } from './dreaming/names';
 
 export type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -48,6 +49,13 @@ export interface Session {
   turns?: Turn[];
   /** The agent's task list (update_tasks) */
   tasks?: TaskItem[];
+  /**
+   * The names of the only tools this session's agent is offered, whatever the permission mode (a dream's session:
+   * reading and proposing, nothing that changes a file). Unset: the usual tools.
+   */
+  tools?: string[];
+  /** Set on a dream's session: the dream, and how many of its proposals wait for the user (see dreaming/) */
+  dream?: { id: string; waiting?: number };
 }
 
 /** A checkpoint: where a user message sits in `messages` and what files looked like when the agent first touched them after it. */
@@ -220,6 +228,7 @@ export function toMeta(s: Session): SessionMeta {
     parentId: s.parentId,
     origin: s.origin,
     mergedInto: s.mergedInto,
+    dream: s.dream ? { id: s.dream.id, waiting: s.dream.waiting ?? 0 } : undefined,
   };
 }
 
@@ -287,6 +296,12 @@ function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], 
             items.push({ role: 'artifact', artifact });
             continue;
           }
+        }
+        // A dream's proposal is its card (a refused one stays a tool row with the reason)
+        const proposal = ok && PROPOSAL_TOOLS.includes(call.function.name) ? PROPOSAL_ID_RE.exec(result)?.[1] : undefined;
+        if (proposal) {
+          items.push({ role: 'proposal', proposalId: proposal, name: call.function.name, args: call.function.arguments, result });
+          continue;
         }
         // A show_image call is the image itself (a failed one stays a tool row with its error)
         const image = call.function.name === 'show_image' && ok ? shown?.get(call.id) : undefined;

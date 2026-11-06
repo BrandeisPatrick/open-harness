@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0
+
+The app can now look back over your sessions, once a day or when you ask, and suggest what would make the agent work better for you: skills, mods and memory, each for you to apply or dismiss.
+
+### Dreaming
+
+A dream is a quiet session that reads what happened in your recent sessions and suggests how the agent could work better for you: a **skill** for a chore you asked for more than once, a **memory** line for a preference you stated or a correction you had to make, a **mod** for a view you keep asking for.
+
+- **It proposes; you decide.** A dream can read and search your sessions and look at the project, nothing more: no shell, no edits, no browser. Each suggestion says why, quotes your own words and links the sessions it came from. The app applies a suggestion, never the model, and only into the skill folders, the mod folders and the instructions files, never through a link that leads out of the project; a suggestion that changes something that exists says so and shows the difference, and anything applied can be reverted. A new mod stays off until you turn it on.
+- **Three modes.** Approve (the default): the dream finishes its review, then each suggestion waits for Apply or Dismiss. Auto: suggestions are applied as they are made and the dream lists what it did. Plan: the suggestions become one plan in the dream's session; approving it applies them all, and answering in the session changes the plan.
+- **Once a day, or when you ask.** Off until you turn it on in Settings → Dreaming; then once a day at the time you pick (03:00 by default). A dream missed while the app was closed runs once at the next launch, unless one ran in the last 20 hours. To run one by hand, press the run icon in Settings → Dreaming, or type `/dream` in a session for that session's project.
+- **What it reads.** One dream per project with new activity since its last dream, at most five per run, each given a digest of its sessions that the app puts together from the history log (what you asked, the final replies, the tool activity with failures and denied approvals, your `#` memory lines), sized to 40% of the model's context window; what does not fit waits for the next dream. A dream that finds nothing worth suggesting says so, and that is a good result.
+- **Where it shows.** A Dreaming row in the sidebar under Customize, with a dot while suggestions wait. Settings → Dreaming lists every dream with its state and its suggestions (Apply, Dismiss, Apply all, Revert) and opens its session, where each suggestion is a card. The sidebar shows a dream's session only while it waits for you or is on screen. A notification when a nightly dream leaves suggestions for you.
+- A dream sends parts of your past conversations to the model you configured and uses tokens: about as many as a long message per project.
+- `settings.json` can set `dreaming.daily`, `dreaming.time`, `dreaming.mode`, `dreaming.skills`, `dreaming.mods` and `dreaming.memory`. A `#` memory line is now also recorded in the session's history log.
+
+### Fixes
+
+- The "Saved" tick in Settings no longer lands on a row's description: it shows above the control.
+
 ## 0.3.0
 
 The window is rebuilt around reading: a measured type scale, one calm column, a chat bar that is a single bar, and tool activity that folds into a line. Mods can now restyle the conversation and the chat bar as looks, with a space-opera set to try, and any session can find another by its name.

@@ -15,6 +15,7 @@ import { appendInstruction } from './instructions';
 import { listOllamaModels, modelCapabilities } from './providers';
 import { rewindSession, toMeta, toTranscript } from './sessions';
 import { loadSkills, toInfo } from './skills';
+import type { HistoryService } from './services';
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGES = 8;
@@ -87,6 +88,7 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
         ...next,
         ollama: { ...current.ollama, ...next.ollama },
         portkey: { ...current.portkey, ...next.portkey },
+        dreaming: { ...current.dreaming, ...next.dreaming },
         mcpServers: current.mcpServers,
         mcpTrusted: current.mcpTrusted,
         allowRules: current.allowRules,
@@ -209,7 +211,12 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
   // The app's folder is the folder of the session on screen, so these read it.
   ipcMain.handle('skills:list', () => loadSkills(cfg().workingDirectory, app.appRoot).map(toInfo));
   ipcMain.handle('files:search', (_e, query: string, limit?: number) => searchFiles(cfg().workingDirectory, String(query ?? ''), Number(limit) || 50));
-  ipcMain.handle('instructions:append', (_e, text: string) => appendInstruction(cfg().workingDirectory, String(text ?? '')));
+  ipcMain.handle('instructions:append', (_e, text: string) => {
+    const added = appendInstruction(cfg().workingDirectory, String(text ?? ''));
+    // In the session's log too, so a dream sees what the user asked to remember (and does not propose it again)
+    app.service<HistoryService>('history')?.record(fg(), 'memory', { text: String(text ?? '').replace(/\s+/g, ' ').trim(), file: added.path });
+    return added;
+  });
 
   const projectRules = (): ProjectRules => {
     const cwd = cfg().workingDirectory;

@@ -52,4 +52,8 @@ export interface Ctx {
   chooseFolder(): Promise<boolean>;
   openShortcuts(): void;
   currentSessionId(): string;
+  /** Closes Settings and brings a session on screen */
+  openSession(id: string): void;
+  /** A session's title, when the window knows it */
+  sessionTitle(id: string): string | undefined;
 }

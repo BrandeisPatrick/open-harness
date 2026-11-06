@@ -21,6 +21,7 @@ import { setupSchedules } from './schedules';
 import { setupSubagents } from './subagents';
 import { setupRemote } from './remote';
 import { setupPower } from './power';
+import { setupDreaming } from './dreaming';
 
 // The app has been renamed (OpenCoder, then OpenAgent, now Open Harness): on the first launch under a new name the
 // old data folder (settings, sessions, history, artifacts, …) is carried over so nothing is lost. Runs before
@@ -32,7 +33,7 @@ import { setupPower } from './power';
   const prev = ['OpenAgent', 'opencoder', 'OpenCoder'].map((n) => path.join(path.dirname(next), n)).find((p) => fs.existsSync(path.join(p, 'config.json')));
   if (!prev) return;
   fs.mkdirSync(next, { recursive: true });
-  for (const entry of ['sessions', 'artifacts', 'history', 'trash', 'schedules.json', 'skill-usage.json', 'mods-data', 'backgrounds', 'remote.json', 'config.json']) {
+  for (const entry of ['sessions', 'artifacts', 'history', 'trash', 'schedules.json', 'dreaming.json', 'skill-usage.json', 'mods-data', 'backgrounds', 'remote.json', 'config.json']) {
     const from = path.join(prev, entry);
     const to = path.join(next, entry);
     if (!fs.existsSync(from) || fs.existsSync(to)) continue;
@@ -170,6 +171,8 @@ function updateBadge(a: AppHost): void {
 function notify(a: AppHost, sessionId: string, ev: AgentEvent): void {
   const w = a.window();
   if (!w || !a.config().notifications || !Notification.isSupported()) return;
+  // A dream says for itself when it has something for the user (dreaming.ts), not every time it ends
+  if (a.store.get(sessionId)?.origin === 'dream') return;
   const onScreen = sessionId === a.runtime.foregroundId();
   if (w.isFocused() && onScreen) return;
   const name = a.store.get(sessionId)?.title || 'New session';
@@ -267,6 +270,7 @@ app.whenReady().then(() => {
   setupSubagents(a);
   setupRemote(a);
   setupPower(a);
+  setupDreaming(a);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

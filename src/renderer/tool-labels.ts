@@ -27,6 +27,7 @@ export const AGENT_TOOLS = new Set([
   'session_spawn', 'session_send', 'session_list', 'session_read', 'session_merge', 'session_rename',
   'schedule_create', 'schedule_list', 'schedule_update', 'schedule_delete',
   'mod_check', 'submit_plan',
+  'history_read', 'history_search', 'propose_skill', 'propose_memory', 'propose_mod', 'withdraw_proposal',
 ]);
 
 const str = (a: Args, k: string): string => (typeof a[k] === 'string' ? (a[k] as string).trim() : typeof a[k] === 'number' ? String(a[k]) : '');
@@ -115,6 +116,16 @@ export function agentToolLabel(name: string, a: Args, now = Date.now()): AgentRo
       return row('Check mod', id || 'all mods', 'puzzle', Boolean(id));
     }
     case 'submit_plan': return row('Plan', str(a, 'title'), 'clipboard');
+    // A dream's tools (a proposal that was made is a card; these rows are what was refused, and the reading)
+    case 'history_read': return row('Read history', sessionName(str(a, 'session')), 'eye');
+    case 'history_search': return row('Search history', str(a, 'query'), 'search');
+    case 'propose_skill': return row('Propose skill', str(a, 'name'), 'sparkles');
+    case 'propose_memory': {
+      const add = Array.isArray(a.add) ? a.add.filter((x): x is string => typeof x === 'string') : [];
+      return row('Propose memory', short(add[0] ?? '', 60), 'file-text');
+    }
+    case 'propose_mod': return row('Propose mod', str(a, 'name') || str(a, 'id'), 'puzzle');
+    case 'withdraw_proposal': return row('Withdraw proposal', str(a, 'id'), 'undo');
     default: return null;
   }
 }
@@ -226,6 +237,16 @@ export function agentToolMeta(name: string, a: Args, result: string): AgentMeta 
     }
     case 'submit_plan':
       return { text: /^Plan "/.test(r) ? 'submitted' : 'not submitted' };
+    case 'history_read':
+      return (m = /^Session "[\s\S]*?" \([^)]+\), (\d+) messages:/.exec(r)) ? { text: `${plural(Number(m[1]), 'message')} in all` } : { text: 'read' };
+    case 'history_search':
+      return /^No session matches/.test(r) ? { text: 'no match' } : { text: plural(r.split('\n').filter(Boolean).length, 'session') };
+    case 'propose_skill':
+    case 'propose_memory':
+    case 'propose_mod':
+      return /^Recorded proposal/.test(r) ? { text: /the app applied it/.test(r) ? 'applied' : 'proposed' } : { text: 'not proposed' };
+    case 'withdraw_proposal':
+      return { text: /^Withdrew/.test(r) ? 'withdrawn' : 'not withdrawn' };
     default:
       return null;
   }
@@ -246,6 +267,12 @@ export function agentStatusVerb(name: string): string | null {
     case 'schedule_delete': return 'Deleting the schedule…';
     case 'mod_check': return 'Checking the mod…';
     case 'submit_plan': return 'Writing the plan…';
+    case 'history_read': return 'Reading a session…';
+    case 'history_search': return 'Searching the sessions…';
+    case 'propose_skill': return 'Proposing a skill…';
+    case 'propose_memory': return 'Proposing memory…';
+    case 'propose_mod': return 'Proposing a mod…';
+    case 'withdraw_proposal': return 'Withdrawing a proposal…';
     default: return null;
   }
 }

@@ -3,7 +3,7 @@
 // tagged with its session, so the runtime always knows what is in flight in each session (LiveState) and whether it
 // needs the user (SessionStatus). No Electron here: the headless tests drive it directly.
 
-import type { AgentEvent, AppConfig, ApprovalScope, ImageAttachment, LiveState, SendResult, SessionMeta, SessionOrigin, SessionStatus, StoredRules } from '../shared/types';
+import type { AgentEvent, AppConfig, ApprovalScope, ImageAttachment, LiveState, PlanInfo, SendResult, SessionMeta, SessionOrigin, SessionStatus, StoredRules } from '../shared/types';
 import { Agent, PLAN_APPROVED_TEXT, type SendOptions } from './agent';
 import type { App } from './app';
 import type { ArtifactStore } from './artifacts';
@@ -39,8 +39,14 @@ export interface RuntimeOptions {
    */
   updateConfig?: (change: (current: AppConfig) => AppConfig) => AppConfig;
   /** Registered prompt sections (app.prompt), joined */
-  prompt?: (info: { cwd: string; mode: AppConfig['permissionMode']; sessionId: string }) => string;
+  prompt?: (info: { cwd: string; mode: AppConfig['permissionMode']; sessionId: string; essential?: boolean; restricted?: boolean }) => string;
 }
+
+/**
+ * Takes over the decision on a plan that is not a build plan (a dream's): returns true when it handled it, and the
+ * runtime then neither switches the permission mode nor starts a build run.
+ */
+export type PlanClaim = (sessionId: string, plan: PlanInfo, decision: 'build-ask' | 'build-acceptEdits' | 'keep') => boolean;
 
 export interface CreateOptions {
   /** Default: the app's folder */
@@ -94,6 +100,7 @@ export class SessionRuntime {
   private readonly listListeners = new Set<() => void>();
   private readonly foregroundListeners = new Set<(id: string, prev: string) => void>();
   private sink: ((sessionId: string, ev: AgentEvent) => void) | null = null;
+  private readonly planClaims = new Set<PlanClaim>();
 
   constructor(private readonly opts: RuntimeOptions) {
     this.browser = browserHandle(opts.browser);
@@ -292,13 +299,28 @@ export class SessionRuntime {
     return true;
   }
 
-  /** Decides a proposed plan of a session; the build decisions switch the permission mode and start the build run. */
+  /** A feature that decides plans of its own (see PlanClaim). */
+  claimPlans(fn: PlanClaim): Disposer {
+    this.planClaims.add(fn);
+    return () => this.planClaims.delete(fn);
+  }
+
+  /**
+   * Decides a proposed plan of a session; the build decisions switch the permission mode and start the build run.
+   * A plan a feature claims (a dream's) is marked decided here and handed to it instead.
+   */
   respondPlan(sessionId: string, planId: string, decision: 'build-ask' | 'build-acceptEdits' | 'keep'): void {
     if (decision !== 'build-ask' && decision !== 'build-acceptEdits' && decision !== 'keep') throw new Error(`Unknown plan decision ${decision}`);
     const agent = this.agentFor(sessionId);
     if (agent.running) throw new Error('Wait for the current run to finish before deciding on the plan.');
-    agent.respondPlan(planId, decision);
+    const plan = agent.respondPlan(planId, decision);
     this.planDecided(sessionId);
+    for (const claim of [...this.planClaims]) {
+      if (!claim(sessionId, plan, decision)) continue;
+      const s = this.opts.store.get(sessionId);
+      if (s) this.dispatch(sessionId, { type: 'session_changed', session: toMeta(s) });
+      return;
+    }
     if (decision !== 'keep') this.opts.updateConfig?.((c) => ({ ...c, permissionMode: decision === 'build-ask' ? 'ask' : 'acceptEdits' }));
     const s = this.opts.store.get(sessionId);
     if (s) this.dispatch(sessionId, { type: 'session_changed', session: toMeta(s) });
@@ -400,6 +422,8 @@ export class SessionRuntime {
         break;
       case 'plan_proposed':
         l.planWaiting = true;
+        // A plan put on a session between runs (a dream's) waits for the user from now on
+        status = !this.isRunning(id);
         break;
       case 'run_end': {
         Object.assign(l, { running: false, startedAt: undefined, text: '', thinking: '' });

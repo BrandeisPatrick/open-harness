@@ -1,4 +1,4 @@
-// The sidebar: navigation rows (New session, Search, Scheduled, Customize), the sessions as a tree in day groups,
+// The sidebar: navigation rows (New session, Search, Scheduled, Customize, Dreaming), the sessions as a tree in day groups,
 // search across titles and conversations, and the footer (model chip, shortcuts, settings). The logic without the
 // DOM is in sidebar-model.ts; renderer.ts keeps the session list, the switch and the actions, and hands them in.
 
@@ -9,7 +9,7 @@ import { brandMark, icon } from './icons.js';
 import { basename, escapeHtml } from './dom.js';
 import { closeMenu, menuAnchoredTo, openMenu, type MenuSection } from './popover.js';
 import { bus } from './bus.js';
-import { rpc } from './rpc.js';
+import { onPush, rpc } from './rpc.js';
 import { ancestorsOf, groupOf, parentOf, shapeResults, shortDate, visibleRows, type Indicator, type Row, type SearchResult } from './sidebar-model.js';
 
 export interface SidebarDeps {
@@ -128,6 +128,8 @@ function indicatorHtml(ind: Indicator): string {
       return `<span class="trail-meta kind" data-tip="Sub-session">${icon('sub-session', 14)}</span>`;
     case 'schedule':
       return `<span class="trail-meta kind" data-tip="Scheduled run">${icon('clock', 14)}</span>`;
+    case 'dream':
+      return `<span class="trail-meta kind dream" data-tip="${ind.waiting ? 'Dream · waiting for you' : 'Dream'}">${icon('moon', 14)}${ind.waiting ? '<span class="status-dot attention" aria-label="Waiting for you"></span>' : ''}</span>`;
   }
 }
 
@@ -141,6 +143,8 @@ export function createSidebar(d: SidebarDeps): SidebarView {
   const clearBtn = $<HTMLButtonElement>('#search-clear');
   const scheduledRow = $<HTMLButtonElement>('#scheduled-row');
   const customizeRow = $<HTMLButtonElement>('#customize-row');
+  const dreamingRow = $<HTMLButtonElement>('#dreaming-row');
+  const dreamingDot = $<HTMLElement>('#dreaming-dot');
   const modelChip = $<HTMLButtonElement>('#model-chip');
   const modelLabel = $<HTMLElement>('#model-label');
   $<HTMLElement>('#model-mark').innerHTML = brandMark(18);
@@ -701,6 +705,16 @@ export function createSidebar(d: SidebarDeps): SidebarView {
 
   scheduledRow.addEventListener('click', () => d.openSettings('scheduled'));
   customizeRow.addEventListener('click', () => d.openSettings('mods'));
+  dreamingRow.addEventListener('click', () => d.openSettings('dreaming'));
+  /** A quiet dot on the row while a dream's proposals wait for the user */
+  const syncDreaming = (s: { waiting?: number } | null | undefined) => {
+    const n = Number(s?.waiting) || 0;
+    dreamingDot.hidden = n === 0;
+    dreamingRow.setAttribute('aria-label', n ? `Dreaming, ${n} suggestion${n === 1 ? '' : 's'} waiting` : 'Dreaming');
+    dreamingRow.dataset.tip = n ? `${n} suggestion${n === 1 ? '' : 's'} waiting for you` : '';
+    if (!n) delete dreamingRow.dataset.tip;
+  };
+  onPush('dreaming:changed', syncDreaming);
   modelChip.addEventListener('click', () => d.openSettings('model'));
 
   const syncModel = (c: AppConfig) => {
@@ -717,6 +731,13 @@ export function createSidebar(d: SidebarDeps): SidebarView {
   // Rows whose target is not in this build stay hidden.
   void probe(() => rpc('schedules.list')).then((ok) => (scheduledRow.hidden = !ok));
   void probe(() => rpc('mods.list')).then((ok) => (customizeRow.hidden = !ok));
+  void rpc('dreaming.get').then(
+    (s) => {
+      dreamingRow.hidden = false;
+      syncDreaming(s);
+    },
+    (err) => (dreamingRow.hidden = absent(err)),
+  );
   void probe(() => rpc('history.stats')).then((ok) => (has.export = ok));
 
   // A session brought on screen (a fork from the menu, a notification, a search result) is shown where it sits; the

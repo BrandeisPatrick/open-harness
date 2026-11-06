@@ -102,13 +102,33 @@ interface PromptParts {
   sections: string;
 }
 
-/** `cfg.workingDirectory` is the session's folder here (see Agent.sessionConfig). `extra` is the app's registered sections. */
-function systemPrompt(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = ''): string {
-  const p = systemPromptParts(cfg, skills, mcp, extra);
+/**
+ * `cfg.workingDirectory` is the session's folder here (see Agent.sessionConfig). `extra` is the app's registered
+ * sections. `own`: the session has a tool set of its own (Session.tools), named here instead of the usual ones.
+ */
+function systemPrompt(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = '', own?: string[]): string {
+  const p = systemPromptParts(cfg, skills, mcp, extra, own);
   return p.base + p.skills + p.mcp + p.mode + p.userExtra + p.instructions.map((i) => i.text).join('') + p.sections;
 }
 
-function systemPromptParts(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = ''): PromptParts {
+/**
+ * A session with a tool set of its own (a dream) is told what it has and nothing about the shell, the browser, the
+ * permission mode, MCP servers or skills it cannot use; its sections (`extra`) say what it is for. The instructions
+ * files are left out too: what such a session needs of them, its first message carries.
+ */
+function ownToolsPromptParts(cfg: AppConfig, extra: string, own: string[]): PromptParts {
+  const base = `You are Open Harness, running on the user's Mac.
+Working directory: ${cfg.workingDirectory}
+Today: ${new Date().toISOString().slice(0, 10)}
+
+In this session you have only these tools: ${own.join(', ')}. You cannot run commands, change files, browse or start other sessions; do not say that you did.`;
+  const userExtra = cfg.systemPromptExtra ? `\n\n${cfg.systemPromptExtra}` : '';
+  const sections = extra.trim() ? `\n\n${extra.trim()}` : '';
+  return { base, skills: '', mcp: '', mode: '', userExtra, instructions: [], sections };
+}
+
+function systemPromptParts(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = '', own?: string[]): PromptParts {
+  if (own) return ownToolsPromptParts(cfg, extra, own);
   const base = `You are Open Harness, an autonomous coding agent running on the user's Mac.
 Working directory: ${cfg.workingDirectory}
 Today: ${new Date().toISOString().slice(0, 10)}
@@ -205,7 +225,7 @@ export interface AgentOptions {
   /** Extra tools offered next to the built-in and MCP ones (app.tools) */
   tools?: () => Tool[];
   /** Extra system-prompt text (app.prompt sections, already joined) */
-  prompt?: (info: { cwd: string; mode: PermissionMode; sessionId: string; essential?: boolean }) => string;
+  prompt?: (info: { cwd: string; mode: PermissionMode; sessionId: string; essential?: boolean; restricted?: boolean }) => string;
 }
 
 export class Agent {
@@ -295,9 +315,16 @@ export class Agent {
     return this.opts.foreground ? this.opts.foreground() : true;
   }
 
+  /** The tool names this session is limited to (Session.tools), or undefined for the usual tools. */
+  private ownTools(): string[] | undefined {
+    const own = this.session.tools;
+    return Array.isArray(own) ? own.filter((n) => typeof n === 'string') : undefined;
+  }
+
   private promptExtra(cfg: AppConfig): string {
     if (!this.opts.prompt) return '';
     try {
+      if (this.ownTools()) return this.opts.prompt({ cwd: cfg.workingDirectory, mode: cfg.permissionMode, sessionId: this.session.id, restricted: true });
       const essential = essentialToolsOnly(cfg);
       const text = this.opts.prompt({ cwd: cfg.workingDirectory, mode: cfg.permissionMode, sessionId: this.session.id, essential });
       return essential ? `${text}${text ? '\n\n' : ''}${ESSENTIAL_NOTE}` : text;
@@ -308,15 +335,35 @@ export class Agent {
   }
 
   private prompt(cfg: AppConfig, skills: Skill[]): string {
-    return systemPrompt(cfg, skills, this.mcp, this.promptExtra(cfg));
+    return systemPrompt(cfg, skills, this.mcp, this.promptExtra(cfg), this.ownToolNames(cfg));
   }
 
-  /** The tools a run in this mode offers: built-in, registered and MCP ones (plan mode: the read-only ones). */
+  /** The names of the tools a session with a tool set of its own really has (those it names that exist). */
+  private ownToolNames(cfg: AppConfig): string[] | undefined {
+    return this.ownTools() ? this.toolsFor(cfg).map((t) => t.name) : undefined;
+  }
+
+  /**
+   * The tools a run in this mode offers: built-in, registered and MCP ones (plan mode: the read-only ones). A session
+   * with a tool set of its own gets exactly the built-in and registered tools it names, in every mode, and never an
+   * MCP tool; scoped tools are offered to no other session.
+   */
   private toolsFor(cfg: AppConfig): Tool[] {
+    const registered = this.opts.tools?.() ?? [];
+    const own = this.ownTools();
+    if (own) {
+      const pool = [...allTools('ask'), ...allTools('plan'), ...registered];
+      const out: Tool[] = [];
+      for (const name of own) {
+        const t = pool.find((x) => x.name === name && !x.mcp);
+        if (t && !out.includes(t)) out.push(t);
+      }
+      return out;
+    }
     const mcpTools = this.mcp?.tools() ?? [];
     const plan = cfg.permissionMode === 'plan';
     const essential = essentialToolsOnly(cfg);
-    const extraTools = (this.opts.tools?.() ?? []).filter((t) => !(essential && t.optional));
+    const extraTools = registered.filter((t) => !t.scoped && !(essential && t.optional));
     return [...allTools(cfg.permissionMode), ...(plan ? extraTools.filter((t) => t.readOnly) : extraTools), ...(plan ? mcpTools.filter((t) => t.mcp?.readOnly) : mcpTools)];
   }
 
@@ -668,7 +715,7 @@ export class Agent {
     const limit = contextLimit(cfg);
     const threshold = compactThreshold(cfg);
     const chars = (t: string) => (t ? Math.ceil(t.length / 4) : 0);
-    const parts = systemPromptParts(cfg, this.getSkills(cfg.workingDirectory), this.mcp, this.promptExtra(cfg));
+    const parts = systemPromptParts(cfg, this.getSkills(cfg.workingDirectory), this.mcp, this.promptExtra(cfg), this.ownToolNames(cfg));
     const noTools = cfg.provider === 'ollama' && this.toolSupport.get(`${cfg.ollama.baseURL}|${cfg.ollama.model}`) === false;
     const tools = noTools ? [] : this.toolsFor(cfg);
     const byServer = new Map<string, Tool[]>();

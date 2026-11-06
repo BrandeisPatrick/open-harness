@@ -2,7 +2,7 @@
 // Types only: a feature that is not installed (or not built yet) is simply absent, so callers check for undefined.
 
 import type { ContextBreakdown } from '../shared/context';
-import type { SearchHit } from '../shared/history';
+import type { HistoryRecord, SearchHit } from '../shared/history';
 import type { ImageInfo } from '../shared/images';
 import type { RemoteStatus } from '../shared/remote';
 import type { Schedule, ScheduleInput, SchedulePatch } from '../shared/schedules';
@@ -14,6 +14,8 @@ export interface HistoryService {
   /** Appends a record to a session's log */
   record(sessionId: string, type: string, data: unknown): void;
   search(query: string, opts?: { limit?: number; includeTrash?: boolean }): SearchHit[];
+  /** A session's log, oldest record first (empty when it has none) */
+  read(sessionId: string): HistoryRecord[];
 }
 
 /** app.service<ImagesService>('images') */

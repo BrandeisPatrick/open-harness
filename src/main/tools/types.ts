@@ -66,6 +66,8 @@ export interface Tool {
   readOnly?: boolean;
   /** Not essential: left out when the tool set is trimmed for a small context window (see AppConfig.toolSet) */
   optional?: boolean;
+  /** Offered only to a session whose own tool set (Session.tools) names it, never to the others (a dream's tools) */
+  scoped?: boolean;
   /** Set for tools an MCP server provides: which server, its own tool name and the annotations the approval rules use */
   mcp?: { server: string; scope: 'user' | 'project'; tool: string; readOnly: boolean; destructive: boolean };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

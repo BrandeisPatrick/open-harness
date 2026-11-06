@@ -29,9 +29,10 @@
 | `/send <name or id>: <message>` | Send a message to another session |
 | `/rename [new name]` | Rename this session; alone, it makes the title in the top bar editable |
 | `/schedules` | The scheduled tasks and their next run |
+| `/dream` | Dream now about this session's project (see Dreaming) |
 | a mod's commands | Listed in the menu with the mod's name |
 
-A message starting with `#` is added to the project's instructions file after a confirmation.
+A message starting with `#` is added to the project's instructions file after a confirmation (and recorded in the session's history log, where a dream sees it).
 
 ## Tools
 
@@ -50,6 +51,7 @@ A message starting with `#` is added to the project's instructions file after a 
 | `session_spawn` `session_send` `session_list` `session_read` `session_merge` | Sub-sessions and messages between sessions; `session_list` with a `query` finds sessions by name |
 | `session_rename` | Rename this session when you ask (no approval; the title is locked like a manual rename) |
 | `mod_check` | What is wrong with a mod the agent is writing |
+| `history_read` `history_search` `propose_skill` `propose_memory` `propose_mod` `withdraw_proposal` | A dream's session only (see Dreaming); no other session is offered them |
 | `mcp__<server>__<tool>` | MCP server tools |
 
 In the conversation each run of two or more calls in a turn is one line that says what it did, in the order it did it ("Read 3 files, ran 2 commands, edited a file"), with the lines that edits and writes added and removed and how many calls failed or were denied on its right; click it, or focus it and press Enter, to see the rows. While the turn runs the line names the call in flight. A waiting approval card stays in the open under the line; once decided it folds in with its call. A single call stays its own row. Settings → General → Tool activity (`toolActivity`: `summary`, the default, or `all`) shows every call as its own row instead.
@@ -68,6 +70,18 @@ Every tool is described to the model in every request. With a context window und
 ## Scheduled tasks
 
 A prompt that runs once at a time, every N minutes (five at least), or on a five-field cron rhythm in local time. Each run gets a session of its own, or is delivered into an existing session. Create them in the Scheduled tab or Settings → Scheduled, or ask the agent: every schedule it creates or re-times shows you an approval card first. Schedules run while the app is open; one that was missed by less than a day runs once at the next launch, never as a backlog. A run that needs approval waits for you like any other.
+
+## Dreaming
+
+A dream is a background session that reads what happened in recent sessions and proposes skills (a procedure you asked for more than once), mods (a view or status you keep asking for) and memory (preferences, corrections and facts, as lines in an instructions file). Settings → Dreaming, or the Dreaming row in the sidebar.
+
+- **When.** Off until you turn on "Dream every day"; then once a day at the time you pick (default 03:00, local time). A daily dream missed while the app was closed runs once after the next launch, unless a dream ran in the last 20 hours. By hand: the play button in Settings → Dreaming (stop it there while it runs), or `/dream` for the current session's project. One dream run at a time.
+- **What it reads.** One dream per project folder with activity since that project's last dream (dream sessions, the trash and sessions without a message of yours are left out), most recently active first, at most five per run. Its first message is a digest the app builds from the history log: for each session its id, title, date and origin, then each of your messages and each final reply, clipped, the tool activity in a few words with failures and denied approvals, and the `#` memory lines; plus the skills, mods and instructions files that exist. It is sized to 40% of the context window, oldest first; what does not fit waits, and the project's cursor moves only past what the dream read (and only when it ended without an error).
+- **What it can do.** Read: `read_file`, `glob`, `grep`, `list_directory`, `session_list`, `session_read`, `history_read` (any part of one session, tool results cut short) and `history_search` (every session's text). Propose: `propose_skill`, `propose_memory`, `propose_mod` (only those for what Look for has on), `withdraw_proposal`. Nothing else, in any permission mode: no shell, no edits, no browser, no MCP tools, no sub-sessions, no schedules. Every proposal carries why and the sessions it is based on (ids that must exist).
+- **Modes.** Approve (default): the dream finishes, then each proposal waits for Apply or Dismiss. Auto: a proposal is applied when it is made. Plan: nothing is applied; at the end the proposals become one plan in the dream's session (a "Dream plan" card, Apply all or Keep planning); approving it applies them all without another model call, and an answer in the session lets the dream withdraw or replace proposals and make a new plan.
+- **Applying.** The app writes, never the model: a skill becomes `<project>/.open-harness/skills/<name>/SKILL.md` or `~/.open-harness/skills/<name>/SKILL.md`; memory lines go into the project's instructions file (the first of `OPENHARNESS.md`, `OPENAGENT.md`, `OPENCODER.md`, `AGENTS.md`, `CLAUDE.md`, else a new `OPENHARNESS.md`) or `~/.open-harness/OPENHARNESS.md`; a mod's folder is written to `<project>/.open-harness/mods/<id>/` or `~/.open-harness/mods/<id>/`, checked like every mod first, and stays off until you turn it on. Nothing else can be written. A proposal that changes an existing skill, mod or memory line must say so (and shows the difference); Apply refuses when the file changed since it was proposed. Revert puts back what was replaced (a file or folder as it was; memory line by line if you edited the file since). A proposal that holds what looks like a key, token or password, or a key from your settings, is refused.
+- **Where it shows.** Settings → Dreaming lists the dreams, newest first: when, which project, how it started, its state (running, waiting for you, plan ready, applied, nothing to suggest, failed with the reason), and opened, its proposals with Apply, Dismiss, Apply all and Revert; Open shows its session, where each proposal is a card. The sidebar lists a dream's session only while it waits for you or is on screen, marked with a moon; it stays in history, search and the trash like any session. A daily dream that leaves proposals waiting sends a notification (when notifications are on).
+- A dream sends parts of your past conversations to the configured model and uses tokens.
 
 ## Mods
 
@@ -97,7 +111,7 @@ Settings → Remote control turns on a small web page, served by the app, for fo
 
 Settings is the place for all of it. On disk:
 
-- Data folder `~/Library/Application Support/Open Harness/`: `config.json`, `sessions/`, `history/`, `trash/`, `artifacts/` (with each session's images), `schedules.json`, mod storage.
+- Data folder `~/Library/Application Support/Open Harness/`: `config.json`, `sessions/`, `history/`, `trash/`, `artifacts/` (with each session's images), `schedules.json`, `dreaming.json` (the dreams, their proposals, what applying replaced, the per-project cursors), mod storage.
 - Config folder `~/.open-harness/` (or `OPEN_HARNESS_CONFIG_DIR`): `settings.json`, `skills/`, `mods/`, `OPENHARNESS.md`.
 - In a project: `.open-harness/settings.json`, `.open-harness/skills/`, `.open-harness/mods/`, `.mcp.json`, and an instructions file (`OPENHARNESS.md`, `AGENTS.md` or `CLAUDE.md`).
 
@@ -115,7 +129,7 @@ A project's `.mcp.json` servers, its mods and its `settings.json` all stay off u
 }
 ```
 
-- Settable: `provider`, `ollama.*`, `portkey.*`, `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
+- Settable: `provider`, `ollama.*`, `portkey.*`, `dreaming.*` (`daily`, `time` as `"HH:MM"`, `mode`: `auto`, `approve` or `plan`, and `skills`, `mods`, `memory`), `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
 - `env` is applied to the process environment, so a key can live there instead of in `config.json` (`PORTKEY_API_KEY` is a fallback for the gateway key). `${VAR}` and `${VAR:-default}` are expanded in every string. Variables a file set are put back when the file stops applying.
 - **A project's file needs your approval.** Until you trust it in Settings → Configuration files nothing in it applies, and an edit withdraws the approval. A notice in the chat tells you one is waiting.
 - A field a file sets is read-only in Settings and is never written to `config.json`. Changes made while the app runs (the mode chip, the model chip) last until the files are read again.

@@ -1,7 +1,7 @@
 // Messages that were not typed here (a sub-session's report, a message from another session, a merged summary, a
 // scheduled task) reach the conversation inside a frame written for the model: who sent it, its id, what to do next.
 // The transcript shows what was said; the frame's news about the sender goes into the label above the bubble.
-// The frames are written in src/main/subagents/service.ts and src/main/schedules/service.ts; test/origin.js runs
+// The frames are written in src/main/subagents/service.ts, src/main/schedules/service.ts and src/main/dreaming/digest.ts; test/origin.js runs
 // their real output through this, so a change of wording there shows up as a failing test rather than as a raw frame
 // in the chat. A text that does not match is shown as it is.
 import type { MessageOrigin } from '../shared/types.js';
@@ -17,6 +17,8 @@ const REPORT = /^\[Sub-session "[\s\S]*?" \([\w-]+\) finished a turn: ([^\]\n]+)
 const MESSAGE = /^\[Message from (?:another session|session "[\s\S]*?" \([\w-]+\)[^\]\n]*)\]\n([\s\S]*)$/;
 const MERGED = /^\[Merged from "[\s\S]*?"\]\n\n([\s\S]*)$/;
 const SCHEDULED = /^\[Scheduled task "[\s\S]*?" \([^\n]*\)\. This message was sent automatically[^\n]*\]\n[^\n]*\n\n([\s\S]*)$/;
+/** A dream's digest (src/main/dreaming/digest.ts): the frame line and the line that asks for the review */
+const DREAM = /^\[Dream\] [^\n]*\n[^\n]*\n([\s\S]*)$/;
 
 export function unframe(origin: MessageOrigin | undefined, text: string): Unframed {
   const raw = String(text ?? '');
@@ -31,6 +33,9 @@ export function unframe(origin: MessageOrigin | undefined, text: string): Unfram
   } else if (origin === 'schedule') {
     const scheduled = SCHEDULED.exec(raw);
     if (scheduled) return { text: scheduled[1].trim() };
+  } else if (origin === 'dream') {
+    const dream = DREAM.exec(raw);
+    if (dream) return { text: dream[1].trim() };
   }
   return { text: raw };
 }

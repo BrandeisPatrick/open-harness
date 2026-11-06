@@ -153,6 +153,7 @@ export function toolLabel(name: string, a: Args): ToolLabel {
       const title = str(a, 'title').trim();
       return { verb: 'Artifact', arg: short(title, 80), title: title || undefined, icon: artifactIcon(str(a, 'kind')), mono: false };
     }
+    case 'show_image': return { verb: 'Show image', arg: displayPath(str(a, 'path')), title: str(a, 'path'), icon: 'image', mono: true };
     case 'update_tasks': {
       const summary = taskSummary(cleanTasks(a.tasks));
       return { verb: 'Tasks', arg: short(summary, 80), title: summary.length > 80 ? summary : undefined, icon: 'list-checks', mono: false };
@@ -272,6 +273,7 @@ export function statusVerb(name: string): string {
   if (name === 'terminal_stop') return 'Stopping the command…';
   if (name === 'create_artifact') return 'Making the artifact…';
   if (name === 'update_tasks') return 'Updating tasks…';
+  if (name === 'show_image') return 'Showing the image…';
   if (name.startsWith('browser_')) return 'Browsing…';
   const mcp = mcpParts(name);
   if (mcp) return `Calling ${mcp.server}…`;
@@ -279,7 +281,7 @@ export function statusVerb(name: string): string {
 }
 
 const KNOWN_TOOLS = new Set([
-  'read_file', 'write_file', 'edit_file', 'list_directory', 'glob', 'grep', 'bash', 'skill', 'create_artifact', 'update_tasks',
+  'read_file', 'write_file', 'edit_file', 'list_directory', 'glob', 'grep', 'bash', 'skill', 'create_artifact', 'update_tasks', 'show_image',
   'terminal_run', 'terminal_read', 'terminal_list', 'terminal_stop',
   'browser_navigate', 'browser_get_text', 'browser_read_page', 'browser_find', 'browser_click',
   'browser_type', 'browser_press_key', 'browser_scroll', 'browser_screenshot', 'browser_eval', 'browser_wait_for',
@@ -802,6 +804,8 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
   const body = document.createElement('div');
   body.className = 'tool-body';
   el.append(summary, body);
+  // show_image has no row: the image itself appears in the reply (images.ts). Only a failure shows the row.
+  if (name === 'show_image') el.hidden = true;
 
   // Bodies that are known before the tool runs
   let editRows: DiffRow[] | undefined;
@@ -838,6 +842,13 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
     finish(res: ToolResult) {
       if (!card.running) return;
       card.running = false;
+      if (name === 'show_image') {
+        if (res.ok && /^Shown to the user:/.test(res.result)) {
+          el.remove();
+          return;
+        }
+        el.hidden = false;
+      }
       const status = el.querySelector<HTMLElement>('.tool-status')!;
       status.className = `tool-status ${res.ok ? 'ok' : 'err'}`;
       if (!res.ok) status.innerHTML = icon('circle-alert');
@@ -903,11 +914,20 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
         }
         body.appendChild(img);
         el.open = true;
+        // A small copy at the right end of the summary line; it opens the lightbox (images.ts) and stays visible collapsed
+        const thumb = document.createElement('img');
+        thumb.className = 'tool-thumb';
+        thumb.src = res.image;
+        thumb.alt = img.alt;
+        thumb.title = 'Open the image';
+        thumb.draggable = false;
+        summary.appendChild(thumb);
       }
     },
     interrupt() {
       if (!card.running) return;
       card.running = false;
+      el.hidden = false;
       const status = el.querySelector<HTMLElement>('.tool-status')!;
       status.className = 'tool-status err';
       status.innerHTML = icon('circle-alert');

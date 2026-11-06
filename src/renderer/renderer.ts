@@ -3798,6 +3798,8 @@ Object.assign(window.__oc_debug!, { sidebar: sidebarView.debug });
 // [feature:tasks]
 
 // [feature:images]
+import { setupImageView } from './images.js';
+setupImageView({ messages: messagesEl, openLightbox, showError: showInlineError });
 
 // [feature:history]
 

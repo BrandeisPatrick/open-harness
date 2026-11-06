@@ -119,7 +119,7 @@ export const browserTools: Tool[] = [
     parameters: { type: 'object', properties: {} },
     run: async (_args, ctx) => {
       const shot = await ctx.browser.screenshot();
-      return { content: `Screenshot saved to ${shot.path} (${shot.width}x${shot.height}).`, image: shot.dataUrl };
+      return { content: `Screenshot saved to ${shot.path} (${shot.width}x${shot.height}). To put it in your reply for the user, pass this path to show_image.`, image: shot.dataUrl };
     },
   },
   {

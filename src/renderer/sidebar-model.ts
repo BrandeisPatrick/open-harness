@@ -142,14 +142,15 @@ export type Indicator =
 export function indicatorFor(
   meta: SessionMeta,
   status: SessionStatus | undefined,
-  opts: { current?: boolean; children?: number; collapsed?: boolean; hiddenHot?: boolean } = {},
+  opts: { current?: boolean; children?: number; collapsed?: boolean; hiddenHot?: boolean; nested?: boolean } = {},
 ): Indicator {
   const st = status ?? meta.status;
   if (st?.running) return { kind: 'running' };
   if (st?.attention) return { kind: 'attention', reason: st.attention };
   if (st?.unread && !opts.current) return { kind: 'unread' };
   if (opts.children) return opts.collapsed ? { kind: 'family', count: opts.children, hot: Boolean(opts.hiddenHot) } : { kind: 'family' };
-  if (meta.origin === 'fork' || (meta.forkedFrom && meta.origin !== 'spawn' && meta.origin !== 'schedule')) return { kind: 'fork' };
+  // A fork sitting under the session it was forked from needs no mark: its place in the tree already says so.
+  if (meta.origin === 'fork' || (meta.forkedFrom && meta.origin !== 'spawn' && meta.origin !== 'schedule')) return opts.nested ? null : { kind: 'fork' };
   if (meta.origin === 'spawn') return { kind: 'spawn' };
   if (meta.origin === 'schedule') return { kind: 'schedule' };
   return null;
@@ -224,6 +225,7 @@ export function visibleRows(metas: SessionMeta[], o: VisibleOptions): Row[] {
           children: n.descendants,
           collapsed: isCollapsed,
           hiddenHot: isCollapsed && hot(n, status, currentId),
+          nested: n.depth > 0,
         }),
         merged: Boolean(n.meta.mergedInto),
       });

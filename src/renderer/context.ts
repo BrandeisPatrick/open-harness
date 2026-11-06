@@ -142,7 +142,10 @@ export function createContextMeter(o: ContextMeterOptions): ContextMeter {
       .then((b) => {
         if (my !== fetchSeq || !menu || !menuAnchoredTo(btn)) return;
         breakdown = b && typeof b === 'object' && Array.isArray(b.slices) ? b : null;
+        // The list makes the popover taller: update() re-renders with the new header and places it again, so it
+        // grows upwards from the meter instead of running past the bottom of the window.
         menu.setHeader(header());
+        menu.update(sections());
       })
       .catch((err: unknown) => {
         if (/No handler registered|Unknown (?:RPC )?method|unknown method/i.test(String((err as Error)?.message ?? err))) breakdownKnown = false;

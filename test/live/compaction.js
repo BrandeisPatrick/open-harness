@@ -74,7 +74,8 @@ const FILLER = 'This line is filler text that pads the file so that reading it t
       await app.evaluate(`document.querySelector('#messages > .compaction').open = false`);
       await app.click('#context-meter');
       await app.waitFor(`Boolean(document.querySelector('.popover.context-menu .ctx-slices'))`, 10_000, 'the breakdown in the meter popover');
-      await sleep(200);
+      // Let the popover finish its fade-in and settle its position before measuring it.
+      await sleep(800);
       await app.screenshotOf(path.join(shots, `meter-popover-${theme}.png`), '.popover.context-menu', 16);
       const rows = await app.evaluate(`[...document.querySelectorAll('.popover.context-menu .ctx-slice')].map((r) => r.innerText.replace(/\\s+/g, ' ').trim())`);
       await app.key('Escape');

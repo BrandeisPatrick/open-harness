@@ -830,7 +830,7 @@ export class Agent {
     const pruned = cfg.pruneToolResults !== false ? this.prune(PRUNE_NORMAL, true) : 0;
     const tail = limit * TAIL_FRACTION;
     let cut = this.cutFor(tail, limit);
-    if (!cut && reason === 'auto' && over()) {
+    if (!cut && over()) {
       // The last turn alone is too big. Shortening its older tool output keeps the most (the heads stay) without a
       // model call; only if that is not enough is the start of the turn folded, with the request kept verbatim.
       if (cfg.pruneToolResults !== false) {
@@ -868,7 +868,7 @@ export class Agent {
     } else if (!cut) error = 'Nothing to compact yet.';
     if (!over()) return pruned > 0 ? { ok: true } : { ok: false, error: error ?? 'Nothing to compact yet.' };
     // Never leave the session over the limit: shorten every old tool result, then drop the oldest messages.
-    const why = error ? `The summary could not be produced (${error.replace(/\.$/, '')})` : this.autoCompactFailed ? 'A summary could not be produced earlier in this run' : 'No summary could be made';
+    const why = trySummary && error ? `The summary could not be produced (${error.replace(/\.$/, '')})` : this.autoCompactFailed ? 'A summary could not be produced earlier in this run' : 'Nothing could be summarised';
     const hard = cfg.pruneToolResults !== false ? this.prune(PRUNE_HARD, false) : 0;
     if (hard > 0 && !over()) {
       this.emit({ type: 'error', kind: 'notice', message: `${why}, so old tool output was shortened further instead (${formatTokens(hard)} tokens cleared).` });

@@ -306,7 +306,7 @@ const resetHome = () => {
     rpc(f, 'mods.setEnabled', 'alpha', true);
     check('and back on', byId('alpha').state === 'on' && !f.app.config().mods.disabledBundled.includes('alpha'));
 
-    // A bundled mod with styles (a theme, the compact chat bar) restyles the whole app, so it starts off
+    // A bundled mod with styles (a theme) restyles the whole app, so it starts off
     writeMod(f.roots.bundled, 'tinted', man('tinted', { contributes: { styles: ['theme.css'] } }), { 'theme.css': ':root{--accent:blue}' });
     rpc(f, 'mods.reload');
     check('a bundled styles mod starts off, and its styles are not served', byId('tinted').state === 'off' && !rpc(f, 'mods.styles').some((s) => s.key === 'tinted'));

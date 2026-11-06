@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### A calmer window to read in
+
+Chatting with an agent means reading a lot of text, so the window now gives the words room and keeps everything else quiet.
+
+- **One type scale, the system font everywhere.** Replies, your messages, tool and status lines and what you type are 15 px on 21 px lines; rows, menus, buttons and inputs 14 px; headings in the rail, notes and counts 13 px; date groups, captions and badges 12 px. Nothing is smaller than 12 px but keyboard keys and the terminal. Headings in a reply are the body size in semibold, not big headlines.
+- **A reading column.** The transcript is one centred column, 736 px at most, with 16 px between blocks. Tool activity is a quiet muted line with its chevron after the words; cards (the task list, plans, artifacts) are a light hairline with no shadow; your message is a soft grey bubble on the right; inline code is a small chip without a border.
+- **The chat bar is one bar.** A plus on the left, the text, and one action on the right: a return glyph that sends, or while a run is going a stop square (with text typed, Enter queues it for the agent's next step). Attached pictures sit inside the bar above the text, 120 px each. Under the bar a quiet row shows the model, the permission mode (in colour only for Plan and Bypass) and a context ring whose tooltip has the percentage. This was the bundled "Compact chat bar" mod; it is the app's own look now and the mod is gone (a profile that had it on just ignores the entry).
+- **More air, fewer boxes.** A 44 px top bar with the folder beside the title, sidebar rows on a 34 px pitch with clear space above each date group, rail sections separated by one hairline with regular-weight headings, rows on a 32 px pitch in the rail mods, and Settings rows with their title and description 24 px apart.
+- **For mod authors**: the type scale is in the kit (`--fs-ui`, `--fs-small`, `--fs-micro`, `--fs-body`, `--fs-code` and their line heights; see [docs/mods.md](docs/mods.md)), `harness.css` pages use it (rows 14 px, `h-item` 32 px tall, `h-title` no longer uppercase), and `.h-md` reads like a reply.
+
 ### Sessions
 
 - **Find a session by its name.** From any session, name another one in plain words ("read the session called deploy fix", "tell tcg fork to stop"): the agent and the commands find it among all your sessions, not only the related and recent ones. The name may be written loosely (case, quotes, punctuation, the start of it, a small typo). When several sessions fit, a related one wins; otherwise you get the list to pick from.

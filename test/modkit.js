@@ -643,7 +643,6 @@ async function readyPage(hello = HELLO) {
     'side-chat': { seat: 'tab', permissions: ['model', 'session:read', 'session:send'] },
     scheduled: { seat: 'tab', permissions: ['schedules', 'session:control'] },
     backgrounds: { seat: 'background', views: ['aurora', 'constellation', 'grid', 'dusk'], permissions: [] },
-    'composer-pill': { styles: ['composer.css'], permissions: [] },
     'theme-midnight': { styles: ['theme.css'], permissions: [] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
@@ -730,7 +729,7 @@ async function readyPage(hello = HELLO) {
     check('scheduled: a local time becomes ISO with an offset that means the same moment', at && /^2026-11-06T09:00:00[+-]\d\d:\d\d$/.test(at) && new Date(Date.parse(at)).getHours() === 9, at);
   }
 
-  // --- The look mods: backgrounds, the compact chat bar, the Midnight theme ----------------------------------
+  // --- The look mods: backgrounds and the Midnight theme ------------------------------------------------------
   {
     const read = (f) => fs.readFileSync(path.join(ROOT, 'mods', f), 'utf8');
     const noComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -749,16 +748,6 @@ async function readyPage(hello = HELLO) {
     const settings = Object.fromEntries((man.contributes.settings || []).map((s) => [s.key, s]));
     check('backgrounds: settings intensity (subtle, medium, vivid) and speed (slow, normal)', same(settings.intensity && settings.intensity.options, ['subtle', 'medium', 'vivid']) && same(settings.speed && settings.speed.options, ['slow', 'normal']));
     check('backgrounds: asks for no permissions', same(man.permissions, []));
-
-    // The compact chat bar: CSS only, every rule scoped to the composer, tokens instead of colours
-    const pill = read('composer-pill/composer.css');
-    const pillRules = rules(pill);
-    const outside = pillRules.filter(([sel]) => !sel.split(',').every((s) => /^\s*#(composer|attach-btn|send-btn)\b/.test(s)));
-    check('composer-pill: every rule is scoped to the composer', pillRules.length > 10 && outside.length === 0, outside.map((r) => r[0]));
-    const colours = pillRules.flatMap(([sel, body]) => [...body.matchAll(/(?:^|;)\s*(color|background|border-color|background-color)\s*:\s*([^;]+)/g)].map((m) => [sel, m[2].trim()])).filter(([, v]) => !/^(var\(|transparent|none|currentColor)/.test(v));
-    check('composer-pill: colours come from tokens', colours.length === 0, colours);
-    check('composer-pill: keeps the focus ring, the drop highlight and the disabled send state', /#composer:has\(#input:focus\)::before/.test(pill) && /#composer\.dragging::before/.test(pill) && /#send-btn:disabled/.test(pill));
-    check('composer-pill: adds no controls (no content other than the send glyph)', (pill.match(/content:/g) || []).length === 2);
 
     // Midnight: tokens only, the app's three selectors, and contrast measured from the file itself
     const theme = read('theme-midnight/theme.css');

@@ -76,7 +76,7 @@
   let pal = null;
   function readPalette() {
     const dark = root.getAttribute('data-theme') === 'dark' || (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    const page = rgb(token('--bg-100'), dark ? [38, 38, 36] : [250, 249, 245]);
+    const page = rgb(token('--bg-100'), dark ? [24, 24, 24] : [255, 255, 255]);
     const glow = (GLOW[settings.glow] || GLOW.blue)[dark ? 'dark' : 'light'];
     // Dark: the page's colour pulled towards deep blue-black space. Light: the page's colour with a cool cast.
     const space = dark ? mix(page, [6, 9, 20], 0.72) : mix(page, [226, 234, 246], 0.45);

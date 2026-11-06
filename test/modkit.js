@@ -644,6 +644,7 @@ async function readyPage(hello = HELLO) {
     scheduled: { seat: 'tab', permissions: ['schedules', 'session:control'] },
     backgrounds: { seat: 'background', views: ['aurora', 'constellation', 'grid', 'dusk'], permissions: [] },
     'theme-midnight': { styles: ['theme.css'], permissions: [] },
+    'theme-paper': { styles: ['theme.css'], permissions: [] },
     hyperspace: { seat: 'background', views: ['starfield'], looks: { holo: 'conversation', cockpit: 'composer' }, permissions: ['session:read'] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
@@ -752,35 +753,59 @@ async function readyPage(hello = HELLO) {
     check('backgrounds: settings intensity (subtle, medium, vivid) and speed (slow, normal)', same(settings.intensity && settings.intensity.options, ['subtle', 'medium', 'vivid']) && same(settings.speed && settings.speed.options, ['slow', 'normal']));
     check('backgrounds: asks for no permissions', same(man.permissions, []));
 
-    // Midnight: tokens only, the app's three selectors, and contrast measured from the file itself
-    const theme = read('theme-midnight/theme.css');
-    const themeRules = rules(theme);
-    check('theme-midnight: only the three selectors the app declares its tokens with', same(themeRules.map((r) => r[0]), [':root', ':root:not([data-theme="light"])', ':root[data-theme="dark"]']) && /@media \(prefers-color-scheme: dark\)/.test(theme), themeRules.map((r) => r[0]));
-    const decls = themeRules.map(([, body]) => Object.fromEntries(body.split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()])));
-    check('theme-midnight: sets nothing but custom properties', decls.every((d) => Object.keys(d).every((k) => k.startsWith('--'))));
-    check('theme-midnight: the two dark blocks are the same', same(decls[1], decls[2]));
+    // The app's own palette, Midnight and Paper: tokens only, the app's three selectors, and contrast measured from the files
     const appCss = fs.readFileSync(path.join(ROOT, 'src/renderer/styles.css'), 'utf8');
+    const tokenBlocks = (css) => rules(css).filter((r) => /^:root/.test(r[0])).map(([sel, body]) => [sel, Object.fromEntries(body.split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()]))]);
+    const appBlocks = tokenBlocks(appCss.slice(0, appCss.indexOf('/* ---------- Base')));
     const appDark = rules(appCss.slice(appCss.indexOf('@media (prefers-color-scheme: dark)'), appCss.indexOf('/* ---------- Base')))[0][1];
     const appDarkNames = [...appDark.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]).filter((n) => !/^--(git|diff)-/.test(n));
-    check('theme-midnight: sets every dark token the app sets (git and diff colours aside)', appDarkNames.every((n) => n in decls[2]), appDarkNames.filter((n) => !(n in decls[2])));
     const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
     const lum = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); };
     const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-    const resolve = (d, name) => { let v = d[name]; for (let i = 0; i < 4 && v && /^var\(/.test(v); i++) v = d[/var\((--[\w-]+)/.exec(v)[1]]; return v; };
-    for (const [label, d] of [['light', decls[0]], ['dark', decls[2]]]) {
+    // A token's value in a scheme: the theme's own declaration, else the app's for that scheme (var() followed)
+    const resolve = (d, name, base) => { const get = (n) => (n in d ? d[n] : base[n]); let v = get(name); for (let i = 0; i < 6 && v && /^var\(/.test(v); i++) v = get(/var\((--[\w-]+)/.exec(v)[1]); return v; };
+    const contrast = (label, d, base, opts) => {
       const low = [];
-      for (const surface of ['--bg-000', '--bg-100', '--bg-200', '--bg-300']) {
-        for (const [fg, min] of [['--text-100', 4.5], ['--text-200', 4.5], ['--text-400', 3], ['--accent', 4.5], ['--danger', 4.5], ['--success', 4.5]]) {
-          const r = ratio(resolve(d, fg), resolve(d, surface));
+      for (const surface of opts.surfaces) {
+        for (const [fg, min] of opts.text) {
+          const r = ratio(resolve(d, fg, base), resolve(d, surface, base));
           if (r < min) low.push(`${fg} on ${surface}: ${r.toFixed(2)}`);
         }
       }
-      for (const tok of ['--tok-kw', '--tok-str', '--tok-num', '--tok-com']) {
-        const r = ratio(resolve(d, tok), resolve(d, '--code-bg'));
+      for (const tok of opts.syntax === false ? [] : ['--tok-kw', '--tok-str', '--tok-num', '--tok-com']) {
+        const r = ratio(resolve(d, tok, base), resolve(d, '--code-bg', base));
         if (r < (tok === '--tok-com' ? 3 : 4.5)) low.push(`${tok} on --code-bg: ${r.toFixed(2)}`);
       }
-      if (ratio('#ffffff', resolve(d, '--accent')) < 3) low.push('white on --accent');
-      check(`theme-midnight ${label}: text 4.5:1 and muted 3:1 on every surface, syntax colours on code, white on the accent 3:1`, low.length === 0, low);
+      const btn = ratio(resolve(d, '--button-text', base), resolve(d, '--button-fill', base));
+      if (btn < opts.button) low.push(`--button-text on --button-fill: ${btn.toFixed(2)}`);
+      check(`${label}: text and muted text on every surface, syntax colours on code, the confirming button's label on its fill`, low.length === 0, low);
+    };
+    // The app: no colour fills a button; text 4.5:1 and muted text 4.5:1 on every surface; links, red and green 4.5:1 on the page and cards
+    const [appLight, appDarkDecls] = [appBlocks[0][1], appBlocks[1][1]];
+    for (const [label, d] of [['light', appLight], ['dark', { ...appLight, ...appDarkDecls }]]) {
+      contrast(`the app ${label}`, d, d, { surfaces: ['--bg-000', '--bg-100', '--bg-200', '--bg-300', '--bubble', '--code-bg', '--field-bg'], text: [['--text-100', 4.5], ['--text-200', 4.5], ['--text-400', 4.5]], button: 4.5 });
+      contrast(`the app ${label}, coloured text`, d, d, { surfaces: ['--bg-000', '--bg-100', '--bg-200', '--bg-300'], text: [['--accent', 4.5], ['--danger', 4.5], ['--success', 4.5], ['--warn', 4.5]], button: 4.5 });
+      const fill = resolve(d, '--button-fill', d);
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(fill.slice(i, i + 2), 16));
+      check(`the app ${label}: the confirming button's fill is a grey`, r === g && g === b, fill);
+    }
+    for (const [mod, opts] of [
+      ['theme-midnight', { light: { surfaces: ['--bg-000', '--bg-100', '--bg-200', '--bg-300'], text: [['--text-100', 4.5], ['--text-200', 4.5], ['--text-400', 3], ['--accent', 4.5], ['--danger', 4.5], ['--success', 4.5]], button: 4.5 } }],
+      // Paper is 0.4.0's palette as it was: its terracotta is 3:1 under white labels and as link text, and its syntax,
+      // red and green colours are 0.4.0's too; only the text tokens are held to the line here
+      ['theme-paper', { light: { surfaces: ['--bg-000', '--bg-100', '--bg-200', '--bg-300'], text: [['--text-100', 4.5], ['--text-200', 4.5], ['--text-400', 3]], button: 3, syntax: false } }],
+    ]) {
+      const theme = read(`${mod}/theme.css`);
+      const themeRules = rules(theme);
+      check(`${mod}: only the three selectors the app declares its tokens with`, same(themeRules.map((r) => r[0]), [':root', ':root:not([data-theme="light"])', ':root[data-theme="dark"]']) && /@media \(prefers-color-scheme: dark\)/.test(theme), themeRules.map((r) => r[0]));
+      const decls = themeRules.map(([, body]) => Object.fromEntries(body.split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()])));
+      check(`${mod}: sets nothing but custom properties`, decls.every((d) => Object.keys(d).every((k) => k.startsWith('--'))));
+      check(`${mod}: the two dark blocks are the same`, same(decls[1], decls[2]));
+      check(`${mod}: sets every dark token the app sets (git and diff colours aside)`, appDarkNames.every((n) => n in decls[2]), appDarkNames.filter((n) => !(n in decls[2])));
+      const lightNames = Object.keys(appLight).filter((n) => n.startsWith('--') && !/^--(git|diff|fs|lh|font|mono|r|sidebar|col|shadow|backdrop)(-|$)/.test(n));
+      check(`${mod}: sets every colour token the app sets in light`, lightNames.every((n) => n in decls[0]), lightNames.filter((n) => !(n in decls[0])));
+      contrast(`${mod} light`, decls[0], appLight, opts.light);
+      contrast(`${mod} dark`, { ...decls[0], ...decls[2] }, { ...appLight, ...appDarkDecls }, opts.light);
     }
   }
 

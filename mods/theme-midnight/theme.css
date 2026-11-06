@@ -22,8 +22,14 @@
  * 4. Check contrast. Measured for this theme (WCAG 2): text-100 and text-200 at least 8:1 on every surface
  *    (bg-000 to bg-300), text-400 at least 4.6:1 (light) and 4.8:1 (dark), the accent as link text at least 4.9:1
  *    (light) and 4.7:1 (dark), danger and success at least 4.7:1, the syntax colours at least 5.1:1 on code
- *    blocks, and white button labels on the accent 6.0:1 (light) and 3.1:1 (dark). Aim for 4.5:1 for body text and
+ *    blocks, and white button labels on the button fill 6.0:1 (light) and 4.6:1 (dark). Aim for 4.5:1 for body text and
  *    3:1 for muted text.
+ *
+ * 5. The app's own look is neutral: grey buttons, neutral spinners and marks, blue only for links, focus and switches.
+ *    A theme can bring colour back through the tokens for those roles: --button-fill, --button-fill-hover and
+ *    --button-text (the button that confirms), --switch-on, --spinner, --badge-bg and --badge-ink (the icon on a
+ *    card), --mark and --mark-ink (the mark beside the model name), --segment-on (the selected segment),
+ *    --warn and --attention (amber: a context window filling up, something waiting for you).
  */
 
 /* ---------- Light ---------- */
@@ -54,6 +60,20 @@
   --success: #22743d;
   --success-soft: rgba(34, 116, 61, 0.1);
   --success-line: rgba(34, 116, 61, 0.35);
+  --switch-on: var(--accent);
+  --warn: #9a5b00;
+  --attention: #c27400;
+
+  /* Buttons, marks and badges: Midnight keeps its blue for the button that confirms and for the marks */
+  --button-fill: var(--accent);
+  --button-fill-hover: var(--accent-hover);
+  --button-text: #ffffff;
+  --spinner: var(--accent);
+  --badge-bg: var(--accent-soft);
+  --badge-ink: var(--accent);
+  --mark: var(--accent);
+  --mark-ink: #ffffff;
+  --segment-on: var(--bg-000);
 
   /* States and the surfaces made from the neutrals */
   --hover: var(--bg-300);
@@ -108,6 +128,19 @@
     --success: #4fb070;
     --success-soft: rgba(79, 176, 112, 0.14);
     --success-line: rgba(79, 176, 112, 0.4);
+    --switch-on: var(--accent);
+    --warn: #f2b14f;
+    --attention: #f2b14f;
+
+    --button-fill: #3f70d8;
+    --button-fill-hover: #3563c6;
+    --button-text: #ffffff;
+    --spinner: var(--accent);
+    --badge-bg: var(--accent-soft);
+    --badge-ink: var(--accent);
+    --mark: var(--accent);
+    --mark-ink: #ffffff;
+    --segment-on: var(--bg-000);
 
     --hover: var(--bg-300);
     --pressed: var(--bg-400);
@@ -160,6 +193,19 @@
   --success: #4fb070;
   --success-soft: rgba(79, 176, 112, 0.14);
   --success-line: rgba(79, 176, 112, 0.4);
+  --switch-on: var(--accent);
+  --warn: #f2b14f;
+  --attention: #f2b14f;
+
+  --button-fill: #3f70d8;
+  --button-fill-hover: #3563c6;
+  --button-text: #ffffff;
+  --spinner: var(--accent);
+  --badge-bg: var(--accent-soft);
+  --badge-ink: var(--accent);
+  --mark: var(--accent);
+  --mark-ink: #ffffff;
+  --segment-on: var(--bg-000);
 
   --hover: var(--bg-300);
   --pressed: var(--bg-400);

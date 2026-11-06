@@ -77,9 +77,9 @@
   let pal = null;
   function readPalette() {
     const dark = root.getAttribute('data-theme') === 'dark' || (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    const bg = rgb(token('--bg-100'), dark ? [38, 38, 36] : [250, 249, 245]);
-    const ink = rgb(token('--text-400'), dark ? [156, 154, 146] : [115, 114, 108]);
-    const accent = rgb(token('--accent'), [217, 119, 87]);
+    const bg = rgb(token('--bg-100'), dark ? [24, 24, 24] : [255, 255, 255]);
+    const ink = rgb(token('--text-400'), dark ? [161, 161, 161] : [102, 102, 102]);
+    const accent = rgb(token('--accent'), dark ? [107, 155, 240] : [31, 102, 196]);
     const [h, s, l] = toHsl(accent);
     // Companions of the accent around the colour wheel, at a lightness that suits the scheme: the set stays in the
     // accent's family, so a theme mod with a blue accent gets blue, violet and teal fields.

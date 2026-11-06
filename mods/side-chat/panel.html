@@ -47,13 +47,13 @@
   /* The reply that is still arriving ends in a soft caret */
   .h-md.streaming > :last-child::after, .h-md.streaming:empty::after {
     content: ''; display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; border-radius: 1px;
-    background: var(--accent); animation: caret 1s ease-in-out infinite;
+    background: var(--text-200); animation: caret 1s ease-in-out infinite;
   }
   @keyframes caret { 50% { opacity: 0.25; } }
 
   /* ---------- nothing yet ---------- */
   .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding-top: 24px; padding-bottom: 24px; text-align: center; }
-  .empty .mark { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 12px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+  .empty .mark { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 12px; border-radius: 12px; background: var(--bg-300); color: var(--text-200); }
   .empty .mark .h-icon { width: 20px; height: 20px; }
   .empty h2 { margin: 0 0 6px; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 500; color: var(--text-100); }
   .empty p { max-width: 380px; color: var(--text-400); }
@@ -69,7 +69,7 @@
   /* ---------- the composer ---------- */
   .composer-wrap { flex: none; padding-bottom: 12px; }
   .composer { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-000); box-shadow: var(--shadow-sm); transition: border-color 0.12s, box-shadow 0.12s; }
-  .composer:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--field-ring); }
+  .composer:focus-within { border-color: color-mix(in srgb, var(--text-400) 55%, var(--border)); }
   .composer textarea { flex: 1 1 auto; min-width: 0; height: 22px; max-height: 200px; margin: 0 0 3px; padding: 2px 0 0; border: 0; outline: none; resize: none; background: transparent; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-100); }
   .composer textarea::placeholder { color: var(--text-400); }
   .composer textarea:focus-visible { outline: none; }

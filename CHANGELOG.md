@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+Open Harness now works with whichever model service you use, and can be set up from a file or the command line, by you or by a coding agent such as Claude Code.
+
+### Any provider
+
+- **Named providers.** `"providers"` in `~/.open-harness/settings.json` (or config.json) holds any number of entries, each of a type that knows its base URL, its key variable and its headers, so an entry can be two lines: `openrouter`, `portkey`, `openai`, `anthropic` (its OpenAI-compatible endpoint), `groq`, `deepseek`, `together`, `ollama`, `lmstudio`, and `openai-compatible` for anything else. An entry can override the base URL, name the key's variable (`apiKeyEnv`) or hold the key (`apiKey`), choose the model, list models for the picker, add headers, and state the context window and the most tokens a reply may have. `"provider"` picks one by name. See [docs/configure.md](docs/configure.md).
+- **Your 0.4.0 settings keep working as they are.** The Ollama and gateway blocks are the providers `ollama` and `portkey`; nothing is migrated.
+- **Settings → Model** chooses among every provider, then its model: a picker from the entry's list and what the service lists, or a text field. A Test button sends one tiny request and says how long the answer took. A provider a file defines is marked "Set in settings.json", and a button opens the file.
+- **The model button under the chat bar** lists the provider's models and the other providers that are ready to use, and names the provider by its label: the gateway fields are no longer called "Portkey" when they point somewhere else. The setup strip says when the provider in use needs a key or a model.
+- **Plain errors.** A missing key names the variable to set; a refused key, an unknown model or an unreachable address says so, with the provider's name and what to check.
+
+### The command line
+
+- **`open-harness`**, inside the app at `Contents/Resources/bin/open-harness`, runs with the app's own Electron and does not need the app to be running: `provider list`, `provider add`, `provider remove`, `provider use`, `provider test`, `config path`, `config get`, `config set`, `config unset` and `doctor`, each with `--json` and `--help` and an exit code that says whether it worked. It writes your settings.json and keeps everything it does not know about; the running app picks the change up within a second.
+- A key is never taken from a command-line argument: `--key-env` names its variable, `--key-stdin` reads it from standard input.
+- **Settings → General → Command line tool** shows where the command is and links it into `~/.local/bin` (no administrator password), and says so when that folder is not on your PATH.
+- **For coding agents**: [docs/configure.md](docs/configure.md) has the exact steps and what never to do, and [settings.schema.json](https://brandeispatrick.github.io/open-harness/settings.schema.json) describes every field; settings.json accepts a `"$schema"` key.
+
+### Keys
+
+- Keys never reach the window, the logs, the transcript, what mods can read or the command's output: Settings shows "Set (OPENROUTER_API_KEY)" or "Not set".
+- A project's settings.json may name a key's variable but may no longer carry a key: `apiKey`, `portkey.apiKey`, `portkey.providerApiKey` and `env` variables named like a key are ignored there, with a problem line.
+
 ## 0.5.0
 
 The window is white and grey now, like Claude Code: neutral surfaces in light and dark, grey buttons, and colour only where it means something. The warm look of 0.4.0 is a bundled theme you can turn back on. Settings → Mods has a tab for each kind of mod, and the app has a new icon.

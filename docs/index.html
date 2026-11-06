@@ -181,6 +181,16 @@ ollama pull qwen3:8b</code></pre>
         <p>Or a hosted one: Settings → Model → Gateway takes any OpenAI-compatible endpoint, such as Anthropic's or Portkey's, with your key.</p>
       </li>
       <li>
+        <h3>Or any other service, set up by your coding agent</h3>
+        <p>Open Harness works with any OpenAI-compatible service: OpenRouter, Portkey, OpenAI, Anthropic, Groq, LM Studio or a gateway of your own. It is all in one file, and the app has a command for it, so a coding agent such as Claude Code can do the setup for you:</p>
+        <div class="code">
+          <div class="code-head"><span>Terminal</span><button type="button" class="copy" data-copy="code-provider" hidden>Copy</button></div>
+          <pre id="code-provider"><code>open-harness provider add openrouter --type openrouter --model anthropic/claude-sonnet-4.5 --use
+open-harness provider test</code></pre>
+        </div>
+        <p>The command is in the app at <code>Open Harness.app/Contents/Resources/bin/open-harness</code>. See <a href="https://github.com/BrandeisPatrick/open-harness/blob/main/docs/configure.md">how to configure it</a>.</p>
+      </li>
+      <li>
         <h3>Or run it from source</h3>
         <div class="code">
           <div class="code-head"><span>Terminal</span><button type="button" class="copy" data-copy="code-source" hidden>Copy</button></div>

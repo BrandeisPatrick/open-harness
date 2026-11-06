@@ -105,7 +105,10 @@ Settings → Remote control turns on a small web page, served by the app, for fo
 ## Providers
 
 - **Ollama** (default): native `/api/chat` with `num_ctx`, thinking control and capability detection.
-- **Gateway fields** = any OpenAI-compatible endpoint. Tested: Portkey, and Anthropic directly at `https://api.anthropic.com/v1` with an Anthropic key (`claude-haiku-5-5`, `claude-sonnet-5-5`). Also usable: OpenRouter, LM Studio, vLLM, llama.cpp.
+- **Gateway fields** (the `portkey` block) = any OpenAI-compatible endpoint, Portkey's by default. The window calls it Portkey for Portkey's own address and Gateway for any other.
+- **Named providers**: any number of entries in `"providers"` of `settings.json` (or `config.json`), each of a type that knows its base URL, key variable and headers: `openrouter`, `portkey`, `openai`, `anthropic`, `groq`, `deepseek`, `together`, `ollama`, `lmstudio`, and `openai-compatible` for anything else. `"provider"` picks one by name. Settings → Model chooses among all of them and their models; the model button under the chat bar lists the provider's models and the other usable providers.
+- **The command line**: `open-harness` (in the app at `Contents/Resources/bin/open-harness`; Settings → General → Command line tool links it into `~/.local/bin`) adds, selects and tests providers and sets the other fields, for you or for a coding agent: `open-harness provider add openrouter --type openrouter --model … --use`, then `open-harness provider test`.
+- All of it, with the shortest working example for each service, the field reference and the steps for coding agents: [configure.md](configure.md). Schema: [settings.schema.json](settings.schema.json).
 
 ## Configuration
 
@@ -119,6 +122,8 @@ A project's `.mcp.json` servers, its mods and its `settings.json` all stay off u
 
 ### settings.json
 
+For providers and the command line, [configure.md](configure.md) supersedes this section.
+
 `~/.open-harness/settings.json`, then `<project>/.open-harness/settings.json`, layer over `config.json`. Precedence: defaults < `config.json` < user < project.
 
 ```json
@@ -129,9 +134,11 @@ A project's `.mcp.json` servers, its mods and its `settings.json` all stay off u
 }
 ```
 
-- Settable: `provider`, `ollama.*`, `portkey.*`, `dreaming.*` (`daily`, `time` as `"HH:MM"`, `mode`: `auto`, `approve` or `plan`, and `skills`, `mods`, `memory`), `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
+- Settable: `provider`, `providers` (named providers, see [configure.md](configure.md)), `ollama.*`, `portkey.*`, `dreaming.*` (`daily`, `time` as `"HH:MM"`, `mode`: `auto`, `approve` or `plan`, and `skills`, `mods`, `memory`), `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
 - `env` is applied to the process environment, so a key can live there instead of in `config.json` (`PORTKEY_API_KEY` is a fallback for the gateway key). `${VAR}` and `${VAR:-default}` are expanded in every string. Variables a file set are put back when the file stops applying.
 - **A project's file needs your approval.** Until you trust it in Settings → Configuration files nothing in it applies, and an edit withdraws the approval. A notice in the chat tells you one is waiting.
+- **A project's file never carries a key**: `apiKey` in a provider entry, `portkey.apiKey`, `portkey.providerApiKey`, and `env` variables whose names end in `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are ignored there with a problem line. It may name a variable with `apiKeyEnv`.
+- `"$schema": "https://brandeispatrick.github.io/open-harness/settings.schema.json"` gives an editor completion and checks.
 - A field a file sets is read-only in Settings and is never written to `config.json`. Changes made while the app runs (the mode chip, the model chip) last until the files are read again.
 - The files are read again when they change, when the folder changes, and when trust changes.
 

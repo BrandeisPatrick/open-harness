@@ -33,7 +33,9 @@ npm install && npm start
 
 Or download the app from [Releases](https://github.com/BrandeisPatrick/open-harness/releases). It isn't notarized yet: on first launch, open it once, then allow it in System Settings → Privacy & Security → Open Anyway.
 
-Hosted models: Settings → Model → Gateway. For Portkey, add your Portkey key and a model id. For Anthropic directly, set the base URL to `https://api.anthropic.com/v1`, your Anthropic key, and a model such as `claude-haiku-5-5` or `claude-sonnet-5-5`. Any OpenAI-compatible endpoint works the same way.
+Hosted models: OpenRouter, Portkey, OpenAI, Anthropic, Groq, DeepSeek, Together, LM Studio or any OpenAI-compatible service, chosen in Settings → Model or named in `~/.open-harness/settings.json`.
+
+Any coding agent can do the setup for you with the command inside the app, `Open Harness.app/Contents/Resources/bin/open-harness` (`open-harness provider add openrouter --type openrouter --model … --use`, then `open-harness provider test`): see [docs/configure.md](docs/configure.md).
 
 ## Features
 

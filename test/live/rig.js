@@ -1,0 +1,275 @@
+// Live test rig: launches the built app under Electron with a throwaway profile and drives the real window over
+// the Chrome DevTools Protocol. No dependencies (Node 22+ for the global WebSocket).
+//
+// The model is the real API when ANTHROPIC_API_KEY is set (Anthropic's OpenAI-compatible endpoint through the
+// app's gateway fields; the key travels in the environment and is never written to the profile), otherwise the
+// mock model server from test/support. Nothing here touches your own profile, settings or sessions: the app gets
+// its own --user-data-dir and its own config directory, and the window stays hidden.
+//
+//   const { launch } = require('./rig.js');
+//   const app = await launch({ mode: 'bypass' });
+//   await app.send('Say hello');
+//   await app.waitIdle();
+//   await app.screenshot('/tmp/hello.png');
+//   await app.close();
+const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const ROOT = path.join(__dirname, '..', '..');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** The model live checks use unless a test asks for another one: the cheapest that handles tools well. */
+const LIVE_MODEL = process.env.OPENAGENT_LIVE_MODEL || 'claude-haiku-5-5';
+
+async function freePort() {
+  const net = require('node:net');
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => {
+      const { port } = s.address();
+      s.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * Starts the app. Options:
+ *   root        the repository to run (default: this one); it must be built (npm run build)
+ *   profile     the user-data folder (default: a new temp folder, removed by close())
+ *   project     the working directory the app opens in (default: a new temp folder)
+ *   mode        permission mode to start in (default 'ask')
+ *   model       model id for the API (default LIVE_MODEL)
+ *   mock        true forces the mock model even when a key is set
+ *   config      extra fields merged into the seeded config.json
+ *   env         extra environment variables for the app
+ *   size        { width, height } of the page for screenshots (default 1440 x 900)
+ */
+async function launch(opts = {}) {
+  const root = opts.root || ROOT;
+  if (!fs.existsSync(path.join(root, 'dist', 'main', 'index.js'))) throw new Error('Build first: npm run build');
+  const ownsProfile = !opts.profile;
+  const profile = opts.profile || fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-profile-'));
+  const project = opts.project || fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-project-'));
+  const home = path.join(profile, 'home-config');
+  fs.mkdirSync(home, { recursive: true });
+
+  const key = opts.mock ? '' : process.env.ANTHROPIC_API_KEY || '';
+  let mock = null;
+  let baseURL = 'https://api.anthropic.com/v1';
+  if (!key) {
+    const { startMock } = require(path.join(root, 'test', 'support', 'mock-model.js'));
+    mock = await startMock();
+    baseURL = `http://127.0.0.1:${mock.port}/v1`;
+  }
+  const config = {
+    schemaVersion: 2,
+    provider: 'portkey',
+    portkey: { baseURL, apiKey: '', model: key ? opts.model || LIVE_MODEL : 'mock-model', virtualKey: '', provider: '', providerApiKey: '', configId: '', contextWindow: 200000 },
+    workingDirectory: project,
+    permissionMode: opts.mode || 'ask',
+    notifications: false,
+    autoTitles: false,
+    ...(opts.config || {}),
+  };
+  if (!fs.existsSync(path.join(profile, 'config.json'))) fs.writeFileSync(path.join(profile, 'config.json'), JSON.stringify(config, null, 2));
+
+  const port = opts.port || (await freePort());
+  const electron = require(path.join(root, 'node_modules', 'electron'));
+  const env = {
+    ...process.env,
+    OPENAGENT_LIVE_TEST: '1',
+    // The app's own config directory (settings.json, skills, mods) is redirected too, so a test never reads yours.
+    OPENAGENT_CONFIG_DIR: home,
+    PORTKEY_API_KEY: key || 'mock-key',
+    ...(opts.env || {}),
+  };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const child = spawn(electron, [root, `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...(opts.args || [])], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const logs = [];
+  const keep = (chunk) => {
+    for (const line of String(chunk).split('\n')) if (line.trim()) logs.push(line);
+    if (logs.length > 2000) logs.splice(0, logs.length - 2000);
+  };
+  child.stdout.on('data', keep);
+  child.stderr.on('data', keep);
+  let exited = false;
+  child.once('exit', () => (exited = true));
+
+  // The renderer page is the target whose URL is the app's index.html (the built-in browser is another target).
+  let wsUrl = '';
+  const deadline = Date.now() + 30_000;
+  while (!wsUrl) {
+    if (exited) throw new Error(`The app exited during start-up:\n${logs.slice(-20).join('\n')}`);
+    if (Date.now() > deadline) throw new Error(`The app did not open its window within 30 s:\n${logs.slice(-20).join('\n')}`);
+    try {
+      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+      const page = targets.find((t) => t.type === 'page' && /renderer\/index\.html/.test(t.url));
+      if (page) wsUrl = page.webSocketDebuggerUrl;
+    } catch {
+      /* not listening yet */
+    }
+    if (!wsUrl) await sleep(150);
+  }
+
+  const ws = new WebSocket(wsUrl);
+  await new Promise((resolve, reject) => {
+    ws.addEventListener('open', resolve, { once: true });
+    ws.addEventListener('error', () => reject(new Error('Could not connect to the DevTools endpoint')), { once: true });
+  });
+  let nextId = 1;
+  const pending = new Map();
+  const consoleLines = [];
+  ws.addEventListener('message', (ev) => {
+    const msg = JSON.parse(String(ev.data));
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      if (msg.error) reject(new Error(msg.error.message));
+      else resolve(msg.result);
+    } else if (msg.method === 'Runtime.consoleAPICalled') {
+      consoleLines.push(`[${msg.params.type}] ${msg.params.args.map((a) => a.value ?? a.description ?? '').join(' ')}`);
+    } else if (msg.method === 'Runtime.exceptionThrown') {
+      const d = msg.params.exceptionDetails;
+      consoleLines.push(`[exception] ${d.exception?.description || d.text}`);
+    }
+  });
+  const cdp = (method, params = {}) =>
+    new Promise((resolve, reject) => {
+      const id = nextId++;
+      pending.set(id, { resolve, reject });
+      ws.send(JSON.stringify({ id, method, params }));
+    });
+  await cdp('Runtime.enable');
+  await cdp('Page.enable');
+  const size = opts.size || { width: 1440, height: 900 };
+  await cdp('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false });
+
+  /** Runs an expression in the page (promises are awaited) and returns its JSON value. */
+  async function evaluate(expression) {
+    const r = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true });
+    if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+    return r.result.value;
+  }
+
+  /** Polls until the expression is truthy; returns its value. */
+  async function waitFor(expression, timeoutMs = 20_000, what = expression) {
+    const until = Date.now() + timeoutMs;
+    for (;;) {
+      const v = await evaluate(expression).catch(() => undefined);
+      if (v) return v;
+      if (exited) throw new Error(`The app exited while waiting for: ${what}`);
+      if (Date.now() > until) throw new Error(`Timed out after ${timeoutMs} ms waiting for: ${what}`);
+      await sleep(120);
+    }
+  }
+
+  const q = (selector) => JSON.stringify(selector);
+  const api = {
+    root,
+    profile,
+    project,
+    port,
+    /** true when the run talks to the real API, false with the mock model */
+    live: Boolean(key),
+    mock,
+    logs,
+    console: consoleLines,
+    cdp,
+    evaluate,
+    waitFor,
+    /** PNG of the window's page (2x). `clip` is { x, y, width, height } in CSS pixels. */
+    async screenshot(file, clip) {
+      const r = await cdp('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, Buffer.from(r.data, 'base64'));
+      return file;
+    },
+    /** PNG of one element (by selector), with a margin around it. */
+    async screenshotOf(file, selector, margin = 0) {
+      const box = await evaluate(`(() => { const e = document.querySelector(${q(selector)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()`);
+      if (!box) throw new Error(`No element matches ${selector}`);
+      return api.screenshot(file, { x: Math.max(0, box.x - margin), y: Math.max(0, box.y - margin), width: box.width + margin * 2, height: box.height + margin * 2 });
+    },
+    exists: (selector) => evaluate(`Boolean(document.querySelector(${q(selector)}))`),
+    text: (selector) => evaluate(`(document.querySelector(${q(selector)})?.innerText ?? null)`),
+    count: (selector) => evaluate(`document.querySelectorAll(${q(selector)}).length`),
+    async click(selector) {
+      await waitFor(`Boolean(document.querySelector(${q(selector)}))`, 10_000, `element ${selector}`);
+      await evaluate(`document.querySelector(${q(selector)}).click()`);
+    },
+    /** Sets a text field's value the way typing would (fires input and change). */
+    async fill(selector, value) {
+      await waitFor(`Boolean(document.querySelector(${q(selector)}))`, 10_000, `element ${selector}`);
+      await evaluate(`(() => { const e = document.querySelector(${q(selector)}); e.focus(); const proto = e instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : e instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(e, ${JSON.stringify(String(value))}); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    },
+    /** A real key press in the page, e.g. key('Escape') or key('k', { meta: true }). */
+    async key(key, mods = {}) {
+      const modifiers = (mods.alt ? 1 : 0) | (mods.ctrl ? 2 : 0) | (mods.meta ? 4 : 0) | (mods.shift ? 8 : 0);
+      const codes = { Enter: 13, Escape: 27, Tab: 9, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Backspace: 8 };
+      const base = { key, modifiers, windowsVirtualKeyCode: codes[key] ?? key.toUpperCase().charCodeAt(0), code: key.length === 1 ? `Key${key.toUpperCase()}` : key };
+      await cdp('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
+      if (key.length === 1 && !mods.meta && !mods.ctrl) await cdp('Input.dispatchKeyEvent', { type: 'char', text: key, ...base });
+      await cdp('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+    },
+    /** Types a message into the composer and sends it. */
+    async send(text) {
+      await api.fill('#input', text);
+      await waitFor(`!document.querySelector('#send-btn').disabled`, 5_000, 'the send button to enable');
+      await api.click('#send-btn');
+    },
+    /** Waits until a run has started and ended (or, with started=false, just until nothing is running). */
+    async waitIdle(timeoutMs = 120_000, started = true) {
+      const busy = `(() => { const s = document.querySelector('#status-line'); return Boolean(s && !s.hidden) || Boolean(document.querySelector('.session-item.running')); })()`;
+      if (started) await waitFor(busy, 15_000, 'the run to start').catch(() => undefined);
+      await waitFor(`!(${busy})`, timeoutMs, 'the run to end');
+      await sleep(250);
+    },
+    /** The transcript as text: one entry per message, tool row or card, in order. */
+    transcript: () => evaluate(`[...document.querySelectorAll('#messages > *')].filter((e) => e.id !== 'empty-state' && !e.hidden).map((e) => ({ cls: e.className, text: (e.innerText || '').trim().slice(0, 2000) }))`),
+    /** The last assistant reply's text. */
+    lastReply: () => evaluate(`(() => { const all = document.querySelectorAll('.msg.assistant'); const e = all[all.length - 1]; return e ? e.innerText.trim() : ''; })()`),
+    /** Answers the open approval card: 'allow' or 'deny'. */
+    async approve(answer = 'allow') {
+      await waitFor(`Boolean(document.querySelector('.approval:not(.decided) .btn'))`, 60_000, 'an approval card');
+      await evaluate(`(() => { const card = [...document.querySelectorAll('.approval')].filter((c) => !c.classList.contains('decided')).pop(); const btns = [...card.querySelectorAll('.btn')]; const pick = ${JSON.stringify(answer)} === 'deny' ? btns.find((b) => /deny/i.test(b.innerText)) : card.querySelector('.btn.primary'); pick.click(); })()`);
+    },
+    async close() {
+      try {
+        ws.close();
+      } catch {
+        /* already closed */
+      }
+      if (!exited) {
+        child.kill('SIGTERM');
+        await Promise.race([new Promise((r) => child.once('exit', r)), sleep(4000)]);
+        if (!exited) child.kill('SIGKILL');
+      }
+      mock?.close();
+      if (ownsProfile) fs.rmSync(profile, { recursive: true, force: true });
+    },
+  };
+  // The page is usable once the composer has taken focus at the end of its start-up.
+  await waitFor(`Boolean(window.oc) && Boolean(document.querySelector('#input'))`, 20_000, 'the page to load');
+  await sleep(400);
+  return api;
+}
+
+/** A small check helper in the style of test/support/check.js, for live scripts. */
+function checker() {
+  let failures = 0;
+  return {
+    check(label, cond, detail) {
+      if (!cond) failures++;
+      console.log(`${cond ? 'ok  ' : 'FAIL'} ${label}${detail !== undefined ? ` | ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`.slice(0, 600));
+    },
+    done() {
+      console.log(failures ? `\n${failures} FAILED` : '\nALL OK');
+      return failures;
+    },
+  };
+}
+
+module.exports = { launch, checker, sleep, LIVE_MODEL };

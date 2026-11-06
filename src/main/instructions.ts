@@ -4,10 +4,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { configDir } from './paths';
 
 /** Checked in this order; the first that exists is used. */
 export const INSTRUCTION_FILES = ['OPENAGENT.md', 'OPENCODER.md', 'AGENTS.md', 'CLAUDE.md'];
-export const USER_INSTRUCTIONS = path.join(os.homedir(), '.openagent', 'OPENAGENT.md');
+export const USER_INSTRUCTIONS = path.join(configDir(), 'OPENAGENT.md');
 /** The file from before the app was renamed, still honoured */
 const USER_INSTRUCTIONS_OLD = path.join(os.homedir(), '.opencoder', 'OPENCODER.md');
 const MAX_CHARS = 24_000;

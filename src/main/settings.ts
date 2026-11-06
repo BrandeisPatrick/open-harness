@@ -13,12 +13,12 @@
 // whatever config.json held (see withoutSettings), so the Settings panel can never
 // bake an override — or a secret — into config.json.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { AppConfig } from '../shared/types';
 import { expandEnvRefs } from './mcp';
+import { configDir } from './paths';
 
-export const USER_SETTINGS = path.join(os.homedir(), '.openagent', 'settings.json');
+export const USER_SETTINGS = path.join(configDir(), 'settings.json');
 export const PROJECT_SETTINGS = path.join('.openagent', 'settings.json');
 
 /** The subset of AppConfig a settings file may set, plus `env`. */

@@ -74,6 +74,13 @@ function windowBackground(): string {
   return dark ? '#262624' : '#faf9f5';
 }
 
+/**
+ * Live tests (test/live) drive the real app over the DevTools protocol. With OPENAGENT_LIVE_TEST set the window is
+ * never shown and the app keeps out of the Dock, so a test run does not take over the screen; it still lays out and
+ * paints, which is what screenshots need.
+ */
+const LIVE_TEST = Boolean(process.env.OPENAGENT_LIVE_TEST);
+
 function createWindow(): void {
   const icon = nativeImage.createFromPath(ICON_PATH);
   win = new BrowserWindow({
@@ -86,11 +93,14 @@ function createWindow(): void {
     trafficLightPosition: { x: 14, y: 13 },
     backgroundColor: windowBackground(),
     icon,
+    show: !LIVE_TEST,
+    paintWhenInitiallyHidden: true,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: !LIVE_TEST,
     },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -565,6 +575,7 @@ app.setName(APP_NAME);
 protocol.registerSchemesAsPrivileged([{ scheme: ARTIFACT_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 app.whenReady().then(() => {
+  if (LIVE_TEST) app.dock?.hide();
   applyBranding();
   protocol.handle(ARTIFACT_SCHEME, async (req) => {
     const r = artifacts?.resolve(req.url);

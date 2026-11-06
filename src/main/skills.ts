@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { SkillInfo } from '../shared/types';
+import { configDir } from './paths';
 
 export interface Skill extends SkillInfo {
   body: string;
@@ -16,7 +17,7 @@ export function loadSkills(cwd: string, appRoot: string): Skill[] {
   const sources: [string, Skill['source']][] = [
     [path.join(cwd, '.openagent', 'skills'), 'project'],
     [path.join(cwd, '.opencoder', 'skills'), 'project'], // the folder name from before the rename
-    [path.join(os.homedir(), '.openagent', 'skills'), 'user'],
+    [path.join(configDir(), 'skills'), 'user'],
     [path.join(os.homedir(), '.opencoder', 'skills'), 'user'],
     [path.join(appRoot, 'skills'), 'bundled'],
   ];

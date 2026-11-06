@@ -59,27 +59,48 @@ const providerRef: Check = describe(
 /** Scalar AppConfig fields a settings file may set. */
 const SCALARS: Record<string, Check> = {
   provider: providerRef,
-  permissionMode: oneOf('ask', 'acceptEdits', 'auto', 'plan', 'bypass'),
-  maxTurns: positiveInt,
-  sendScreenshotsToModel: bool,
-  systemPromptExtra: str,
-  theme: oneOf('system', 'light', 'dark'),
-  autoTitles: bool,
-  autoCompact: bool,
-  compactThreshold: between(0.5, 0.95),
-  pruneToolResults: bool,
-  notifications: bool,
-  keepAwake: oneOf('off', 'running', 'always'),
-  toolSet: oneOf('auto', 'all', 'essential'),
-  toolActivity: oneOf('summary', 'all'),
-  historyTrashDays: nonNegative,
+  permissionMode: describe(oneOf('ask', 'acceptEdits', 'auto', 'plan', 'bypass'), 'The permission mode a session starts in.'),
+  maxTurns: describe(positiveInt, 'How many tool calls one request may make before it stops and asks you to continue.'),
+  sendScreenshotsToModel: describe(bool, 'Attach browser screenshots to the conversation as images (needs a vision model).'),
+  systemPromptExtra: describe(str, 'Added to every request: house rules, coding style, project context.'),
+  theme: describe(oneOf('system', 'light', 'dark'), 'The window theme.'),
+  autoTitles: describe(bool, 'Name a session from its first exchange.'),
+  autoCompact: describe(bool, 'Summarise the conversation on its own when it nears the context window.'),
+  compactThreshold: describe(between(0.5, 0.95), 'How full the context window gets before the conversation is summarised.'),
+  pruneToolResults: describe(bool, 'Before summarising, shorten old tool results.'),
+  notifications: describe(bool, 'Notify when a run finishes or needs approval while the app is in the background.'),
+  keepAwake: describe(oneOf('off', 'running', 'always'), 'Keep the Mac awake: never, while a session runs, or whenever the app is open.'),
+  toolSet: describe(oneOf('auto', 'all', 'essential'), 'Which tools the model is offered.'),
+  toolActivity: describe(oneOf('summary', 'all'), 'Fold each run of tool calls into one line, or show every call.'),
+  historyTrashDays: describe(nonNegative, 'Days a deleted session stays in the trash.'),
 };
 
 /** Sections a settings file may set field by field. */
 const SECTIONS: Record<'ollama' | 'portkey' | 'dreaming', Record<string, Check>> = {
-  ollama: { baseURL: str, model: str, numCtx: positiveInt, think: oneOf('auto', 'on', 'off') },
-  portkey: { baseURL: str, apiKey: str, model: str, virtualKey: str, provider: str, providerApiKey: str, configId: str, contextWindow: positiveInt },
-  dreaming: { daily: bool, time: timeOfDay, mode: oneOf('auto', 'approve', 'plan'), skills: bool, mods: bool, memory: bool },
+  ollama: {
+    baseURL: describe(str, "The Ollama server's OpenAI-compatible endpoint, e.g. http://localhost:11434/v1."),
+    model: describe(str, 'The Ollama model tag, e.g. qwen3:8b.'),
+    numCtx: describe(positiveInt, 'Tokens of context Ollama is asked for (num_ctx).'),
+    think: describe(oneOf('auto', 'on', 'off'), 'Thinking mode for models that can reason.'),
+  },
+  portkey: {
+    baseURL: describe(str, 'The gateway endpoint (Portkey, or any OpenAI-compatible gateway).'),
+    apiKey: describe(str, 'The gateway key (x-portkey-api-key); falls back to PORTKEY_API_KEY. Not allowed in a project file.'),
+    model: describe(str, 'The model id, e.g. @openai/gpt-4o-mini.'),
+    virtualKey: describe(str, 'x-portkey-virtual-key'),
+    provider: describe(str, 'x-portkey-provider'),
+    providerApiKey: describe(str, "The upstream provider's key, sent as Authorization: Bearer. Not allowed in a project file."),
+    configId: describe(str, 'x-portkey-config'),
+    contextWindow: describe(positiveInt, "The model's context window in tokens."),
+  },
+  dreaming: {
+    daily: describe(bool, 'Dream once a day.'),
+    time: describe(timeOfDay, 'When, as "HH:MM" (24-hour).'),
+    mode: describe(oneOf('auto', 'approve', 'plan'), 'How suggestions are applied.'),
+    skills: describe(bool, 'Look for skills.'),
+    mods: describe(bool, 'Look for mods.'),
+    memory: describe(bool, 'Look for memory lines.'),
+  },
 };
 
 /** Fields of the built-in blocks that hold a secret: never shown, never accepted from a project's file. */

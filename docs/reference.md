@@ -52,6 +52,8 @@ A message starting with `#` is added to the project's instructions file after a 
 | `mod_check` | What is wrong with a mod the agent is writing |
 | `mcp__<server>__<tool>` | MCP server tools |
 
+In the conversation each run of two or more calls in a turn is one line that says what it did, in the order it did it ("Read 3 files, ran 2 commands, edited a file"), with the lines that edits and writes added and removed and how many calls failed or were denied on its right; click it, or focus it and press Enter, to see the rows. While the turn runs the line names the call in flight. A waiting approval card stays in the open under the line; once decided it folds in with its call. A single call stays its own row. Settings → General → Tool activity (`toolActivity`: `summary`, the default, or `all`) shows every call as its own row instead.
+
 Every tool is described to the model in every request. With a context window under 32k tokens the scheduling, session and mod tools are left out and the model is told so; Settings → Context → "Tools offered to the model" (`toolSet`: `auto`, `all`, `essential`) decides.
 
 ## Sessions
@@ -113,7 +115,7 @@ A project's `.mcp.json` servers, its mods and its `settings.json` all stay off u
 }
 ```
 
-- Settable: `provider`, `ollama.*`, `portkey.*`, `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
+- Settable: `provider`, `ollama.*`, `portkey.*`, `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
 - `env` is applied to the process environment, so a key can live there instead of in `config.json` (`PORTKEY_API_KEY` is a fallback for the gateway key). `${VAR}` and `${VAR:-default}` are expanded in every string. Variables a file set are put back when the file stops applying.
 - **A project's file needs your approval.** Until you trust it in Settings → Configuration files nothing in it applies, and an edit withdraws the approval. A notice in the chat tells you one is waiting.
 - A field a file sets is read-only in Settings and is never written to `config.json`. Changes made while the app runs (the mode chip, the model chip) last until the files are read again.

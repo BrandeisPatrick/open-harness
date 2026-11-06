@@ -161,6 +161,7 @@ They are removed when the look goes away. A setting is how a look offers a choic
 | `.tool`, `.tool > summary`, `.tool-verb`, `.tool-arg`, `.tool-meta`, `.tool-body` | a tool row (a `<details>`), its one line, what it did, on what, the time or size on the right, and what opens under it |
 | `.tool-status`, `.tool-status.spin`, `.tool-status.err` | the row's icon: `.spin` while the tool runs, `.err` when it failed |
 | `.tool-group` | several rows folded into one (a `<details>` like `.tool`) |
+| `.tool-group > summary`, `.group-stat`, `.group-failed`, `.group-denied` | the folded line (`.live` on the group while its calls run), and on its right the lines added and removed, the failed count and the denied count |
 | `.cmd`, `.out pre` | a command and its output inside a tool row |
 | `.approval` | an approval card (restyle with care: it has to stay readable) |
 | `.plan-card`, `.task-list`, `.task-row` (`data-status`: `pending`, `in_progress`, `completed`) | a plan, the task list card and its rows |

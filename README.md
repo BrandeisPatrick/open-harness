@@ -76,4 +76,4 @@ npm run test:live   # the real app, hidden, on a throwaway profile; set ANTHROPI
 npm run package     # the app in release/mac-arm64
 ```
 
-`src/main` is the agent, the session runtime and the features; `src/renderer` the window; `src/shared` the contracts between them; `mods/` the built-in mods; `modkit/` what mod pages load, and a playground. How it fits together: [docs/architecture.md](docs/architecture.md). MIT.
+`src/main` is the agent, the session runtime and the features; `src/renderer` the window; `src/shared` the contracts between them; `mods/` the built-in mods; `modkit/` what mod pages load, and a playground. How it fits together: [docs/architecture.md](docs/architecture.md). Version numbers and the release steps: [docs/releasing.md](docs/releasing.md). MIT.

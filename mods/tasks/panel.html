@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  .head { display: flex; align-items: center; justify-content: space-between; min-height: 20px; margin-bottom: 2px; }
+  .head .count { font-variant-numeric: tabular-nums; }
+  .head.all-done .count { color: var(--success); }
+  .rows { margin: 0; padding: 0; list-style: none; }
+  .row { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; color: var(--text-200); }
+  .glyph { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 18px; color: var(--text-400); }
+  .title { min-width: 0; }
+  .row[data-status="in_progress"] { color: var(--text-100); font-weight: 500; }
+  .row[data-status="completed"] { color: var(--text-400); }
+  .row[data-status="completed"] .glyph { color: var(--success); }
+  .check { width: 16px; height: 16px; }
+  .check circle { fill: currentColor; stroke: none; }
+  .check path { stroke: var(--bg-100); stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<div id="root" hidden>
+  <div class="head" id="head"><span class="h-muted count" id="count"></span></div>
+  <ul class="rows" id="rows"></ul>
+</div>
+<p class="h-empty" id="empty" hidden>No tasks yet. The agent lists its steps here when it plans out a job.</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  const ICON = {
+    done: '<svg class="check" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.75"/><path d="M5.25 8.25l1.9 1.9 3.6-3.9"/></svg>',
+    pending: '<svg class="h-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75" stroke-dasharray="2.1 2.4"/></svg>',
+  };
+  const LABEL = { completed: 'Done', in_progress: 'In progress', pending: 'Pending' };
+  let tasks = [];
+  let running = false;
+  const $ = (id) => document.getElementById(id);
+
+  function render() {
+    const list = Array.isArray(tasks) ? tasks : [];
+    $('root').hidden = !list.length;
+    $('empty').hidden = !!list.length;
+    const done = list.filter((t) => t.status === 'completed').length;
+    $('count').textContent = `${done} of ${list.length} done`;
+    $('head').classList.toggle('all-done', !!list.length && done === list.length);
+    const rows = $('rows');
+    rows.textContent = '';
+    for (const t of list) {
+      const li = document.createElement('li');
+      li.className = 'row';
+      li.dataset.status = t.status;
+      const g = document.createElement('span');
+      g.className = 'glyph';
+      g.setAttribute('aria-label', LABEL[t.status] || '');
+      if (t.status === 'completed') g.innerHTML = ICON.done;
+      else if (t.status === 'in_progress') g.innerHTML = `<span class="h-spin sm${running ? '' : ' paused'}"></span>`;
+      else g.innerHTML = ICON.pending;
+      const title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = t.title || '';
+      li.append(g, title);
+      rows.appendChild(li);
+    }
+    harness.ui.setBadge(list.length ? `${done}/${list.length}` : null);
+  }
+
+  async function load() {
+    const [s, r] = await Promise.all([harness.session.get(), harness.session.tasks()]);
+    running = !!(s && s.running);
+    tasks = (r && r.tasks) || [];
+    render();
+  }
+
+  harness.on('tasks.changed', (d) => { tasks = (d && d.tasks) || []; render(); });
+  harness.on('run.started', () => { running = true; render(); });
+  harness.on('run.ended', () => { running = false; render(); });
+  harness.on('session.changed', load);
+  harness.ready.then(load);
+</script>
+</body>
+</html>

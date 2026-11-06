@@ -1,0 +1,14 @@
+{
+  "protocol": 1,
+  "id": "environment",
+  "name": "Environment",
+  "version": "1.0.0",
+  "description": "The project folder, the model and the permission mode, with remote control and keep-awake switches.",
+  "author": "OpenAgent",
+  "license": "MIT",
+  "icon": "folder",
+  "permissions": ["config:read", "config:write", "remote"],
+  "contributes": {
+    "views": [{ "id": "main", "title": "Environment", "entry": "panel.html", "seat": "rail", "order": 10 }]
+  }
+}

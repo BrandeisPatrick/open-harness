@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  :root {
+    --c-system: #8f8a7e; --c-instructions: #c48a3a; --c-skills: #8a6fb0; --c-tools: #4f86b8; --c-mcpTools: #3a9a95;
+    --c-summary: #b0668a; --c-messages: #d97757; --c-toolResults: #6f9a3e; --c-other: #a39e93;
+  }
+  :root[data-theme="dark"] {
+    --c-system: #a8a296; --c-instructions: #d9a24f; --c-skills: #a58bd0; --c-tools: #6aa3d6; --c-mcpTools: #4fb8b2;
+    --c-summary: #cf82a8; --c-messages: #e08a6c; --c-toolResults: #88b553; --c-other: #8a867c;
+  }
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .top.warn .pct { color: var(--warn); }
+  .top.danger .pct { color: var(--danger); }
+  .sum { font-variant-numeric: tabular-nums; }
+  .h-bar { margin: 8px 0 8px; }
+  .seg-reserve { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--text-400) 55%, transparent) 0 2px, transparent 2px 4px) !important; }
+  .slices { margin: 0 -4px; padding: 0; list-style: none; }
+  .slice { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto 44px; align-items: center; column-gap: 8px; min-height: 24px; padding: 0 4px; border-radius: var(--r-control); color: var(--text-200); }
+  button.slice { width: 100%; text-align: left; }
+  button.slice:hover { background: var(--hover); color: var(--text-100); }
+  .slice .name { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  .slice .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slice .h-chev { width: 12px; height: 12px; flex: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .slice .tok { color: var(--text-200); }
+  .slice .per { color: var(--text-400); font-size: 12px; }
+  .slice.muted, .slice.muted .tok { color: var(--text-400); }
+  .dot-free { background: transparent; box-shadow: inset 0 0 0 1.25px var(--text-400); }
+  .dot-reserve { background: repeating-linear-gradient(135deg, var(--text-400) 0 1.5px, transparent 1.5px 3px); }
+  .items { margin: 0 0 2px; padding: 0; list-style: none; }
+  .items li { display: grid; grid-template-columns: minmax(0, 1fr) auto 44px; column-gap: 8px; min-height: 20px; align-items: center; padding: 0 4px 0 20px; font-size: 12px; line-height: 16px; color: var(--text-400); }
+  .items li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+  .error { margin-top: 6px; color: var(--danger); font-size: 12px; line-height: 16px; }
+  .foot { margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="root" hidden>
+  <div class="top" id="top"><span class="pct" id="pct"></span><span class="h-muted sum" id="sum"></span></div>
+  <div class="h-bar" id="bar" role="img"></div>
+  <ul class="slices" id="slices"></ul>
+  <div class="actions">
+    <button class="h-btn sm" id="compact">Compact now</button>
+    <span class="h-muted" id="auto"></span>
+  </div>
+  <div class="error" id="error" hidden></div>
+  <p class="h-muted foot" id="foot"></p>
+</div>
+<p class="h-empty" id="empty" hidden>No context numbers yet.</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const CHEV = '<svg class="h-icon h-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.25 3.75L10.5 8l-4.25 4.25"/></svg>';
+  let ctx = null;
+  let running = false;
+  let compacting = false;
+  let error = '';
+  const open = new Set();
+
+  function fmtTokens(n) {
+    n = Math.max(0, Math.round(Number(n) || 0));
+    if (n < 1000) return String(n);
+    const k = n / 1000;
+    if (k < 99.95) return `${Math.round(k * 10) / 10}k`;
+    if (k < 999.5) return `${Math.round(k)}k`;
+    const m = n / 1e6;
+    return m < 9.95 ? `${Math.round(m * 10) / 10}M` : `${Math.round(m)}M`;
+  }
+  function fmtPct(r) {
+    const p = (Number(r) || 0) * 100;
+    if (p <= 0) return '0%';
+    if (p < 0.05) return '<0.1%';
+    const one = Math.round(p * 10) / 10;
+    return one < 10 ? `${one.toFixed(1)}%` : `${Math.round(p)}%`;
+  }
+  function ago(t) {
+    const s = Math.max(0, (Date.now() - t) / 1000);
+    if (s < 45) return 'just now';
+    const m = Math.round(s / 60);
+    if (m < 60) return m <= 1 ? '1 minute ago' : `${m} minutes ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return h === 1 ? '1 hour ago' : `${h} hours ago`;
+    const d = Math.round(h / 24);
+    return d === 1 ? 'yesterday' : `${d} days ago`;
+  }
+  const colour = (key) => `var(--c-${/^(system|instructions|skills|tools|mcpTools|summary|messages|toolResults)$/.test(key) ? key : 'other'})`;
+
+  function compactable() {
+    if (!ctx) return false;
+    const body = (ctx.slices || []).filter((s) => s.key === 'messages' || s.key === 'toolResults').reduce((n, s) => n + (s.tokens || 0), 0);
+    return (ctx.messages || 0) >= 2 && body > 0;
+  }
+
+  function render() {
+    const ok = !!(ctx && ctx.limit > 0);
+    $('root').hidden = !ok;
+    $('empty').hidden = ok;
+    if (!ok) { harness.ui.setBadge(null); return; }
+    const limit = ctx.limit;
+    const used = ctx.tokens || 0;
+    const ratio = used / limit;
+    const threshold = typeof ctx.threshold === 'number' ? ctx.threshold : 0.8;
+    $('pct').textContent = `${fmtPct(ratio)} used`;
+    $('sum').textContent = `${fmtTokens(used)} / ${fmtTokens(limit)}`;
+    $('top').classList.toggle('danger', ratio >= threshold);
+    $('top').classList.toggle('warn', ratio < threshold && ratio >= threshold - 0.1);
+
+    const slices = Array.isArray(ctx.slices) ? ctx.slices : [];
+    const bar = $('bar');
+    bar.textContent = '';
+    bar.setAttribute('aria-label', `${fmtPct(ratio)} of the context window used`);
+    for (const s of slices) {
+      if (s.key === 'free' || !(s.tokens > 0)) continue;
+      const seg = document.createElement('span');
+      seg.className = 'h-bar-seg' + (s.key === 'reserve' ? ' seg-reserve' : '');
+      seg.style.width = `${Math.min(100, (s.tokens / limit) * 100)}%`;
+      if (s.key !== 'reserve') seg.style.setProperty('--seg', colour(s.key));
+      seg.title = `${s.label}: ${fmtTokens(s.tokens)}`;
+      bar.appendChild(seg);
+    }
+    if (ctx.autoCompact !== false && threshold > 0 && threshold < 1) {
+      const mark = document.createElement('span');
+      mark.className = 'h-bar-mark';
+      mark.style.left = `${threshold * 100}%`;
+      mark.title = `Compacts on its own at ${Math.round(threshold * 100)}%`;
+      bar.appendChild(mark);
+    }
+
+    const list = $('slices');
+    list.textContent = '';
+    for (const s of slices) {
+      const li = document.createElement('li');
+      const items = Array.isArray(s.items) && s.items.length ? s.items : null;
+      const row = document.createElement(items ? 'button' : 'div');
+      row.className = 'slice' + (s.key === 'free' || s.key === 'reserve' ? ' muted' : '');
+      const dot = document.createElement('span');
+      dot.className = 'h-dot' + (s.key === 'free' ? ' dot-free' : s.key === 'reserve' ? ' dot-reserve' : '');
+      if (s.key !== 'free' && s.key !== 'reserve') dot.style.setProperty('--dot', colour(s.key));
+      const name = document.createElement('span');
+      name.className = 'name';
+      const label = document.createElement('span');
+      label.textContent = s.label || s.key;
+      name.appendChild(label);
+      if (items) {
+        name.insertAdjacentHTML('beforeend', CHEV);
+        row.setAttribute('aria-expanded', String(open.has(s.key)));
+        row.onclick = () => { open.has(s.key) ? open.delete(s.key) : open.add(s.key); render(); };
+      }
+      const tok = document.createElement('span');
+      tok.className = 'num tok';
+      tok.textContent = fmtTokens(s.tokens);
+      const per = document.createElement('span');
+      per.className = 'num per';
+      per.textContent = fmtPct(s.tokens / limit);
+      row.append(dot, name, tok, per);
+      li.appendChild(row);
+      if (items && open.has(s.key)) {
+        const ul = document.createElement('ul');
+        ul.className = 'items';
+        for (const it of items) {
+          const sub = document.createElement('li');
+          const a = document.createElement('span'); a.textContent = it.label; a.title = it.label;
+          const b = document.createElement('span'); b.className = 'num'; b.textContent = fmtTokens(it.tokens);
+          const c = document.createElement('span'); c.className = 'num'; c.textContent = fmtPct(it.tokens / limit);
+          sub.append(a, b, c);
+          ul.appendChild(sub);
+        }
+        li.appendChild(ul);
+      }
+      list.appendChild(li);
+    }
+
+    const btn = $('compact');
+    btn.disabled = running || compacting || !compactable();
+    btn.textContent = compacting ? 'Compacting…' : 'Compact now';
+    btn.title = running ? 'Wait for the run to end' : !compactable() ? 'Nothing to compact yet' : 'Summarise the conversation so far to free up room';
+    $('auto').textContent = ctx.autoCompact === false ? 'Auto-compact off' : `Auto-compacts at ${Math.round(threshold * 100)}%`;
+    $('error').hidden = !error;
+    $('error').textContent = error;
+    renderFoot();
+    harness.ui.setBadge(fmtPct(ratio));
+  }
+
+  function renderFoot() {
+    if (!ctx) return;
+    const when = ctx.updatedAt ? `Updated ${ago(ctx.updatedAt)}` : 'Not measured yet';
+    const basis = ctx.basis === 'estimated' ? ' (estimated)' : '';
+    $('foot').textContent = `${when}${basis}. The numbers refresh when a turn ends.`;
+  }
+
+  async function loadContext() {
+    try { ctx = await harness.session.context(); } catch (e) { ctx = null; }
+    render();
+  }
+  async function load() {
+    const s = await harness.session.get().catch(() => null);
+    running = !!(s && s.running);
+    lastId = s && s.id;
+    error = '';
+    await loadContext();
+  }
+
+  $('compact').onclick = async () => {
+    compacting = true;
+    error = '';
+    render();
+    try {
+      const r = await harness.session.compact();
+      if (r && r.ok === false) error = r.error || 'Could not compact.';
+    } catch (e) {
+      error = e.message;
+    }
+    compacting = false;
+    await loadContext();
+  };
+
+  harness.on('context.changed', loadContext);
+  harness.on('run.started', () => { running = true; error = ''; render(); });
+  harness.on('run.ended', () => { running = false; loadContext(); });
+  harness.on('session.changed', (s) => {
+    const switched = !ctx || !s || (lastId && s.id !== lastId);
+    lastId = s && s.id;
+    running = !!(s && s.running);
+    if (switched) { open.clear(); error = ''; loadContext(); } else render();
+  });
+  let lastId = null;
+  harness.ready.then(load);
+  setInterval(renderFoot, 30000);
+</script>
+</body>
+</html>

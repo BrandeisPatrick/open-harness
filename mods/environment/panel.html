@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="/@harness/harness.css">
 <style>
-  .info { display: flex; align-items: center; gap: 8px; min-height: 24px; min-width: 0; }
+  .info { display: flex; align-items: center; gap: 8px; min-height: 32px; min-width: 0; }
   .info .h-icon { color: var(--text-400); }
   .info .main { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-100); }
   .info .sub { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .info .grow { flex: 1 1 auto; max-width: none; }
-  .rule { height: 1px; margin: 8px 0 6px; background: var(--border-subtle); }
-  .ctl { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+  .rule { height: 8px; }
+  .ctl { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
   .ctl > span { color: var(--text-100); white-space: nowrap; }
   /* Keep awake: when the rail is too narrow for the label and the three choices on one line, the choices move under
      the label (flex-wrap) instead of pushing the panel wider than the rail. */
@@ -24,7 +24,7 @@
   .devices { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
   .devices .h-dot { --dot: var(--success); width: 6px; height: 6px; }
   .devices.none .h-dot { --dot: var(--text-400); opacity: 0.6; }
-  .error { color: var(--danger); font-size: 12px; line-height: 16px; }
+  .error { color: var(--danger); font-size: var(--fs-small); line-height: var(--lh-small); }
 </style>
 </head>
 <body>

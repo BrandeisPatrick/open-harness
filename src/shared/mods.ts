@@ -44,6 +44,20 @@ export interface ModViewManifest {
   icon?: string;
 }
 
+/** The region a look restyles: conversation is the transcript (#messages), composer the chat bar (#chatbar). */
+export type ModLookTarget = 'conversation' | 'composer';
+
+/** A stylesheet that restyles one region of the window; the app scopes it so it cannot reach outside that region. */
+export interface ModLookManifest {
+  /** Unique within the mod */
+  id: string;
+  title: string;
+  target: ModLookTarget;
+  /** CSS files in the mod, applied in order inside the region's scope */
+  styles: string[];
+  description?: string;
+}
+
 export interface ModCommandManifest {
   /** Without the slash; lower-case letters, digits and - */
   name: string;
@@ -75,6 +89,8 @@ export interface ModManifest {
     views?: ModViewManifest[];
     /** CSS files applied to the app's own page */
     styles?: string[];
+    /** Stylesheets for one region each (the conversation, the chat bar); one look per region is active */
+    looks?: ModLookManifest[];
     commands?: ModCommandManifest[];
     settings?: ModSettingField[];
   };
@@ -84,6 +100,8 @@ export interface ModProblem {
   /** manifest: mod.json is missing, unreadable or invalid. file: something it names does not exist. runtime: a page threw. */
   kind: 'manifest' | 'file' | 'runtime';
   message: string;
+  /** Only a warning: the part it names is ignored and the rest of the mod loads (a look target this app does not know) */
+  warning?: boolean;
   /** runtime: the view that reported it */
   view?: string;
   at?: number;
@@ -110,7 +128,7 @@ export interface ModInfo {
   granted: ModPermission[];
   /** Asked for by the manifest and not granted: what turning it on (or resuming it) would add */
   wants: ModPermission[];
-  /** True when the manifest contributes styles or a background that were not part of what was approved */
+  /** True when the manifest contributes styles, looks or a background that were not part of what was approved */
   wantsStyles: boolean;
   problems: ModProblem[];
   /** Changes whenever a file of the mod changes; views reload when it does */
@@ -137,6 +155,8 @@ export interface ModLayout {
   backgroundImage: string | null;
   /** 0 to 1: how strongly the app's surfaces cover the background */
   backgroundDim: number;
+  /** The active look per region: "<mod key>/<look id>", or null for the app's own look */
+  looks: Record<ModLookTarget, string | null>;
 }
 
 /** The part of the config that belongs to mods (AppConfig.mods). */
@@ -322,6 +342,8 @@ export type ModMethod = keyof ModBridge;
 export interface ModEvents {
   'theme.changed': ModTheme;
   'settings.changed': Record<string, unknown>;
+  /** Background views only: where the pointer is, as fractions of the window (0 to 1), at most 30 times a second */
+  pointer: { x: number; y: number };
   'visibility.changed': { visible: boolean };
   command: { name: string; args: string };
   /** Another session came on screen. Needs no permission (it carries only the id), so any view can reset itself. */
@@ -397,8 +419,8 @@ export interface ModsRpc {
   'mods.reload': () => ModInfo[];
   /** Copies a bundled mod into the user folder so it can be edited; returns the new list */
   'mods.customise': (key: string) => ModInfo[];
-  /** Writes a starter mod into the user folder (or the project's) and returns it */
-  'mods.create': (input: { id: string; name: string; seat: ModSeat; scope: 'user' | 'project' }) => ModInfo;
+  /** Writes a starter mod into the user folder (or the project's) and returns it: a view in `seat`, or a look for `look` */
+  'mods.create': (input: { id: string; name: string; seat?: ModSeat; look?: ModLookTarget; scope: 'user' | 'project' }) => ModInfo;
   /** Installs from a folder (copied) or a Git URL (cloned) into the user folder */
   'mods.install': (source: string) => ModInfo;
   /** Moves a user mod's folder to the Trash */
@@ -412,6 +434,8 @@ export interface ModsRpc {
   'mods.report': (caller: ModCaller, problem: { message: string; stack?: string }) => void;
   /** The CSS text of every enabled mod's styles, in load order */
   'mods.styles': () => { key: string; css: string }[];
+  /** The active look of each region (its mod on, chosen in the layout), already scoped to the region */
+  'mods.looks': () => { target: ModLookTarget; ref: string; mod: string; css: string }[];
 }
 
 export interface ModsEvents {

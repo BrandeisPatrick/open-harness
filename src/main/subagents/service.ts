@@ -2,12 +2,15 @@
 // sub-sessions are ordinary sessions of the runtime (origin 'spawn', parentId set), so the sidebar, the transcript
 // and the queue treat them like any other.
 
+import os from 'node:os';
+import path from 'node:path';
 import type { RelatedSessions } from '../../shared/subagents';
 import type { AgentEvent, MessageOrigin, SendResult, SessionMeta } from '../../shared/types';
 import type { App } from '../app';
 import { MAX_RUNNING } from '../runtime';
 import { clip, toMeta, type Msg, type Session, type Turn } from '../sessions';
 import { writeMergeReport } from './summary';
+import { TIERS, ago, matchTier, nameDistance, normName, unquote, type Tier } from './names';
 
 /** A sub-session of a sub-session may not spawn: depth counts the parent links above a session. */
 export const MAX_DEPTH = 2;
@@ -17,7 +20,7 @@ export const MAX_CHILDREN = 12;
 export const NOTE_CAP = 20;
 export const NOTE_REPLY_CHARS = 600;
 
-export type Relation = 'parent' | 'sub-session' | 'fork' | 'forked from' | 'other';
+export type Relation = 'parent' | 'sub-session' | 'fork' | 'forked from' | 'this session' | 'other';
 
 /** A refusal the caller (tool, command, RPC) shows as it is. */
 export class SubagentError extends Error {}
@@ -83,12 +86,12 @@ export class Subagents {
     return this.app.runtime.meta(id);
   }
 
-  /** Every stored session (those with messages) plus `extra`, as Session objects. */
+  /**
+   * Every session not in the trash: those with messages, and empty ones the user named already (renamed before the
+   * first message, or a sub-session about to start). An empty "New session" is nothing to find.
+   */
   private all(): Session[] {
-    return this.app.store
-      .list()
-      .map((m) => this.app.store.get(m.id))
-      .filter((s): s is Session => !!s);
+    return this.app.store.all().filter((s) => s.messages.length > 0 || s.titleLocked === true);
   }
 
   /** How many parent links are above a session. */
@@ -118,6 +121,7 @@ export class Subagents {
 
   relation(of: string, to: Session): Relation {
     const me = this.app.store.get(of);
+    if (of === to.id) return 'this session';
     if (me?.parentId === to.id) return 'parent';
     if (me?.forkedFrom === to.id) return 'forked from';
     if (to.parentId === of && to.origin === 'spawn') return 'sub-session';
@@ -131,21 +135,105 @@ export class Subagents {
     return { parent, children: this.children(s.id).map((c) => this.meta(c.id)), forks: this.forks(s.id).map((f) => this.meta(f.id)) };
   }
 
+  /** 2 for a session related to `from` (parent, sub-session, fork, source), 1 for another one, 0 for `from` itself. */
+  private kinRank(from: string | undefined, s: Session): number {
+    if (!from) return 1;
+    if (s.id === from) return 0;
+    return this.relation(from, s) === 'other' ? 1 : 2;
+  }
+
   /**
-   * A session named by id, or by its exact title (case-insensitive only when that is unambiguous). `among` limits
-   * the search; an ambiguous title is refused with the ids to choose from.
+   * The one session `ref` names, and how (names.ts): an exact id, a unique id prefix, the name written loosely, a
+   * unique name prefix, a name holding every word, a close misspelling; the first tier with a hit wins. Several hits
+   * in it: a session related to `from` beats an unrelated one, which beats `from` itself; still several is an error
+   * listing them. `among` narrows the search (default: every session not in the trash); `what` names that set in
+   * the error when nothing matches.
    */
-  resolve(ref: string, among?: Session[]): Session {
-    const key = String(ref ?? '').trim();
-    if (!key) throw new SubagentError('Name a session by id or title.');
-    const pool = among ?? this.all();
-    const byId = pool.find((s) => s.id === key) ?? (among ? undefined : this.app.store.get(key));
-    if (byId) return byId;
-    let hits = pool.filter((s) => s.title === key);
-    if (!hits.length) hits = pool.filter((s) => s.title.toLowerCase() === key.toLowerCase());
-    if (hits.length === 1) return hits[0];
-    if (hits.length > 1) throw new SubagentError(`${hits.length} sessions are titled "${key}"; name one by id: ${hits.map((s) => s.id).join(', ')}.`);
-    throw new SubagentError(`No session with the id or title "${key}".`);
+  find(ref: string, opts: { from?: string; among?: Session[]; what?: string } = {}): { session: Session; tier: Tier } {
+    const key = unquote(String(ref ?? ''));
+    if (!key) throw new SubagentError('Name a session by its name or id.');
+    const pool = opts.among ?? this.all();
+    const byId = pool.find((s) => s.id === key) ?? (opts.among ? undefined : this.app.store.get(key));
+    if (byId) return { session: byId, tier: 'id' };
+    const tiers = new Map<Tier, Session[]>();
+    for (const s of pool) {
+      const t = matchTier(key, s);
+      if (t) tiers.set(t, [...(tiers.get(t) ?? []), s]);
+    }
+    for (const tier of TIERS) {
+      const hits = tiers.get(tier);
+      if (!hits?.length) continue;
+      if (hits.length === 1) return { session: hits[0], tier };
+      const top = Math.max(...hits.map((s) => this.kinRank(opts.from, s)));
+      const best = hits.filter((s) => this.kinRank(opts.from, s) === top);
+      if (best.length === 1) return { session: best[0], tier };
+      const sorted = [...hits].sort((a, b) => this.kinRank(opts.from, b) - this.kinRank(opts.from, a) || b.updatedAt - a.updatedAt);
+      throw new SubagentError(`"${key}" fits ${hits.length} sessions; name one by its id:\n${sorted.map((s) => `  ${this.brief(s, opts.from)}`).join('\n')}`);
+    }
+    const near = pool
+      .filter((s) => s.id !== opts.from)
+      .map((s) => ({ s, d: nameDistance(key, s.title) }))
+      .sort((a, b) => a.d - b.d || b.s.updatedAt - a.s.updatedAt)
+      .slice(0, 3);
+    const what = opts.what ?? 'session';
+    throw new SubagentError(`No ${what} matches "${key}".${near.length ? ` Closest names:\n${near.map(({ s }) => `  ${this.brief(s, opts.from)}`).join('\n')}` : ''}`);
+  }
+
+  /** The session `ref` names (see find). */
+  resolve(ref: string, opts: { from?: string; among?: Session[]; what?: string } = {}): Session {
+    return this.find(ref, opts).session;
+  }
+
+  /** Every session `query` matches at any tier (not only uniquely), best first: tier, then related, then recent. */
+  matches(query: string, from?: string): Session[] {
+    const key = unquote(String(query ?? ''));
+    if (!key) return [];
+    return this.all()
+      .map((s) => ({ s, t: matchTier(key, s) }))
+      .filter((x): x is { s: Session; t: Tier } => x.t !== null)
+      .sort((a, b) => TIERS.indexOf(a.t) - TIERS.indexOf(b.t) || this.kinRank(from, b.s) - this.kinRank(from, a.s) || b.s.updatedAt - a.s.updatedAt)
+      .map((x) => x.s);
+  }
+
+  /** Other sessions with the same name as `id`, written loosely: a lookup by that name is then ambiguous. */
+  namesakes(id: string): Session[] {
+    const me = this.session(id);
+    const name = normName(me.title);
+    return this.all().filter((s) => s.id !== me.id && normName(s.title) === name);
+  }
+
+  /**
+   * Renames a session the way the sidebar does (the title is locked against generated titles) and tells the window.
+   * Returns the other sessions that already had that name.
+   */
+  rename(id: string, title: string): { session: Session; namesakes: Session[] } {
+    const clean = unquote(title);
+    if (!clean) throw new SubagentError('A session name cannot be empty.');
+    this.session(id);
+    const s = this.app.store.rename(id, clean);
+    this.emit(s.id, { type: 'session_changed', session: toMeta(s) });
+    this.listChanged();
+    return { session: s, namesakes: this.namesakes(s.id) };
+  }
+
+  /** "…: 1 other session is also called "x" (id 4cd9…): …" for a rename's answer, or '' */
+  namesakeWarning(namesakes: Session[]): string {
+    if (!namesakes.length) return '';
+    const ids = namesakes.map((s) => s.id).join(', ');
+    return `${one(namesakes.length, 'other session')} ${namesakes.length === 1 ? 'is' : 'are'} also called that (${ids}), so a lookup by this name is ambiguous: use the id, or pick a name of its own.`;
+  }
+
+  /** Where a session works, with the home folder as ~ */
+  folder(s: Session): string {
+    const dir = s.cwd ?? this.app.config().workingDirectory;
+    const home = os.homedir();
+    return dir === home ? '~' : dir.startsWith(home + path.sep) ? `~${dir.slice(home.length)}` : dir;
+  }
+
+  /** id, name, folder and last activity: enough to tell two sessions apart */
+  private brief(s: Session, from?: string): string {
+    const rel = from ? this.relation(from, s) : 'other';
+    return `${s.id}  "${s.title}"${rel === 'other' ? '' : `  ${rel}`}  ${this.folder(s)}  active ${ago(s.updatedAt)}`;
   }
 
   /** running, waiting for the user, merged, or idle */
@@ -393,9 +481,32 @@ export class Subagents {
 
   // ---------- Text views (session_list, /sessions, session_read) ----------
 
+  /** id, name, relation, state, folder, last activity and the first line of the last reply */
   line(of: string, s: Session, relation = this.relation(of, s)): string {
     const last = this.lastReplyLine(s);
-    return `${s.id}  "${s.title}"  ${relation}  ${this.state(s.id)}${last ? `  last: ${last}` : ''}`;
+    return `${s.id}  "${s.title}"  ${relation}  ${this.state(s.id)}  ${this.folder(s)}  active ${ago(s.updatedAt)}${last ? `  last: ${last}` : ''}`;
+  }
+
+  /** The sessions `query` matches, out of all of them, best first (session_list with a query, /sessions <query>). */
+  searchText(id: string, query: string, max = 15): string {
+    const me = this.session(id);
+    const key = unquote(query);
+    // This session is the header line, not a hit (its own first message often holds the name it is asked about)
+    const hits = this.matches(key, me.id).filter((s) => s.id !== me.id);
+    const out: string[] = [`This session: ${me.id} "${me.title}"`];
+    if (!hits.length) {
+      // Nothing at any tier: find() words the refusal with the closest names (or finds an empty session by its id)
+      try {
+        hits.push(this.find(key, { from: me.id }).session);
+      } catch (err) {
+        if (!(err instanceof SubagentError)) throw err;
+        out.push(err.message);
+        return out.join('\n');
+      }
+    }
+    out.push(`Sessions matching "${key}" (${hits.length}${hits.length > max ? `, the best ${max}` : ''}), best first:`);
+    for (const s of hits.slice(0, max)) out.push(`  ${this.line(me.id, s)}`);
+    return out.join('\n');
   }
 
   /** The related sessions, then up to `others` recent other ones. */
@@ -413,10 +524,8 @@ export class Subagents {
     if (me.forkedFrom) add(this.app.store.get(me.forkedFrom), 'forked from');
     for (const c of this.children(me.id)) add(c, 'sub-session');
     for (const f of this.forks(me.id)) add(f, 'fork');
-    const rest = this.all()
-      .filter((s) => !seen.has(s.id))
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, others);
+    const unrelated = this.all().filter((s) => !seen.has(s.id));
+    const rest = unrelated.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, others);
     const out: string[] = [`This session: ${me.id} "${me.title}"`];
     out.push(rel.length ? `Related (${rel.length}):` : 'Related: none.');
     for (const { s, r } of rel) out.push(`  ${this.line(me.id, s, r)}`);
@@ -424,6 +533,7 @@ export class Subagents {
       out.push(`Other recent sessions (${rest.length}):`);
       for (const s of rest) out.push(`  ${this.line(me.id, s, 'other')}`);
     }
+    if (unrelated.length > rest.length) out.push(`${unrelated.length - rest.length} older not shown; session_list with a query searches every session by name.`);
     return out.join('\n');
   }
 

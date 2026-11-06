@@ -1,6 +1,6 @@
 ---
 name: create-mod
-description: Write or change an Open Harness mod (a panel, tab, composer strip, background, theme or slash command made of mod.json plus HTML). Load before touching any mod.
+description: Write or change an Open Harness mod (a panel, tab, composer strip, background, theme, a look for the conversation or the chat bar, or a slash command made of mod.json plus HTML or CSS). Load before touching any mod.
 ---
 A mod is a folder named by its id with a `mod.json` and one or more HTML pages. The page runs in a sandboxed frame and talks to the app only through the `harness` object.
 
@@ -55,6 +55,7 @@ A mod is a folder named by its id with a `mod.json` and one or more HTML pages. 
 Required: `protocol` (1), `id`, `name`, `version` ("0.1.0"). Optional: `description`, `author`, `icon`, `permissions`, `contributes` with:
 - `views`: `[{ "id", "title", "entry", "seat", "order"?, "maxHeight"? }]`. `entry` is a relative path to an HTML file in the folder.
 - `styles`: `["theme.css"]`, CSS applied to the app itself (override tokens like `--accent` on `:root`).
+- `looks`: `[{ "id", "title", "target": "conversation"|"composer", "styles": ["look.css"] }]`, CSS for one region only (see Looks).
 - `commands`: `[{ "name": "words", "description": "…", "view": "main" }]`; the page gets a `command` event `{ name, args }`.
 - `settings`: `[{ "key", "type": "boolean"|"string"|"number"|"select", "title", "default", "options"? }]`; read with `harness.settings.get()`.
 
@@ -62,7 +63,28 @@ Required: `protocol` (1), `id`, `name`, `version` ("0.1.0"). Optional: `descript
 - `rail`: a section in the right rail, sized to content (up to `maxHeight`, default 360).
 - `tab`: a full tab in the side pane next to Browser, Diff and Terminal.
 - `composer`: one compact row above the composer (up to 120 px).
-- `background`: behind the whole window, takes no clicks.
+- `background`: behind the whole window, takes no clicks. The `pointer` event `{ x, y }` (fractions of the window) lets it follow the pointer.
+
+## Looks
+A look restyles one region, and the user picks it in Settings → Appearance → Looks (one per region). Use a look, not `styles`, when the request is about how the conversation or the chat bar looks.
+- `conversation`: the app wraps the CSS in `@scope (#messages) { … }`; `composer`: in `@scope (#chatbar) { … }`. Selectors reach only that region; `:scope` is its root. Set tokens on `:scope` to retheme the region: `:scope { --accent: #2b9; }`.
+- State on the root, no script needed: `data-running="true|false"`, `data-scheme="light|dark"`, `data-mode`, and `data-set-<key>` for each of the mod's `settings` (key in lower case). Branch on them: `:scope[data-running="true"] .tool-status.spin { … }`.
+- Rely only on the stable hooks in docs/mods.md (Looks): `.msg.user .bubble`, `.msg.assistant .md`, `.tool`, `.tool-verb`, `.code-block`, `.task-list`, `#composer`, `#input`, `#send-btn`, `#model-btn`, `#mode-btn`, and so on.
+- `@keyframes` are moved out of the scope, so their names are global: prefix them with the mod id. `@import` is removed.
+- Keep the app's text size and line height; work in light and dark; animate only under `@media (prefers-reduced-motion: no-preference)`.
+- `mods/hyperspace` (glow.css, holo.css, cockpit.css) is the full example.
+
+Minimal look (`mod.json` and `look.css`):
+```json
+{ "protocol": 1, "id": "teal-chat", "name": "Teal chat", "version": "0.1.0",
+  "contributes": { "looks": [{ "id": "main", "title": "Teal", "target": "conversation", "styles": ["look.css"] }] } }
+```
+```css
+:scope { --look: #1a9e9e; }
+:scope[data-scheme="dark"] { --look: #46d1d1; }
+.msg.user .bubble { box-shadow: inset 3px 0 0 var(--look); }
+.md :is(h1, h2) { color: var(--look); }
+```
 
 ## Kit (`/@harness/harness.css`)
 Classes: `h-row` (label/value line), `h-label`, `h-value`, `h-muted`, `h-title`, `h-list` + `h-item` (clickable rows), `h-btn` (`.primary`, `.ghost`, `.sm`), `h-input`, `h-switch`, `h-chip`, `h-bar` + `h-bar-seg` (meter), `h-dot`, `h-empty`, `h-spin`, `h-mono`, `h-md` (put `ui.markdown()`'s html in it: chat styling, working Copy buttons and links; `.compact` for the rail).
@@ -91,7 +113,8 @@ Ask only for the permissions the page uses. A call without its permission reject
 - No `window.open`, `alert`, forms that submit, or navigating away; the page cannot leave its own origin.
 - Handle "nothing to show": no session open, an empty transcript, a call that rejects. Show an `h-empty` line instead of a blank or broken panel.
 - Inline `<script>` and `<style>` are fine. Keep everything in one page unless it grows.
-- Adding a permission, styles or a background to a mod that is on pauses it until the user approves.
+- Adding a permission, styles, a look or a background to a mod that is on pauses it until the user approves.
+- A look applies only once the user picks it in Settings → Appearance → Looks; tell them so after turning it on.
 
 ## The loop
 1. Write `mod.json` and the page(s) in the right folder.

@@ -50,6 +50,7 @@ async function freePort() {
  *   seed        false leaves the profile without a config.json, to see what the app makes of the folder it finds
  *   env         extra environment variables for the app
  *   size        { width, height } of the page for screenshots (default 1440 x 900)
+ *   scale       device pixels per CSS pixel for screenshots (default 2; 1 gives native-size PNGs)
  *   binary      the executable of a packaged app to drive instead of `electron <root>` (also: OPEN_HARNESS_LIVE_APP),
  *               e.g. release/mac-arm64/Open Harness.app/Contents/MacOS/Open Harness
  *   ownsProfile whether close() removes the profile (default: only when the rig made it)
@@ -174,7 +175,7 @@ async function launch(opts = {}) {
   await cdp('Runtime.enable');
   await cdp('Page.enable');
   const size = opts.size || { width: 1440, height: 900 };
-  await cdp('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false });
+  await cdp('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: opts.scale || 2, mobile: false });
 
   /** Runs an expression in the page (promises are awaited) and returns its JSON value. */
   async function evaluate(expression) {
@@ -209,9 +210,17 @@ async function launch(opts = {}) {
     cdp,
     evaluate,
     waitFor,
-    /** PNG of the window's page (2x). `clip` is { x, y, width, height } in CSS pixels. */
+    /** PNG of the window's page (2x, or the launch's `scale`). `clip` is { x, y, width, height } in CSS pixels. */
     async screenshot(file, clip) {
-      const r = await cdp('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
+      let r = await cdp('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
+      // In the hidden window, a full-page capture after some changes (seen every time Settings opens or closes) can
+      // come back as a stale surface at half the emulated size, repeated 2 × 2. A tiny clipped capture makes the
+      // compositor draw a fresh frame at the emulated scale, and the capture after it is whole. Only then: the extra
+      // frame re-rasterises the page, which a pixel comparison of two captures would count as change.
+      if (!clip && looksTiled(Buffer.from(r.data, 'base64'))) {
+        await cdp('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 } });
+        r = await cdp('Page.captureScreenshot', { format: 'png' });
+      }
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, Buffer.from(r.data, 'base64'));
       return file;
@@ -256,8 +265,22 @@ async function launch(opts = {}) {
       await waitFor(`!(${busy})`, timeoutMs, 'the run to end');
       await sleep(250);
     },
-    /** The transcript as text: one entry per message, tool row or card, in order. */
-    transcript: () => evaluate(`[...document.querySelectorAll('#messages > *')].filter((e) => e.id !== 'empty-state' && !e.hidden).map((e) => ({ cls: e.className, text: (e.innerText || '').trim().slice(0, 2000) }))`),
+    /**
+     * The transcript as text: one entry per message, tool row or card, in order. A folded run of tool calls is one
+     * entry for its line followed by one for each row inside it, whether it is open or not.
+     */
+    transcript: () =>
+      evaluate(`(() => {
+        const out = [];
+        const flat = (e) => (e.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 2000);
+        for (const e of document.querySelectorAll('#messages > *')) {
+          if (e.id === 'empty-state' || e.hidden) continue;
+          out.push({ cls: e.className, text: (e.innerText || '').trim().slice(0, 2000) });
+          if (!e.classList.contains('tool-group')) continue;
+          for (const row of e.querySelectorAll(':scope > .group-body > *')) out.push({ cls: row.className, text: flat(row.querySelector(':scope > summary') || row) });
+        }
+        return out;
+      })()`),
     /** The last assistant reply's text. */
     lastReply: () => evaluate(`(() => { const all = document.querySelectorAll('.msg.assistant'); const e = all[all.length - 1]; return e ? e.innerText.trim() : ''; })()`),
     /** Answers the open approval card: 'allow' or 'deny'. */
@@ -305,6 +328,70 @@ async function launch(opts = {}) {
   await waitFor(`Boolean(window.oc) && Boolean(document.querySelector('#input'))`, 20_000, 'the page to load');
   await sleep(400);
   return api;
+}
+
+/**
+ * Whether a PNG screenshot is its own top-left quarter repeated 2 × 2 (a stale surface of a hidden window). Decodes
+ * the PNG (8-bit RGB or RGBA, as CDP writes them) and compares sample points across the four quarters; a real page
+ * agrees at nearly none of them.
+ */
+function looksTiled(png) {
+  const zlib = require('node:zlib');
+  let i = 8;
+  let w = 0;
+  let h = 0;
+  let bpp = 4;
+  const idat = [];
+  while (i < png.length) {
+    const len = png.readUInt32BE(i);
+    const type = png.toString('ascii', i + 4, i + 8);
+    if (type === 'IHDR') {
+      w = png.readUInt32BE(i + 8);
+      h = png.readUInt32BE(i + 12);
+      bpp = png[i + 17] === 2 ? 3 : 4;
+    }
+    if (type === 'IDAT') idat.push(png.subarray(i + 8, i + 8 + len));
+    i += 12 + len;
+  }
+  if (w < 64 || h < 64 || w % 2 || h % 2) return false;
+  const d = zlib.inflateSync(Buffer.concat(idat));
+  const stride = w * bpp;
+  const raw = Buffer.alloc(stride * h);
+  for (let y = 0; y < h; y++) {
+    const ft = d[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const v = d[y * (stride + 1) + 1 + x];
+      const a = x >= bpp ? raw[y * stride + x - bpp] : 0;
+      const up = y ? raw[(y - 1) * stride + x] : 0;
+      const c = x >= bpp && y ? raw[(y - 1) * stride + x - bpp] : 0;
+      let o = v;
+      if (ft === 1) o = v + a;
+      else if (ft === 2) o = v + up;
+      else if (ft === 3) o = v + ((a + up) >> 1);
+      else if (ft === 4) {
+        const p = a + up - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - up);
+        const pc = Math.abs(p - c);
+        o = v + (pa <= pb && pa <= pc ? a : pb <= pc ? up : c);
+      }
+      raw[y * stride + x] = o & 255;
+    }
+  }
+  let same = 0;
+  let n = 0;
+  const varied = new Set();
+  for (let y = 7; y < h / 2; y += 29) {
+    for (let x = 7; x < w / 2; x += 31) {
+      n++;
+      const at = (xx, yy) => raw.readUIntBE((yy * w + xx) * bpp, 3);
+      const p = at(x, y);
+      varied.add(p);
+      if (p === at(x + w / 2, y) && p === at(x, y + h / 2) && p === at(x + w / 2, y + h / 2)) same++;
+    }
+  }
+  // A blank page agrees everywhere too: only a quarter with something in it counts as tiled.
+  return varied.size > 8 && same / n > 0.97;
 }
 
 /** A small check helper in the style of test/support/check.js, for live scripts. */

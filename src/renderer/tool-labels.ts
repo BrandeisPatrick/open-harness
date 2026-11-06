@@ -3,7 +3,7 @@
 // runs, and the approval card's wording. Pure (no DOM, type imports only), so test/tool-labels.js loads it headless;
 // tools.ts and renderer.ts render what it returns.
 //
-// The wording matches the phone page (remote/): Sub-session, Message, Sessions, Read session, Merge, Schedule,
+// The wording matches the phone page (remote/): Sub-session, Message, Sessions, Read session, Merge, Rename session, Schedule,
 // Schedules, Update schedule, Delete schedule, Check mod.
 
 import type { IconName } from './icons.js';
@@ -24,7 +24,7 @@ export function setNameLookup(l: Partial<NameLookup>): void {
 
 /** The tools this module labels */
 export const AGENT_TOOLS = new Set([
-  'session_spawn', 'session_send', 'session_list', 'session_read', 'session_merge',
+  'session_spawn', 'session_send', 'session_list', 'session_read', 'session_merge', 'session_rename',
   'schedule_create', 'schedule_list', 'schedule_update', 'schedule_delete',
   'mod_check', 'submit_plan',
 ]);
@@ -102,9 +102,10 @@ export function agentToolLabel(name: string, a: Args, now = Date.now()): AgentRo
       const to = str(a, 'to');
       return row('Message', to ? `to ${sessionName(to)}` : '', 'message');
     }
-    case 'session_list': return row('Sessions', '', 'list');
+    case 'session_list': return row('Sessions', str(a, 'query'), 'list');
     case 'session_read': return row('Read session', sessionName(str(a, 'id')), 'eye');
     case 'session_merge': return row('Merge', sessionName(str(a, 'id')), 'git-merge');
+    case 'session_rename': return row('Rename session', str(a, 'name'), 'pencil');
     case 'schedule_create': return row('Schedule', joinName(str(a, 'name'), rhythmFromArgs(a, now)), 'clock');
     case 'schedule_list': return row('Schedules', '', 'clock');
     case 'schedule_update': return row('Update schedule', scheduleName(str(a, 'id')), 'clock');
@@ -196,12 +197,15 @@ export function agentToolMeta(name: string, a: Args, result: string): AgentMeta 
       return /^Delivered/.test(r) ? { text: /it is busy/.test(r) ? 'queued' : 'sent' } : { text: 'not sent' };
     case 'session_list': {
       const n = r.split('\n').filter((l) => /^ {2}\S/.test(l)).length;
+      if (/^No session matches/m.test(r)) return { text: 'no match' };
       return { text: n ? plural(n, 'session') : 'no other sessions' };
     }
     case 'session_read':
       return (m = /: the last (\d+) messages? of \d+\./.exec(r)) ? { text: plural(Number(m[1]), 'message') } : { text: 'read' };
     case 'session_merge':
       return { text: /^\[Merged from "/.test(r) ? 'merged' : 'not merged' };
+    case 'session_rename':
+      return /^Renamed/.test(r) ? { text: /ambiguous/.test(r) ? 'renamed, name shared' : 'renamed' } : { text: 'not renamed' };
     case 'schedule_create':
       return { text: /^Scheduled "/.test(r) ? 'created' : 'not created' };
     case 'schedule_list':
@@ -235,6 +239,7 @@ export function agentStatusVerb(name: string): string | null {
     case 'session_list': return 'Listing sessions…';
     case 'session_read': return 'Reading the session…';
     case 'session_merge': return 'Merging…';
+    case 'session_rename': return 'Renaming the session…';
     case 'schedule_create': return 'Scheduling…';
     case 'schedule_list': return 'Listing schedules…';
     case 'schedule_update': return 'Updating the schedule…';

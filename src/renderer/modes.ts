@@ -7,6 +7,8 @@ export type ModeTone = 'neutral' | 'accent' | 'success' | 'danger';
 
 export interface ModeInfo {
   label: string;
+  /** The word under the chat bar */
+  short: string;
   /** One line under the label in the mode menu, also the chip's tooltip */
   desc: string;
   /** Second sentence of the "Permission mode: …" notice */
@@ -20,6 +22,7 @@ export interface ModeInfo {
 export const MODES: Record<PermissionMode, ModeInfo> = {
   ask: {
     label: 'Ask before actions',
+    short: 'Ask',
     desc: 'Approve commands, writes and edits',
     hint: 'Commands, writes and edits show an approval card',
     icon: 'shield-check',
@@ -28,6 +31,7 @@ export const MODES: Record<PermissionMode, ModeInfo> = {
   },
   acceptEdits: {
     label: 'Accept edits',
+    short: 'Accept edits',
     desc: 'Edits run; commands still ask',
     hint: 'Writes and edits in the working directory run without asking; commands still ask',
     icon: 'file-check',
@@ -36,6 +40,7 @@ export const MODES: Record<PermissionMode, ModeInfo> = {
   },
   auto: {
     label: 'Auto',
+    short: 'Auto',
     desc: 'Runs on its own; risky actions still ask',
     hint: 'Open Harness works on its own and pauses only for risky actions',
     icon: 'zap',
@@ -44,6 +49,7 @@ export const MODES: Record<PermissionMode, ModeInfo> = {
   },
   plan: {
     label: 'Plan',
+    short: 'Plan',
     desc: 'Read-only; propose a plan to approve',
     hint: 'Open Harness explores read-only and proposes a plan for you to approve',
     icon: 'clipboard',
@@ -52,6 +58,7 @@ export const MODES: Record<PermissionMode, ModeInfo> = {
   },
   bypass: {
     label: 'Bypass permissions',
+    short: 'Bypass',
     desc: 'Runs everything without asking',
     hint: 'Everything runs without asking, including risky actions',
     icon: 'shield-off',

@@ -88,10 +88,11 @@
     <div class="pg-transcript" id="transcript"></div>
     <div class="pg-composer-wrap">
       <div class="pg-composer-seat" id="seat-composer"></div>
+      <!-- A stand-in for the app's chat bar, in its shape: one row in a box (plus, text, send), a quiet row under it -->
       <div class="pg-composer">
-        <textarea id="composer-text" rows="2" placeholder="Describe a task, / for skills"></textarea>
-        <div class="pg-composer-bar"><span class="pg-chip" id="mode-chip">Ask before actions</span><span class="pg-chip" id="model-chip">model</span><span class="pg-spacer"></span><button class="h-btn sm primary" id="composer-send">Send</button></div>
+        <div class="pg-composer-row"><span class="pg-plus" aria-hidden="true">+</span><textarea id="composer-text" rows="1" placeholder="Describe a task, / for skills"></textarea><button class="pg-send" id="composer-send" aria-label="Send">↵</button></div>
       </div>
+      <div class="pg-composer-foot"><span class="pg-foot" id="model-chip">model</span><span class="pg-foot" id="mode-chip">Ask before actions</span></div>
     </div>
   </div>
 

@@ -56,10 +56,14 @@ body.has-bg .pg-side, body.has-bg .pg-chat, body.has-bg .pg-rail, body.has-bg .p
 .pg-composer-wrap { padding: 0 24px 16px; }
 .pg-composer-seat { display: flex; flex-direction: column; }
 .pg-composer-seat iframe { display: block; width: 100%; border: 0; }
-.pg-composer { padding: 10px 12px 8px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-000); box-shadow: var(--shadow-sm); }
-:root[data-theme="dark"] .pg-composer { background: var(--bg-000); }
-.pg-composer textarea { width: 100%; border: 0; outline: none; resize: none; background: transparent; font-size: 14px; line-height: 20px; }
-.pg-composer-bar { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.pg-composer { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-000); }
+.pg-composer-row { display: flex; align-items: flex-end; min-height: 44px; }
+.pg-plus, .pg-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0 8px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-200); font-size: 15px; }
+.pg-send { margin-left: 0; cursor: pointer; }
+.pg-send:hover { background: var(--bg-300); }
+.pg-composer textarea { flex: 1; min-width: 0; min-height: 44px; padding: 11px 0 12px; border: 0; outline: none; resize: none; background: transparent; color: var(--text-100); font-size: 15px; line-height: 21px; }
+.pg-composer-foot { display: flex; justify-content: flex-end; gap: 4px; height: 24px; margin-top: 8px; padding-right: 8px; }
+.pg-foot { display: inline-flex; align-items: center; height: 24px; padding: 0 6px; font-size: 13px; color: var(--text-100); }
 .pg-chip { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text-200); }
 
 /* ---------- rail ---------- */

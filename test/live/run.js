@@ -32,10 +32,14 @@ const SCRIPTS = [
   { name: 'carry-over', shots: 'none' },
   { name: 'compaction', needsApi: true },
   { name: 'subagents' },
+  { name: 'names' },
   { name: 'tool-rows' },
+  { name: 'quiet' },
   { name: 'mods', shots: 'env' },
   { name: 'mods-look', shots: 'env' },
+  { name: 'type-scale' },
   { name: 'mods-protocol', shots: 'none' },
+  { name: 'looks', shots: 'env' },
   { name: 'remote-page', electron: true },
 ];
 

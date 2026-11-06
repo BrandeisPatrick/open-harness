@@ -17,6 +17,10 @@ const ICONS = {
   'arrow-up': '<path d="M8 13V3.5M4 7.5l4-4 4 4"/>',
   'arrow-down': '<path d="M8 3v9.5M4 8.5l4 4 4-4"/>',
   square: '<rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" stroke="none"/>',
+  // The chat bar: a full-size plus (attach), the return glyph (send) and a 12px stop square
+  'plus-lg': '<path d="M8 1.5v13M1.5 8h13" stroke-width="1.25"/>',
+  'corner-down-left': '<path d="M14.5 2.25v7H1.5M5.25 5.25l-3.75 4 3.75 4"/>',
+  stop: '<rect x="2" y="2" width="12" height="12" rx="2.5" fill="currentColor" stroke="none"/>',
   'chevron-right': '<path d="M6.25 3.75L10.5 8l-4.25 4.25"/>',
   'chevron-down': '<path d="M3.75 6.25L8 10.5l4.25-4.25"/>',
   copy: '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/>',

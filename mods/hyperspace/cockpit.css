@@ -1,0 +1,74 @@
+/*
+ * Cockpit: a look for the chat bar (contributes.looks, target "composer").
+ *
+ * The app wraps this file (after glow.css) in @scope (#chatbar) { … }: the rules reach the chat bar and nothing
+ * else, and :scope is #chatbar. The attributes on it are the same as on the conversation's root: data-scheme,
+ * data-running, data-mode (the permission mode) and data-set-glow / data-set-motion.
+ *
+ * The app's bar is one quiet row: a plus, the text, a send glyph (a stop square while the agent works), and under
+ * it, outside the box, a small row with the model, the mode and the context ring. Cockpit dresses that bar and
+ * keeps it exactly as compact: the same sizes, padding and type. It changes the edge (cut corners, the glow colour,
+ * four small corner marks), tints the glyphs, and lets the edge glow while the agent works.
+ *
+ * Hooks used (docs/mods.md, Looks → Stable hooks): #composer, .composer-row, #attach-btn, #input, #send-btn
+ * (.stop while a run can be stopped), #attachments, #composer-foot, .foot-btn, #mode-btn, #context-meter.
+ */
+
+/* ---------- The bar ---------- */
+
+#composer {
+  --mark: color-mix(in srgb, var(--holo) 55%, transparent);
+  border-color: var(--holo-edge);
+  background-color: color-mix(in srgb, var(--holo) 3%, var(--bg-000));
+  /* Four small corner marks, 8px each way, just inside the edge */
+  background-image:
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark));
+  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px, 8px 1px, 1px 8px;
+  background-position: 6px 2px, 2px 6px, calc(100% - 6px) 2px, calc(100% - 2px) 6px, 6px calc(100% - 2px), 2px calc(100% - 6px), calc(100% - 6px) calc(100% - 2px), calc(100% - 2px) calc(100% - 6px);
+  background-repeat: no-repeat;
+}
+/* Cut corners where the engine knows corner-shape; elsewhere the app's rounded ones stay. */
+@supports (corner-shape: bevel) {
+  #composer { corner-shape: bevel; }
+}
+#composer:focus-within { border-color: color-mix(in srgb, var(--holo) 70%, transparent); }
+/* Dropping an image on the bar: the glow colour instead of the app's accent */
+#composer.dragging { border-color: var(--holo); box-shadow: 0 0 0 3px var(--holo-faint); }
+
+/* While the agent works the edge lights up, with a soft glow (it breathes with motion "full") */
+:scope[data-running="true"] #composer {
+  border-color: color-mix(in srgb, var(--holo) 75%, transparent);
+  box-shadow: var(--shadow-bar), 0 0 14px -6px var(--holo);
+}
+/* A mode that acts without asking shows in the edge too */
+:scope[data-mode="bypass"] #composer:not(:focus-within) { border-color: color-mix(in srgb, var(--danger) 45%, var(--holo-edge)); }
+
+#input { caret-color: var(--holo); }
+#input::placeholder { color: color-mix(in srgb, var(--holo) 30%, var(--text-400)); }
+
+/* ---------- The glyphs ---------- */
+
+#attach-btn { color: color-mix(in srgb, var(--holo) 60%, var(--text-200)); }
+#attach-btn:hover { color: var(--holo); background: var(--holo-wash); }
+#send-btn:not(:disabled) { color: var(--holo); }
+#send-btn:hover:not(:disabled) { background: var(--holo-wash); }
+#send-btn.stop { color: var(--holo); }
+#attachments .attach-thumb { border-color: var(--holo-faint); }
+
+/* ---------- The row under the bar ---------- */
+
+#model-btn { color: color-mix(in srgb, var(--holo) 45%, var(--text-100)); }
+#composer-foot .foot-btn:hover, #composer-foot .foot-btn[aria-expanded="true"] { background: var(--holo-wash); }
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  :scope[data-running="true"]:not([data-set-motion="calm"]) #composer { animation: hyperspace-breathe 2.4s ease-in-out infinite; }
+}
+@keyframes hyperspace-breathe {
+  0%, 100% { box-shadow: var(--shadow-bar), 0 0 10px -6px var(--holo); }
+  50% { box-shadow: var(--shadow-bar), 0 0 18px -5px var(--holo); }
+}

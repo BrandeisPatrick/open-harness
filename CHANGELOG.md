@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.0
+
+The window is rebuilt around reading: a measured type scale, one calm column, a chat bar that is a single bar, and tool activity that folds into a line. Mods can now restyle the conversation and the chat bar as looks, with a space-opera set to try, and any session can find another by its name.
+
+### A calmer window to read in
+
+Chatting with an agent means reading a lot of text, so the window now gives the words room and keeps everything else quiet.
+
+- **One type scale, the system font everywhere.** Replies, your messages, tool and status lines and what you type are 15 px on 21 px lines; rows, menus, buttons and inputs 14 px; headings in the rail, notes and counts 13 px; date groups, captions and badges 12 px. Nothing is smaller than 12 px but keyboard keys and the terminal. Headings in a reply are the body size in semibold, not big headlines.
+- **A reading column.** The transcript is one centred column, 736 px at most, with 16 px between blocks. Tool activity is a quiet muted line with its chevron after the words; cards (the task list, plans, artifacts) are a light hairline with no shadow; your message is a soft grey bubble on the right; inline code is a small chip without a border.
+- **The chat bar is one bar.** A plus on the left, the text, and one action on the right: a return glyph that sends, or while a run is going a stop square (with text typed, Enter queues it for the agent's next step). Attached pictures sit inside the bar above the text, 120 px each. Under the bar a quiet row shows the model, the permission mode (in colour only for Plan and Bypass) and a context ring whose tooltip has the percentage. This was the bundled "Compact chat bar" mod; it is the app's own look now and the mod is gone (a profile that had it on just ignores the entry).
+- **Tool activity folds into one line.** A turn that reads six files, edits two and runs the tests is no longer nine lines between two paragraphs: each run of calls is one quiet line that says what happened, "Read 6 files, edited 2 files, ran a command", with the lines added and removed (+49 −2) and anything that failed or was denied on its right. Click it to see every row as before. While the agent works the line shows the call in flight. An approval card waiting for you stays in the open; once you answer, its line folds in with the call, so a turn in Ask mode folds too. A single call stays a single row, and a session opened later folds the same way. Settings → General → Tool activity → Every call brings back one row per call.
+- **More air, fewer boxes.** A 44 px top bar with the folder beside the title, sidebar rows on a 34 px pitch with clear space above each date group, rail sections separated by one hairline with regular-weight headings, rows on a 32 px pitch in the rail mods, and Settings rows with their title and description 24 px apart.
+- **For mod authors**: the type scale is in the kit (`--fs-ui`, `--fs-small`, `--fs-micro`, `--fs-body`, `--fs-code` and their line heights; see [docs/mods.md](docs/mods.md)), `harness.css` pages use it (rows 14 px, `h-item` 32 px tall, `h-title` no longer uppercase), and `.h-md` reads like a reply.
+
+### Sessions
+
+- **Find a session by its name.** From any session, name another one in plain words ("read the session called deploy fix", "tell tcg fork to stop"): the agent and the commands find it among all your sessions, not only the related and recent ones. The name may be written loosely (case, quotes, punctuation, the start of it, a small typo). When several sessions fit, a related one wins; otherwise you get the list to pick from.
+- **Rename from the conversation.** `/rename <new name>`, or `/rename` alone to edit the title in the top bar; or ask the agent to "call this session …" (`session_rename`, no approval needed). A name another session already has is allowed, and you are told that it makes lookup by that name ambiguous.
+- `/sessions <name>` and `session_list` with a query list every session that matches, best first, with its folder and last activity.
+
+### Looks
+
+- **Looks for the conversation and the chat bar.** A mod can now restyle just the transcript or just the chat bar (`contributes.looks`, see [docs/mods.md](docs/mods.md#looks)). The app scopes a look to its region, so it cannot reach the rest of the window, and keeps a few attributes on the region (a run in progress, light or dark, the permission mode, the mod's own settings) so a look can come alive without any script.
+- **Settings → Appearance → Looks**: pick a conversation look, a chat bar look and a background, or a whole set from one mod in a single choice.
+- **Hyperspace**, a bundled space-opera set to turn on in Settings → Mods: a starfield behind the app that jumps to lightspeed while the agent works and brakes with a flash when it is done, a holographic conversation, and a cockpit chat bar. Five glow colours, and a calm setting for less motion.
+- **Backgrounds can follow the pointer** (the `pointer` event), for parallax.
+- A mod's stylesheet can no longer `@import` another one, and its relative `url()`s point at the mod's own files.
+- Choosing a background from a mod in Settings → Appearance works again.
+
+### Fixes
+
+- A confirmation that followed another one at once (merge twice, delete twice) could close itself without asking: the first one's late "closed" signal cancelled it. Each confirmation now only answers to its own.
+
 ## 0.2.0
 
 The app is now called **Open Harness** (it was OpenAgent). On the first launch your sessions, settings and artifacts are moved from the old data folder to the new one (`~/Library/Application Support/Open Harness`). `OPENAGENT.md` files and `.openagent/skills` folders are still read. The repository is now `BrandeisPatrick/open-harness`; old links redirect.

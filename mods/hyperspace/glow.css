@@ -1,0 +1,29 @@
+/*
+ * The glow colour, shared by both looks of this mod. A look's "styles" may list several files: the conversation
+ * look is ["glow.css", "holo.css"] and the chat bar look ["glow.css", "cockpit.css"]. The app scopes each look's
+ * files to that look's own region, so the same :scope rules set the tokens on #messages for one and on #chatbar for
+ * the other.
+ *
+ * --holo is the glow colour itself: a brighter one under the dark scheme, a deeper one under the light scheme (so
+ * that text in it keeps its contrast on a pale surface). The other tokens are tints of it.
+ */
+
+:scope {
+  --holo: #1068b0;
+  --holo-face: "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", var(--font);
+  --holo-edge: color-mix(in srgb, var(--holo) 42%, transparent);
+  --holo-faint: color-mix(in srgb, var(--holo) 14%, transparent);
+  --holo-wash: color-mix(in srgb, var(--holo) 7%, transparent);
+  /* Text on a surface of the glow colour (a filled button) */
+  --holo-on: #ffffff;
+}
+:scope[data-set-glow="green"] { --holo: #167a46; }
+:scope[data-set-glow="red"] { --holo: #b2261e; }
+:scope[data-set-glow="purple"] { --holo: #6840c4; }
+:scope[data-set-glow="amber"] { --holo: #965a00; }
+
+:scope[data-scheme="dark"] { --holo: #5cc8ff; --holo-on: #061018; }
+:scope[data-scheme="dark"][data-set-glow="green"] { --holo: #58e696; }
+:scope[data-scheme="dark"][data-set-glow="red"] { --holo: #ff6b6b; }
+:scope[data-scheme="dark"][data-set-glow="purple"] { --holo: #b892ff; }
+:scope[data-scheme="dark"][data-set-glow="amber"] { --holo: #ffb852; }

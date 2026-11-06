@@ -1,9 +1,9 @@
-// Live checks of the three look mods in the real window, through the rig: mods/backgrounds (each view, light and
-// dark, at two dims; readability measured from the pixels; CPU while it animates; off restores the look),
-// mods/composer-pill (geometry and every composer state, a real message sent through it), mods/theme-midnight (the
-// window, Settings, an approval card, a diff, the rail mods following it), all three together, and the kit's h-md
-// class at rail and tab width.
-// Run: npm run build && node test/live/mods-look.js [phase…]   phases: backgrounds pill theme all md
+// Live checks of the look mods in the real window, through the rig: mods/backgrounds (each view, light and dark, at
+// two dims; readability measured from the pixels; CPU while it animates; off restores the look), the chat bar under
+// the themes (geometry and every state, a real message sent through it; its look was the composer-pill mod's and is
+// the app's own now), mods/theme-midnight (the window, Settings, an approval card, a diff, the rail mods following it),
+// all of them together, and the kit's h-md class at rail and tab width.
+// Run: npm run build && node test/live/mods-look.js [phase…]   phases: backgrounds chatbar theme all md
 // Screenshots go to $SHOTS (default: a temp folder).
 const fs = require('node:fs');
 const os = require('node:os');
@@ -228,14 +228,18 @@ async function seedCards(app) {
 const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
 
 (async () => {
-  const app = await launch({ mode: 'bypass', config: { theme: 'light' } });
+  // A profile that had the retired composer-pill mod turned on: the stale entry must do nothing
+  const app = await launch({ mode: 'bypass', config: { theme: 'light', mods: { enabled: { 'composer-pill': { permissions: [], styles: true } } } } });
   console.log(`model: ${app.live ? 'real API' : 'mock model (no key)'}; screenshots: ${SHOTS}`);
   try {
     await app.waitFor(`window.__oc_debug.mods.views().filter((v) => v.hello).length >= 7`, 15_000, 'the rail to start');
     // The look mods are bundled; the two that restyle the app start off, the backgrounds wait to be picked
     const list = await dbg(app, 'list()');
     const st = (id) => list.find((m) => m.id === id)?.state;
-    check('bundled: backgrounds on (nothing shown until picked), composer-pill and theme-midnight off', st('backgrounds') === 'on' && st('composer-pill') === 'off' && st('theme-midnight') === 'off' && !(await app.evaluate(`document.documentElement.classList.contains('mod-bg') || !!document.querySelector('style[data-mod]')`)), { b: st('backgrounds'), p: st('composer-pill'), t: st('theme-midnight') });
+    check('bundled: backgrounds on (nothing shown until picked), theme-midnight off', st('backgrounds') === 'on' && st('theme-midnight') === 'off' && !(await app.evaluate(`document.documentElement.classList.contains('mod-bg') || !!document.querySelector('style[data-mod]')`)), { b: st('backgrounds'), t: st('theme-midnight') });
+    const stale = list.filter((m) => m.id === 'composer-pill');
+    const errors = app.console.filter((l) => /^\[(error|exception)\]/.test(l) && /composer-pill|mod/i.test(l));
+    check('a stale composer-pill entry from an older profile: no such mod, no styles, no error', stale.length === 0 && !(await app.exists('style[data-mod="composer-pill"]')) && errors.length === 0, { stale, errors });
     const tokens = (await dbg(app, 'theme()')).tokens;
     check('the tokens sent to mods include the Markdown ones', ['--code-bg', '--code-hover', '--bubble', '--tok-kw', '--tok-str', '--tok-com', '--tok-num', '--tok-pun'].every((k) => tokens[k]), Object.keys(tokens).filter((k) => /code|bubble|tok/.test(k)));
     if (await app.exists('#pane-close')) await app.click('#pane-close');
@@ -346,28 +350,17 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       console.log('readability:', JSON.stringify(results));
     }
 
-    // ---------- The compact chat bar ----------
-    if (want('pill')) {
+    // ---------- The chat bar under the themes ----------
+    if (want('chatbar')) {
       await app.evaluate(`window.__oc_debug.context({ tokens: 23400, limit: 200000, threshold: 0.8, autoCompact: true })`);
-      await shot(app, 'pill-before');
-      // Where the slash menu sits against the app's own composer, to compare with the bar
-      const menuAt = () => app.evaluate(`(() => { const m = document.querySelector('#slash-menu').getBoundingClientRect(); const c = document.querySelector('#composer').getBoundingClientRect(); return { open: !document.querySelector('#slash-menu').hidden, above: m.bottom <= c.top, left: Math.round(m.left - c.left), right: Math.round(m.right - c.right) }; })()`);
-      await app.fill('#input', '/');
-      await app.waitFor(`!document.querySelector('#slash-menu').hidden`, 4000, 'the slash menu').catch(() => {});
-      await sleep(300); // its pop-in animation
-      const menuBefore = await menuAt();
-      await app.fill('#input', '');
-      await app.key('Escape');
-      await enable(app, 'composer-pill', true);
-      await app.waitFor(`Boolean(document.querySelector('style[data-mod="composer-pill"]'))`, 5000, 'the pill styles');
+      const menuAt = (sel) => app.evaluate(`(() => { const m = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); const c = document.querySelector('#composer').getBoundingClientRect(); return { open: !document.querySelector(${JSON.stringify(sel)}).hidden, above: m.bottom <= c.top, left: Math.round(m.left - c.left), right: Math.round(m.right - c.right) }; })()`);
       const clip = async () => {
         const r = await app.evaluate(`(() => { const w = document.querySelector('.composer-wrap').getBoundingClientRect(); const m = [...document.querySelectorAll('.slash-menu:not([hidden]), #queue:not([hidden]), #status-line:not([hidden])')].map((e) => e.getBoundingClientRect().top); const top = Math.min(w.top, ...m); return { x: w.x - 24, y: top - 16, width: w.width + 48, height: w.bottom - top + 16 }; })()`);
         return r;
       };
-      const pill = async (name) => shot(app, `pill-${name}`, await clip());
-      const geo = () => app.evaluate(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2 }; }; const cs = (s, p) => getComputedStyle(document.querySelector(s))[p]; return { comp: r('#composer'), input: r('#input'), attach: r('#attach-btn'), send: r('#send-btn'), model: r('#model-btn'), mode: r('#mode-btn'), meter: r('#context-meter'), att: r('#attachments'), barRadius: getComputedStyle(document.querySelector('#composer'), '::before').borderTopLeftRadius, chipBorder: cs('#model-btn', 'borderTopColor'), modeBorder: cs('#mode-btn', 'borderTopColor') }; })()`);
+      const bar = async (name) => shot(app, `chatbar-${name}`, await clip());
+      const geo = () => app.evaluate(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2 }; }; const cs = (s, p) => getComputedStyle(document.querySelector(s))[p]; return { comp: r('#composer'), input: r('#input'), attach: r('#attach-btn'), send: r('#send-btn'), foot: r('#composer-foot'), model: r('#model-btn'), mode: r('#mode-btn'), meter: r('#context-meter'), att: r('#attachments'), radius: cs('#composer', 'borderTopLeftRadius'), border: cs('#composer', 'borderTopColor'), chipBorder: cs('#model-btn', 'borderTopStyle'), modeBorder: cs('#mode-btn', 'borderTopStyle') }; })()`);
       const near = (a, b, d = 1.5) => Math.abs(a - b) <= d;
-      const passes = [];
       for (const theme of [false, true]) {
         if (theme) await enable(app, 'theme-midnight', true);
         for (const scheme of ['light', 'dark']) {
@@ -375,28 +368,26 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
           const tag = `${scheme}${theme ? '-midnight' : ''}`;
           await app.fill('#input', '');
           await app.evaluate(`document.activeElement.blur()`);
-          await sleep(400); // the focus ring fades out
+          await sleep(400);
           const g = await geo();
-          const barH = g.input.h + 4;
           const ok =
-            near(barH, 44) && g.barRadius === '14px' &&
+            near(g.comp.h, 46) && g.radius === '12px' &&
             g.attach.r <= g.input.x + 1 && g.send.x >= g.input.r - 1 &&
             near(g.attach.cy, g.input.cy, 2) && near(g.send.cy, g.input.cy, 2) &&
-            g.model.y >= g.input.b && g.mode.y >= g.input.b && near(g.model.cy, g.mode.cy) &&
-            g.model.x < g.mode.x && (!g.meter || (g.mode.r <= g.meter.x + 1 && near(g.meter.r, g.comp.r, 6))) &&
-            /rgba\(0, 0, 0, 0\)|transparent/.test(g.chipBorder) && /rgba\(0, 0, 0, 0\)|transparent/.test(g.modeBorder);
-          passes.push(ok);
-          check(`pill (${tag}): one 44 px row with attach left, field, send right; model, mode, meter in a borderless line below, right-aligned`, ok, g);
-          await pill(`empty-${tag}`);
+            g.foot.y >= g.comp.b && near(g.model.cy, g.mode.cy) && g.model.x < g.mode.x &&
+            (!g.meter || (g.mode.r <= g.meter.x + 1 && near(g.meter.r, g.comp.r - 8, 3))) &&
+            g.chipBorder === 'none' && g.modeBorder === 'none';
+          check(`chatbar (${tag}): one 46 px bar with the plus left, the field, the action right; model, mode, ring in a borderless row under it, right-aligned`, ok, g);
+          await bar(`empty-${tag}`);
           await app.evaluate(`document.querySelector('#input').focus()`);
-          await sleep(200);
-          check(`pill (${tag}): focus ring on the bar`, await app.evaluate(`getComputedStyle(document.querySelector('#composer'), '::before').boxShadow !== 'none'`));
-          await pill(`focused-${tag}`);
+          await sleep(250);
+          check(`chatbar (${tag}): focus shows on the bar's border`, (await geo()).border !== g.border, { before: g.border });
+          await bar(`focused-${tag}`);
           await app.fill('#input', 'First line of a longer request\nsecond line with more detail\nthird line');
           await sleep(200);
           const g3 = await geo();
-          check(`pill (${tag}): three lines grow the field upward, buttons stay on the last line`, near(g3.input.h, 80) && near(g3.input.b, g.input.b) && near(g3.send.cy, g.send.cy) && near(g3.attach.cy, g.attach.cy), { input: g3.input, send: g3.send });
-          await pill(`three-lines-${tag}`);
+          check(`chatbar (${tag}): three lines grow the bar upward, the plus and the action stay on the last line`, near(g3.input.h, 86) && near(g3.comp.b, g.comp.b) && near(g3.send.cy, g.send.cy) && near(g3.attach.cy, g.attach.cy), { input: g3.input, send: g3.send });
+          await bar(`three-lines-${tag}`);
           await app.fill('#input', '');
         }
         if (theme) await enable(app, 'theme-midnight', false);
@@ -408,28 +399,32 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       await app.evaluate(`document.querySelector('#input').focus()`);
       await sleep(200);
       const ga = await geo();
-      check('pill: two attachments sit inside the bar, above the field', ga.att && ga.att.b <= ga.input.y + 1 && ga.att.y >= ga.comp.y && (await app.evaluate(`window.__oc_debug.attachments().length`)) === 2, ga.att);
-      await pill('attachments-light');
+      const thumb = await app.evaluate(`(() => { const t = document.querySelector('.attachment').getBoundingClientRect(); const c = document.querySelector('#composer').getBoundingClientRect(); return { w: t.width, h: t.height, left: Math.round(t.left - c.left), top: Math.round(t.top - c.top) }; })()`);
+      check('chatbar: two attachments sit inside the bar above the field, 120 px, lined up with the text', ga.att && ga.att.b <= ga.input.y + 1 && ga.att.y >= ga.comp.y && (await app.evaluate(`window.__oc_debug.attachments().length`)) === 2 && thumb.w === 120 && thumb.h === 120 && near(thumb.left, 45) && near(thumb.top, 13, 2.5), { att: ga.att, thumb });
+      await bar('attachments-light');
       await setTheme(app, 'dark');
-      await pill('attachments-dark');
+      await bar('attachments-dark');
       await setTheme(app, 'light');
       await app.evaluate(`document.querySelectorAll('.attach-remove').forEach((b) => b.click())`);
       await sleep(400);
       // Drag highlight
+      const look = () => app.evaluate(`(() => { const s = getComputedStyle(document.querySelector('#composer')); return s.borderTopColor + ' ' + s.boxShadow; })()`);
+      const idleLook = await look();
       await app.evaluate(`document.querySelector('#composer').classList.add('dragging')`);
-      await pill('dragging-light');
+      check('chatbar: a drag over it shows on the bar', (await look()) !== idleLook, idleLook);
+      await bar('dragging-light');
       await app.evaluate(`document.querySelector('#composer').classList.remove('dragging')`);
       // Slash menu
       await app.fill('#input', '/');
       await app.waitFor(`!document.querySelector('#slash-menu').hidden`, 4000, 'the slash menu').catch(() => {});
       await sleep(300); // its pop-in animation
-      const sm = await menuAt();
-      check('pill: the slash menu opens above the bar, placed as with the app\'s own composer', sm.open && sm.above && sm.left === menuBefore.left && sm.right === menuBefore.right, { pill: sm, app: menuBefore });
-      await pill('slash-light');
+      const sm = await menuAt('#slash-menu');
+      check('chatbar: the slash menu opens above the bar, as wide as it', sm.open && sm.above && near(sm.left, 0) && near(sm.right, 0), sm);
+      await bar('slash-light');
       await setTheme(app, 'dark');
       await app.fill('#input', '/');
       await sleep(500);
-      await pill('slash-dark');
+      await bar('slash-dark');
       await setTheme(app, 'light');
       await app.fill('#input', '');
       await app.key('Escape');
@@ -439,19 +434,21 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       await app.fill('#input', 'Look at @log');
       await app.waitFor(`!document.querySelector('#mention-menu').hidden`, 4000, 'the mention menu').catch(() => {});
       await sleep(300);
-      check('pill: the mention menu opens above the bar', await app.evaluate(`!document.querySelector('#mention-menu').hidden && document.querySelector('#mention-menu').getBoundingClientRect().bottom <= document.querySelector('#composer').getBoundingClientRect().top`));
-      await pill('mention-light');
+      check('chatbar: the mention menu opens above the bar', (await menuAt('#mention-menu')).above);
+      await bar('mention-light');
       await app.key('Escape');
       await app.fill('#input', '');
       await app.evaluate(`window.__oc_debug.files.mock(null)`);
-      // Mode colours in the quiet line
-      for (const mode of ['auto', 'plan']) {
+      // The mode under the bar: plain text for Auto, a colour for Plan and Bypass
+      const modeColour = () => app.evaluate(`[getComputedStyle(document.querySelector('#mode-btn')).color, getComputedStyle(document.querySelector('#model-btn')).color, document.querySelector('#mode-btn').innerText.trim()]`);
+      const colours = {};
+      for (const mode of ['auto', 'plan', 'bypass']) {
         await app.evaluate(`(async () => { const c = await window.oc.getConfig(); c.permissionMode = ${JSON.stringify(mode)}; await window.oc.setConfig(c); })()`);
         await sleep(500);
-        await pill(`mode-${mode}-light`);
+        colours[mode] = await modeColour();
+        await bar(`mode-${mode}-light`);
       }
-      await app.evaluate(`(async () => { const c = await window.oc.getConfig(); c.permissionMode = 'bypass'; await window.oc.setConfig(c); })()`);
-      await sleep(400);
+      check('chatbar: Auto reads as plain text ("Auto"), Plan and Bypass keep a colour', colours.auto[0] === colours.auto[1] && colours.auto[2] === 'Auto' && colours.plan[0] !== colours.plan[1] && colours.bypass[0] !== colours.bypass[1] && colours.plan[0] !== colours.bypass[0], colours);
       // A real message through it, with a second one queued while the first runs
       await app.evaluate(`document.getElementById('new-session-btn').click()`);
       await sleep(800);
@@ -459,24 +456,27 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       await app.send(app.live ? 'Run `sleep 6` with bash, then reply with the single word: done.' : 'Run ls');
       await app.waitFor(`!document.querySelector('#status-line').hidden`, 20_000, 'the run to start').catch(() => {});
       await sleep(800);
-      // Enter queues while a run is going (the button itself is Stop then)
+      const face = () => app.evaluate(`(() => { const b = document.querySelector('#send-btn'); return { stop: b.classList.contains('stop'), label: b.getAttribute('aria-label'), placeholder: document.querySelector('#input').placeholder }; })()`);
+      const empty = await face();
+      check('chatbar: during a run with nothing typed the action is Stop, and the placeholder says Enter queues', empty.stop && empty.label === 'Stop' && /queue/i.test(empty.placeholder), empty);
       await app.fill('#input', 'And then list the files.');
+      const typed = await face();
+      check('chatbar: with something typed during a run the action queues it instead', !typed.stop && /queue/i.test(typed.label), typed);
       await app.key('Enter');
       await app.waitFor(`window.__oc_debug.queue().length > 0`, 5000, 'a queued message').catch(() => {});
       await sleep(300);
-      check('pill: during a run the send button is Stop and a message can be queued', await app.evaluate(`document.querySelector('#send-btn').classList.contains('stop') && window.__oc_debug.queue().length === 1`));
-      await pill('running-queue-light');
-      await shot(app, 'pill-running-window-light');
+      check('chatbar: Enter queued the message, and the empty field shows Stop again', (await face()).stop && (await app.evaluate(`window.__oc_debug.queue().length`)) === 1);
+      await bar('running-queue-light');
+      await shot(app, 'chatbar-running-window-light');
       await app.waitIdle(180_000, false);
       await sleep(1500);
       const reply = await app.lastReply();
       const replies = await app.evaluate(`[...document.querySelectorAll('.msg.assistant')].map((e) => e.innerText.trim()).join(' | ')`);
-      check('pill: the message went through and was answered, and the queued one after it', app.live ? replies.length > 20 && (await app.evaluate(`document.querySelectorAll('.msg.user').length`)) >= 2 : reply.length > 0, replies.slice(0, 200));
+      check('chatbar: the message went through and was answered, and the queued one after it', app.live ? replies.length > 20 && (await app.evaluate(`document.querySelectorAll('.msg.user').length`)) >= 2 : reply.length > 0, replies.slice(0, 200));
       await app.waitIdle(180_000, false).catch(() => {});
-      await shot(app, 'pill-after-run-light');
-      await enable(app, 'composer-pill', false);
+      await shot(app, 'chatbar-after-run-light');
+      await app.evaluate(`(async () => { const c = await window.oc.getConfig(); c.permissionMode = 'bypass'; await window.oc.setConfig(c); })()`);
       await app.evaluate(`window.__oc_debug.context({ tokens: 23400, limit: 200000, threshold: 0.8, autoCompact: true })`);
-      check('pill off: the composer is back to the app\'s own', await app.evaluate(`!document.querySelector('style[data-mod="composer-pill"]') && getComputedStyle(document.querySelector('#composer')).display === 'block'`));
     }
 
     // ---------- Midnight ----------
@@ -528,7 +528,6 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
     // ---------- All three ----------
     if (want('all')) {
       await enable(app, 'theme-midnight', true);
-      await enable(app, 'composer-pill', true);
       await app.evaluate(`window.__oc_debug.context({ tokens: 61000, limit: 200000, threshold: 0.8, autoCompact: true })`);
       for (const [scheme, bgv] of [['light', 'aurora'], ['dark', 'aurora'], ['dark', 'constellation'], ['light', 'grid'], ['dark', 'dusk']]) {
         await setTheme(app, scheme);
@@ -539,7 +538,6 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
         check(`all three (${bgv}, ${scheme}): readable`, r.text >= 4.5 && r.muted >= 3, r);
       }
       await rpc(app, 'mods.setLayout', { background: null });
-      await enable(app, 'composer-pill', false);
       await enable(app, 'theme-midnight', false);
       await setTheme(app, 'light');
     }

@@ -115,6 +115,12 @@ function logoPng(size = 240) {
       await app.send('Open https://example.com in the browser, take a screenshot, and include the screenshot in your answer with show_image. One sentence is enough.');
       await app.waitIdle(240_000);
       await imagesLoaded(app);
+      // The browser calls fold into one line (Tool activity: Summary), which carries the screenshot's thumbnail;
+      // opened, it shows the screenshot's own row
+      // (the row that carries a picture: in a hidden window a first attempt can fail, and the model then takes another)
+      const folded = await app.evaluate(`(() => { const g = [...document.querySelectorAll('.tool[data-tool="browser_screenshot"]')].find((r) => r.querySelector(':scope > summary img.tool-thumb'))?.closest('.tool-group'); if (!g) return null; const t = g.querySelector(':scope > summary .group-thumbs img.tool-thumb'); return { open: g.open, thumb: Boolean(t), thumbH: t ? t.getBoundingClientRect().height : 0 }; })()`);
+      check('(c) the folded line shows the screenshot as a 20 px thumbnail', !folded || (!folded.open && folded.thumb && Math.round(folded.thumbH) === 20), folded);
+      await app.evaluate(`[...document.querySelectorAll('.tool[data-tool="browser_screenshot"]')].find((r) => r.querySelector(':scope > summary img.tool-thumb'))?.closest('.tool-group')?.setAttribute('open', '')`);
       const shot = await app.evaluate(`(() => { const f = [...document.querySelectorAll('.reply-image')].pop(); const thumb = document.querySelector('.tool[data-tool="browser_screenshot"] > summary img.tool-thumb'); return { fig: f && f.querySelector('img').getAttribute('src'), thumb: Boolean(thumb), thumbH: thumb ? thumb.getBoundingClientRect().height : 0 }; })()`);
       check('(c) the screenshot is in the reply', shot.fig && /images\/img-3\.png$/.test(shot.fig), shot);
       check('(c) its tool row has a 20 px thumbnail', shot.thumb && Math.round(shot.thumbH) === 20, shot);
@@ -158,9 +164,9 @@ function logoPng(size = 240) {
     await sleep(300);
     const group = await app.evaluate(`(() => { const g = [...document.querySelectorAll('.tool-group')].pop(); if (!g) return null; return { thumbs: g.querySelectorAll(':scope > summary .group-thumbs img.tool-thumb').length, more: g.querySelector(':scope > summary .thumb-more')?.innerText, open: g.open }; })()`);
     check('(e) a group row shows three thumbnails and +2', group && group.thumbs === 3 && group.more === '+2', group);
-    await app.evaluate(`document.querySelector('.tool-group > summary .group-thumbs img').click()`);
+    await app.evaluate(`[...document.querySelectorAll('.tool-group')].pop().querySelector(':scope > summary .group-thumbs img').click()`);
     await sleep(300);
-    check('(e) a group thumbnail opens the lightbox without opening the group', await app.evaluate(`document.getElementById('lightbox').open && !document.querySelector('.tool-group').open`));
+    check('(e) a group thumbnail opens the lightbox without opening the group', await app.evaluate(`document.getElementById('lightbox').open && ![...document.querySelectorAll('.tool-group')].pop().open`));
     await app.evaluate(`document.getElementById('lightbox').close()`);
     await app.evaluate(`document.getElementById('messages').scrollTop = 1e9`);
     await both(app, 'e-group', await last(app, '.tool-group'), 16);

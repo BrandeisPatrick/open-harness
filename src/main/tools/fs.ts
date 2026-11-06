@@ -55,9 +55,11 @@ export const writeFile: Tool = {
     const approval = await ctx.approve('write_file', `${file}\n(${content.length} characters)`, file);
     if (!approval.ok) return { content: approval.message };
     ctx.beforeChange(file);
+    const existed = await fs.stat(file).then(() => true, () => false);
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, content, 'utf8');
-    return { content: `Wrote ${Buffer.byteLength(content)} bytes to ${file}` };
+    // "Created" or "Wrote": the window's summary of a run of calls says which
+    return { content: existed ? `Wrote ${Buffer.byteLength(content)} bytes to ${file}` : `Created ${file} (${Buffer.byteLength(content)} bytes)` };
   },
 };
 

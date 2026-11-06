@@ -424,7 +424,7 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
       await checkAligned(app, 'menu closed');
       // Composer strip
       const sv = await view(app, 'stripy/main');
-      check('composer mod: sits directly above the composer, sized to content', sv && sv.hello && sv.height > 10 && sv.height <= 120 && (await app.evaluate(`document.querySelector('#mod-strip').nextElementSibling.id === 'composer' && !document.querySelector('#mod-strip').hidden`)), sv);
+      check('composer mod: sits directly above the composer, sized to content', sv && sv.hello && sv.height > 10 && sv.height <= 120 && (await app.evaluate(`document.querySelector('#mod-strip').nextElementSibling.id === 'chatbar' && document.querySelector('#chatbar').firstElementChild.id === 'composer' && !document.querySelector('#mod-strip').hidden`)), sv);
       await app.screenshotOf(path.join(SHOTS, 'seat-composer-light.png'), '.composer-wrap', 8);
       // Styles: the token reaches the app and, through theme.changed, every mod page
       await app.waitFor(`getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === '#2b6cb0'`, 5000, 'the tint').catch(() => {});

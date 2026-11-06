@@ -10,6 +10,9 @@
 //
 //   npm run build   (once; dist/ must be current)
 //   node scripts/readme-shots.js [out-dir]      default: docs/screenshots
+//
+// Required as a module it runs nothing and hands out its fixtures (the project, the seeded sessions, the scripted
+// replies, the PNG helpers), for other screenshot scripts.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -1002,6 +1005,9 @@ async function main() {
     fs.rmSync(HOME, { recursive: true, force: true });
   }
 }
+
+module.exports = { HOME, PROJECT, CONFIG_DIR, makeProject, seedSessions, scriptHero, scriptImages, scriptApproval, panelPng, writeGrafanaServer, installWordCount, cropPng, encodePng, decodePng, mainEval, freePort, isMain, call };
+if (require.main !== module) return;
 
 const started = Date.now();
 main().then(

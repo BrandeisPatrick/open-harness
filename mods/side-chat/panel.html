@@ -21,11 +21,11 @@
   /* ---------- the conversation ---------- */
   .scroller { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .thread { display: flex; flex-direction: column; padding-top: 16px; padding-bottom: 8px; }
-  .msg { font-size: 14px; line-height: 20px; }
+  .msg { font-size: var(--fs-body); line-height: var(--lh-body); }
   .msg.user { display: flex; justify-content: flex-end; margin: 4px 0 16px; }
   .bubble { max-width: 85%; padding: 8px 14px; background: var(--bubble); color: var(--text-100); border-radius: 18px 18px 4px 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .msg.assistant { margin-bottom: 8px; color: var(--text-100); }
-  .waiting { display: flex; align-items: center; gap: 8px; min-height: 20px; color: var(--text-400); font-size: 13px; }
+  .waiting { display: flex; align-items: center; gap: 8px; min-height: 20px; color: var(--text-400); font-size: var(--fs-small); }
   .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin-top: 2px; }
   .foot .info { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .foot .info .h-muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -36,11 +36,11 @@
   /* Narrow pane: the actions keep their icons (and names as tooltips) so the usage line has room */
   @media (max-width: 520px) { .actions .lbl { display: none; } .actions .h-btn { width: 28px; padding: 0; } }
 
-  .msg.error { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; padding: 10px 12px; border-radius: var(--r-card); background: var(--bg-200); border: 1px solid var(--border-subtle); font-size: 13px; line-height: 18px; }
+  .msg.error { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; padding: 10px 12px; border-radius: var(--r-card); background: var(--bg-200); border: 1px solid var(--border-subtle); font-size: var(--fs-small); line-height: var(--lh-small); }
   .msg.error > .h-icon { margin-top: 1px; color: var(--danger); }
   .msg.error .body { flex: 1 1 auto; min-width: 0; }
   .msg.error .what { color: var(--text-100); }
-  .msg.error .hint { margin-top: 2px; color: var(--text-400); font-size: 12px; line-height: 16px; }
+  .msg.error .hint { margin-top: 2px; color: var(--text-400); font-size: var(--fs-small); line-height: var(--lh-small); }
   .msg.error .h-btn { margin: -4px -4px -4px 0; }
 
   /* ---------- Replies: the kit's .h-md (harness.css) styles them and makes Copy and links work ---------- */
@@ -55,7 +55,7 @@
   .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding-top: 24px; padding-bottom: 24px; text-align: center; }
   .empty .mark { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 12px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
   .empty .mark .h-icon { width: 20px; height: 20px; }
-  .empty h2 { margin: 0 0 6px; font-size: 16px; line-height: 22px; font-weight: 600; color: var(--text-100); }
+  .empty h2 { margin: 0 0 6px; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 500; color: var(--text-100); }
   .empty p { max-width: 380px; color: var(--text-400); }
   .examples { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 420px; margin-top: 16px; }
   .example { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 7px 12px; border: 1px solid var(--border-subtle); border-radius: var(--r-card); background: var(--bg-000); color: var(--text-200); text-align: left; box-shadow: var(--shadow-sm); transition: background-color 0.12s, color 0.12s, border-color 0.12s; }
@@ -70,7 +70,7 @@
   .composer-wrap { flex: none; padding-bottom: 12px; }
   .composer { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-000); box-shadow: var(--shadow-sm); transition: border-color 0.12s, box-shadow 0.12s; }
   .composer:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--field-ring); }
-  .composer textarea { flex: 1 1 auto; min-width: 0; height: 22px; max-height: 200px; margin: 0 0 3px; padding: 2px 0 0; border: 0; outline: none; resize: none; background: transparent; font-size: 14px; line-height: 20px; color: var(--text-100); }
+  .composer textarea { flex: 1 1 auto; min-width: 0; height: 22px; max-height: 200px; margin: 0 0 3px; padding: 2px 0 0; border: 0; outline: none; resize: none; background: transparent; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-100); }
   .composer textarea::placeholder { color: var(--text-400); }
   .composer textarea:focus-visible { outline: none; }
   .send { width: 28px; height: 28px; padding: 0; border-radius: 8px; }

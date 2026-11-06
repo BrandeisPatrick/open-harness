@@ -1,17 +1,17 @@
 // Settings → Mods: install, create and reload mods, safe mode, and the list (Built-in / Yours / This project) with
 // each mod's switch, what it asks for, what it adds, its problems and its own settings. Follows mods:changed live.
 
-import type { ModInfo, ModPermission, ModSeat, ModSettingField } from '../../shared/mods';
+import type { ModInfo, ModLookTarget, ModPermission, ModSeat, ModSettingField } from '../../shared/mods';
 import { escapeHtml, h } from '../dom.js';
 import { icon, isIconName } from '../icons.js';
 import { onPush } from '../rpc.js';
-import { deriveModId, grantSheet, MOD_GROUPS, modChip, modIconFile, parseInteger, permissionWords, SEAT_WORDS, validModId } from './model.js';
+import { deriveModId, grantSheet, LOOK_WORDS, MOD_GROUPS, modChip, modIconFile, parseInteger, permissionWords, SEAT_WORDS, validModId } from './model.js';
 import { actions, button, chip, group, note, row, sectionTitle, segmented, selectControl, switchControl, textControl, tildePath, type Row } from './ui.js';
 import type { Ctx, Section } from './ctx.js';
 
 export function modsSection(ctx: Ctx): Section {
   const el = h('section', {}, sectionTitle('Mods'));
-  el.append(note('Mods add panels, tabs, styles and commands to Open Harness. Built-in mods are on; mods of yours and of a project stay off until you turn them on.', 'sp-intro'));
+  el.append(note('Mods add panels, tabs, looks, styles and commands to Open Harness. Built-in mods are on, except the ones that restyle the app; mods of yours and of a project stay off until you turn them on. Pick a mod’s looks in Appearance.', 'sp-intro'));
 
   let mods: ModInfo[] = [];
   const expanded = new Set<string>();
@@ -88,19 +88,22 @@ export function modsSection(ctx: Ctx): Section {
     if (!idEdited) idInput.input.value = deriveModId(nameInput.input.value);
   });
   idInput.input.addEventListener('input', () => (idEdited = idInput.input.value !== ''));
-  let seat: ModSeat = 'rail';
-  const seatSel = selectControl<ModSeat>(
+  // A view in a seat, or a look for a region ("look:conversation")
+  let seat: ModSeat | `look:${ModLookTarget}` = 'rail';
+  const seatSel = selectControl<ModSeat | `look:${ModLookTarget}`>(
     [
       { value: 'rail', label: 'Rail panel' },
       { value: 'tab', label: 'Side pane tab' },
       { value: 'composer', label: 'Composer strip' },
       { value: 'background', label: 'Background' },
+      { value: 'look:conversation', label: 'Conversation look' },
+      { value: 'look:composer', label: 'Chat bar look' },
     ],
     'rail',
     (v) => (seat = v),
-    160,
+    180,
   );
-  seatSel.select.setAttribute('aria-label', 'Where its view sits');
+  seatSel.select.setAttribute('aria-label', 'What it adds: a view and where it sits, or a look');
   let scope: 'user' | 'project' = 'user';
   const scopeSeg = segmented<'user' | 'project'>(
     [
@@ -119,7 +122,7 @@ export function modsSection(ctx: Ctx): Section {
     if (!validModId(id)) return formProblem(createProblem, 'The id needs lower-case letters, digits and -, 2 to 40 characters, starting with a letter.');
     b.disabled = true;
     try {
-      const made = await ctx.call('mods.create', { id, name, seat, scope });
+      const made = await ctx.call('mods.create', seat.startsWith('look:') ? { id, name, look: seat.slice(5) as ModLookTarget, scope } : { id, name, seat: seat as ModSeat, scope });
       formProblem(createProblem, null);
       nameInput.set('');
       idInput.set('');
@@ -141,8 +144,8 @@ export function modsSection(ctx: Ctx): Section {
     'div',
     { class: 'sp-form sp-only-browse', hidden: true, role: 'group', 'aria-label': 'Create a mod' },
     h('div', { class: 'sp-form-title' }, 'New mod'),
-    h('p', { class: 'sp-form-hint' }, 'Writes a starter mod (mod.json and one page) and shows its folder. Ask the agent to build it out.'),
-    h('div', { class: 'sp-form-grid' }, field('Name', nameInput), field('Id', idInput), field('Seat', seatSel), h('div', { class: 'sp-form-field' }, h('span', { class: 'sp-form-label' }, 'Where'), scopeSeg)),
+    h('p', { class: 'sp-form-hint' }, 'Writes a starter mod (mod.json and one page, or one stylesheet for a look) and shows its folder. Ask the agent to build it out.'),
+    h('div', { class: 'sp-form-grid' }, field('Name', nameInput), field('Id', idInput), field('Adds', seatSel), h('div', { class: 'sp-form-field' }, h('span', { class: 'sp-form-label' }, 'Where'), scopeSeg)),
     h('div', { class: 'sp-form-line end' }, button('Cancel', () => closeForms()), createGo),
     createProblem,
   );
@@ -315,6 +318,7 @@ export function modsSection(ctx: Ctx): Section {
     // What it adds
     const adds: string[] = [];
     for (const v of m.manifest?.contributes?.views ?? []) adds.push(`${v.title}: ${SEAT_WORDS[v.seat] ?? v.seat}`);
+    for (const l of m.manifest?.contributes?.looks ?? []) adds.push(`${l.title}: ${LOOK_WORDS[l.target] ?? l.target} (pick it in Appearance)`);
     for (const c of m.manifest?.contributes?.commands ?? []) adds.push(`/${c.name}: ${c.description}`);
     const styles = m.manifest?.contributes?.styles ?? [];
     if (styles.length) adds.push(`Styles for the whole app: ${styles.join(', ')}`);
@@ -330,7 +334,7 @@ export function modsSection(ctx: Ctx): Section {
       li.innerHTML = `${icon(granted ? 'check' : wanted ? 'circle-alert' : 'circle', 14)}<span>${escapeHtml(permissionWords(p))}</span>${wanted ? '<span class="sp-chip warn">Not granted yet</span>' : ''}`;
       permList.append(li);
     }
-    if (m.wantsStyles) permList.append(h('li', { class: 'wanted', html: `${icon('circle-alert', 14)}<span>Restyle the whole app (styles or a background)</span><span class="sp-chip warn">Not granted yet</span>` }));
+    if (m.wantsStyles) permList.append(h('li', { class: 'wanted', html: `${icon('circle-alert', 14)}<span>Restyle the app (styles, looks or a background)</span><span class="sp-chip warn">Not granted yet</span>` }));
     d.append(block('Permissions', asked.length || m.wantsStyles ? permList : h('p', { class: 'sp-detail-muted' }, 'None: it only shows its own views and keeps its own storage.')));
 
     // Problems
@@ -342,7 +346,7 @@ export function modsSection(ctx: Ctx): Section {
           h(
             'ul',
             { class: 'sp-problem-list' },
-            ...probs.map((p) => h('li', {}, h('span', { class: 'sp-problem-kind' }, p.kind === 'runtime' ? `Page${p.view ? ` ${p.view}` : ''}` : p.kind === 'file' ? 'Missing file' : 'mod.json'), h('pre', {}, p.message))),
+            ...probs.map((p) => h('li', {}, h('span', { class: 'sp-problem-kind' }, p.kind === 'runtime' ? `Page${p.view ? ` ${p.view}` : ''}` : p.kind === 'file' ? 'Missing file' : p.warning ? 'mod.json (warning)' : 'mod.json'), h('pre', {}, p.message))),
           ),
         ),
       );

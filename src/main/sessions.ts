@@ -368,6 +368,11 @@ export class SessionStore {
     return this.sessions.get(id);
   }
 
+  /** Every session held, empty ones too (list() leaves those out), in no order. */
+  all(): Session[] {
+    return [...this.sessions.values()];
+  }
+
   /** New empty session. It is only written to disk once it has messages. */
   create(opts: CreateSessionOptions = {}): Session {
     const now = Date.now();

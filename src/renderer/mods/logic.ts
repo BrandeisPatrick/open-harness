@@ -3,7 +3,7 @@
 // touches the DOM, so test/mods-host.js loads the compiled file under plain Node.
 
 import type { AgentEvent, SessionMeta } from '../../shared/types';
-import type { ModHello, ModInfo, ModLayout, ModPermission, ModSeat, ModSession, ModTheme, ModViewManifest } from '../../shared/mods';
+import type { ModHello, ModInfo, ModLayout, ModLookTarget, ModPermission, ModSeat, ModSession, ModTheme, ModViewManifest } from '../../shared/mods';
 
 export const PROTOCOL = 1;
 export const RAIL_MIN = 240;
@@ -48,6 +48,42 @@ export function activeBackground(mods: readonly ModInfo[], layout: Pick<ModLayou
   const want = layout?.background;
   if (!want) return null;
   return viewsFor(mods, 'background').find((r) => r.key === want) ?? null;
+}
+
+/** The regions a look can restyle, in the order the host applies them */
+export const LOOK_TARGETS: readonly ModLookTarget[] = ['conversation', 'composer'];
+
+/** The look the layout names for a region, when its mod is on and has that look for that region. */
+export function activeLook(mods: readonly ModInfo[], layout: Pick<ModLayout, 'looks'> | null | undefined, target: ModLookTarget): { key: string; mod: ModInfo; id: string } | null {
+  const ref = layout?.looks?.[target];
+  if (!ref) return null;
+  const i = ref.lastIndexOf('/');
+  if (i <= 0) return null;
+  const mod = mods.find((m) => m.key === ref.slice(0, i));
+  const id = ref.slice(i + 1);
+  if (!mod || mod.state !== 'on' || !mod.manifest?.contributes?.looks?.some((l) => l.id === id && l.target === target)) return null;
+  return { key: ref, mod, id };
+}
+
+/** An attribute name for a mod setting: "data-set-" and the key in lower case, other characters as "-". */
+export function settingAttribute(key: string): string {
+  return `data-set-${String(key).toLowerCase().replace(/[^a-z0-9_.-]/g, '-')}`;
+}
+
+/** The attributes a region's root carries while a look is active there (docs/mods.md, Looks: state). */
+export function lookAttributes(s: { ref: string; running: boolean; scheme: 'light' | 'dark'; mode: string; settings: Record<string, unknown> }): Record<string, string> {
+  const out: Record<string, string> = { 'data-look': s.ref, 'data-running': String(!!s.running), 'data-scheme': s.scheme, 'data-mode': String(s.mode) };
+  for (const [k, v] of Object.entries(s.settings ?? {})) {
+    if (v === null || v === undefined || typeof v === 'object') continue;
+    out[settingAttribute(k)] = String(v).slice(0, 200);
+  }
+  return out;
+}
+
+/** The pointer as fractions of the window, each from 0 to 1, rounded to four places. */
+export function pointerFraction(x: number, y: number, w: number, h: number): { x: number; y: number } {
+  const f = (v: number, size: number) => Math.round(Math.min(1, Math.max(0, size > 0 ? v / size : 0.5)) * 10000) / 10000;
+  return { x: f(x, w), y: f(y, h) };
 }
 
 export function clampRailWidth(w: unknown): number {
@@ -229,10 +265,13 @@ export function askLines(mod: ModInfo): AskLine[] {
   }
   const c = mod.manifest?.contributes;
   const hasStyles = !!c?.styles?.length;
+  const hasLooks = !!c?.looks?.length;
   const hasBackground = !!c?.views?.some((v) => v.seat === 'background');
   if ((mod.state !== 'paused' || mod.wantsStyles) && (hasStyles || hasBackground)) {
-    const what = hasStyles && hasBackground ? 'restyle Open Harness and draw behind it' : hasStyles ? 'restyle Open Harness itself' : 'draw behind the whole window';
+    const what = hasStyles && hasBackground ? 'restyle Open Harness and draw behind it' : hasStyles ? 'restyle Open Harness itself' : hasLooks ? 'restyle the conversation or the chat bar and draw behind the window' : 'draw behind the whole window';
     lines.push({ text: `It can ${what}: its stylesheet applies to the app's own page, approval cards included. Turn it on only if you trust where it came from.`, strong: true });
+  } else if ((mod.state !== 'paused' || mod.wantsStyles) && hasLooks) {
+    lines.push({ text: 'It can restyle the conversation or the chat bar once you pick its look: its stylesheet applies to the app\'s own page, approval cards in the conversation included. Turn it on only if you trust where it came from.', strong: true });
   }
   if (perms.includes('network')) {
     const reads = perms.some((p) => p === 'session:read' || p === 'sessions:read');

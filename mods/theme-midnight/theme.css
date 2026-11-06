@@ -76,6 +76,7 @@
   --tok-pun: var(--text-400);
 
   --shadow-sm: 0 1px 2px rgba(15, 21, 34, 0.06);
+  --shadow-bar: 0 2px 8px -2px rgba(15, 21, 34, 0.07), 0 1px 2px rgba(15, 21, 34, 0.04);
   --shadow-pop: 0 4px 6px -1px rgba(15, 21, 34, 0.1), 0 2px 4px -2px rgba(15, 21, 34, 0.08);
   --shadow-dialog: 0 10px 15px -3px rgba(15, 21, 34, 0.12), 0 4px 6px -4px rgba(15, 21, 34, 0.1);
   --backdrop: rgba(8, 12, 22, 0.4);
@@ -127,6 +128,7 @@
     --tok-pun: var(--text-400);
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-bar: 0 2px 8px -2px rgba(0, 0, 0, 0.4);
     --shadow-pop: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.55);
     --shadow-dialog: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.55);
     --backdrop: rgba(2, 4, 10, 0.6);
@@ -178,6 +180,7 @@
   --tok-pun: var(--text-400);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-bar: 0 2px 8px -2px rgba(0, 0, 0, 0.4);
   --shadow-pop: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.55);
   --shadow-dialog: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.55);
   --backdrop: rgba(2, 4, 10, 0.6);

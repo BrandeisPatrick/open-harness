@@ -1,0 +1,149 @@
+/*
+ * Holo terminal: a look for the conversation (contributes.looks, target "conversation").
+ *
+ * This is the example to copy for a look of your own. What the app does with this file:
+ *
+ * 1. It wraps it in @scope (#messages) { … }, so every rule below reaches the transcript and nothing else. :scope is
+ *    #messages itself, and the custom properties set on it cascade through the transcript only.
+ * 2. It moves @keyframes in front of the scope (they cannot live inside it), so their names are global: they carry
+ *    the prefix "holo-".
+ * 3. While this look is active it keeps attributes on #messages that the rules branch on, with no script at all:
+ *      data-scheme="light|dark"    the colour scheme in effect
+ *      data-running="true|false"   a run is in progress in the session on screen
+ *      data-set-glow="blue|…"      this mod's settings (Settings → Mods → Hyperspace)
+ *      data-set-motion="full|calm"
+ *
+ * Readability comes first: the conversation is mostly reading. The app's text size and line height, the column,
+ * the spacing and the quiet tool lines are left exactly as they are. The look changes edges and tints, sets headings
+ * in a condensed face at the app's own size, and adds light only where something is happening. It only uses the class names docs/mods.md lists as stable (Looks → Stable hooks).
+ */
+
+/* The glow colour (--holo) and its tints come from glow.css, listed before this file in mod.json. */
+
+/* A very faint scanline behind the text, dark scheme only; it scrolls with the conversation (no repaint on scroll). */
+:scope[data-scheme="dark"] {
+  background-image: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--holo) 2.5%, transparent) 0 1px, transparent 1px 4px);
+  background-attachment: local;
+}
+
+/* ---------- Your messages: a transmission panel with cut corners and an edge in the glow colour ---------- */
+
+.msg.user .bubble {
+  background: color-mix(in srgb, var(--holo) 8%, var(--bubble));
+  box-shadow: inset 0 0 0 1px var(--holo-edge), inset 2px 0 0 color-mix(in srgb, var(--holo) 65%, transparent);
+}
+/* Cut corners where the engine knows corner-shape; elsewhere the app's rounded ones stay. */
+@supports (corner-shape: bevel) {
+  .msg.user .bubble { corner-shape: bevel; }
+}
+.msg.user .bubble.images-only { background: transparent; border: none; box-shadow: none; }
+
+/* ---------- Replies: a faint glow rule in the gutter beside the text (the text itself does not move) ---------- */
+
+.msg.assistant::before {
+  content: '';
+  position: absolute; left: -18px; top: 4px; bottom: 4px; width: 1px;
+  background: linear-gradient(to bottom, var(--holo-edge), color-mix(in srgb, var(--holo) 4%, transparent));
+  pointer-events: none;
+}
+/* The reply coming in now: its rule is brighter and carries a moving glint while the agent works. */
+:scope[data-running="true"] > .msg.assistant:last-child::before {
+  width: 2px; left: -18.5px;
+  background: linear-gradient(to bottom, transparent, var(--holo) 40%, transparent 60%) 0 0 / 100% 300% no-repeat, var(--holo-edge);
+}
+
+/* The streaming caret: a thin glowing blade after the last words of the reply coming in */
+:scope[data-running="true"] > .msg.assistant:last-child > .md > p:last-child::after,
+:scope[data-running="true"] > .msg.assistant:last-child > .md > :is(ul, ol):last-child > li:last-child::after {
+  content: '';
+  display: inline-block; width: 2px; height: 1.05em; margin-left: 4px; vertical-align: -0.16em; border-radius: 1px;
+  background: var(--holo);
+  box-shadow: 0 0 4px var(--holo), 0 0 10px color-mix(in srgb, var(--holo) 60%, transparent);
+}
+
+/* ---------- Headings: a condensed system face with a little tracking, at the app's size or larger ---------- */
+
+.md :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--holo-face);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: color-mix(in srgb, var(--holo) 30%, var(--text-100));
+}
+/* A condensed face looks smaller at the same size: one pixel more keeps it at the app's visual size, same line height */
+.md :is(h1, h2) { font-size: calc(var(--fs-head) + 1px); }
+.md :is(h3, h4, h5, h6) { font-size: calc(var(--fs-body) + 1px); }
+.md :is(h1, h2)::after {
+  content: ''; display: block; height: 1px; margin-top: 6px;
+  background: linear-gradient(to right, var(--holo-edge), transparent 70%);
+}
+.md a { color: color-mix(in srgb, var(--holo) 80%, var(--text-100)); text-decoration-color: var(--holo-edge); }
+.md blockquote { border-left-color: var(--holo-edge); }
+.md hr { background: linear-gradient(to right, var(--holo-edge), transparent); }
+.md th { background: var(--holo-wash); font-family: var(--holo-face); font-weight: 600; letter-spacing: 0.04em; }
+
+/* ---------- Code blocks: instrument panels with corner brackets ---------- */
+
+.code-block {
+  --bracket: color-mix(in srgb, var(--holo) 60%, transparent);
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--holo) 4%, var(--code-bg));
+  background-image:
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket));
+  background-size: 10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px;
+  background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+  background-repeat: no-repeat;
+}
+.code-lang { font-family: var(--holo-face); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in srgb, var(--holo) 70%, var(--text-400)); }
+.cmd, .out pre, pre.args { border-color: var(--holo-faint); }
+
+/* ---------- Tool lines: the app's quiet lines, with the icon in the glow colour ---------- */
+
+/* The same rules hold for a single .tool, for a .tool-group's own line, and for the rows inside a group. */
+:is(.tool, .tool-group) > summary { position: relative; }
+.tool-status, .group-icon { color: color-mix(in srgb, var(--holo) 60%, var(--text-400)); }
+.tool-status.err, .group-icon.err { color: var(--danger); }
+.tool-status.spin::after, .group-icon.spin::after { border-top-color: var(--holo); }
+.tool-chevron { color: color-mix(in srgb, var(--holo) 40%, var(--text-400)); }
+/* The rule beside a group's rows; the rows stay where the app puts them (16px + 12px = its 28px) */
+.group-body { border-left: 1px solid var(--holo-faint); margin-left: 16px; padding-left: 11px; }
+/* The line in flight: a thin mark in the gutter that pulses while the run lasts (the text itself is untouched) */
+:scope[data-running="true"] :is(.tool, .tool-group):has(> summary .spin) > summary::after {
+  content: ''; position: absolute; left: -14px; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; pointer-events: none;
+  background: var(--holo); box-shadow: 0 0 6px var(--holo);
+}
+
+/* ---------- Thinking, cards, notices ---------- */
+
+.thinking .body { border-left-color: var(--holo-faint); }
+.approval, .plan-card { border-color: var(--holo-edge); }
+
+/* The task list as a mission checklist. ":scope >" matches the app's own ".transcript > .task-list" in specificity;
+   a scoped rule wins a tie with an unscoped one, so no !important is needed. */
+:scope > .task-list { border-color: var(--holo-edge); }
+@supports (corner-shape: bevel) {
+  :scope > .task-list { corner-shape: bevel; }
+}
+.task-list::before {
+  content: 'Objectives';
+  display: block; margin: 2px 0 4px;
+  font: 600 var(--fs-micro) / var(--lh-micro) var(--holo-face); text-transform: uppercase; letter-spacing: 0.14em;
+  color: color-mix(in srgb, var(--holo) 70%, var(--text-400));
+}
+.task-row[data-status="completed"] .task-glyph { color: var(--holo); }
+.task-row[data-status="in_progress"] .task-glyph { color: var(--holo); }
+
+/* ---------- Motion: only with motion "full" (this mod's setting) and no reduced motion in the system ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  :scope[data-running="true"]:not([data-set-motion="calm"]) > .msg.assistant:last-child::before { animation: holo-glint 2.4s linear infinite; }
+  :scope[data-running="true"]:not([data-set-motion="calm"]) > .msg.assistant:last-child > .md > p:last-child::after,
+  :scope[data-running="true"]:not([data-set-motion="calm"]) > .msg.assistant:last-child > .md > :is(ul, ol):last-child > li:last-child::after { animation: holo-blade 1.1s ease-in-out infinite; }
+  :scope[data-running="true"]:not([data-set-motion="calm"]) :is(.tool, .tool-group):has(> summary .spin) > summary::after { animation: holo-pulse 1.4s ease-in-out infinite; }
+}
+
+@keyframes holo-glint { from { background-position: 0 100%, 0 0; } to { background-position: 0 -200%, 0 0; } }
+@keyframes holo-blade { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes holo-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }

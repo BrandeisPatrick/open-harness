@@ -6,7 +6,7 @@ import { escapeHtml, h } from '../dom.js';
 import { icon } from '../icons.js';
 import { MODES } from '../modes.js';
 import { onPush } from '../rpc.js';
-import { COMPACT_AT, KEEP_AWAKE, nearestCompactStep, parseInteger, parseText, parseUrl, TOOL_SET } from './model.js';
+import { COMPACT_AT, KEEP_AWAKE, nearestCompactStep, parseInteger, parseText, parseUrl, TOOL_ACTIVITY, TOOL_SET } from './model.js';
 import { button, group, iconButton, row, sectionTitle, tildePath } from './ui.js';
 import type { Ctx, Section } from './ctx.js';
 
@@ -33,6 +33,14 @@ export function generalSection(ctx: Ctx): Section {
       null,
       folder,
       awake,
+      ctx.segField({
+        id: 'toolActivity',
+        title: 'Tool activity',
+        desc: 'Fold each run of tool calls into one line that says what it did, or show every call as its own row.',
+        keywords: 'tools calls rows fold collapse group summary quiet verbose',
+        field: 'toolActivity',
+        choices: TOOL_ACTIVITY,
+      }),
       ctx.switchField({ id: 'notifications', title: 'Notifications', desc: 'Notify when a run finishes or needs your approval while Open Harness is in the background.', keywords: 'alert notify banner sound', field: 'notifications' }),
       ctx.switchField({ id: 'autoTitles', title: 'Generated titles', desc: 'Name a session from its first exchange.', keywords: 'session name rename title', field: 'autoTitles' }),
       ctx.textField({ id: 'maxTurns', inputId: 'maxTurns', title: 'Max tool turns', desc: 'How many tool calls one request may make before it stops and asks you to continue.', keywords: 'limit steps iterations', field: 'maxTurns', type: 'number', width: 96, parse: (t) => parseInteger(t, 1, 500) }),

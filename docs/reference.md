@@ -24,9 +24,10 @@
 | `/compact [focus]` | Compact the conversation now; the focus says what the brief must keep |
 | `/mcp` | MCP servers and their tools |
 | `/spawn <task>` | Start a sub-session on that task |
-| `/merge [title or id]` | Bring a finished sub-session or fork into this session |
-| `/sessions` | This session's parent, sub-sessions and forks |
-| `/send <title or id>: <message>` | Send a message to another session |
+| `/merge [name or id]` | Bring a finished sub-session or fork into this session |
+| `/sessions [name]` | This session's parent, sub-sessions and forks; with a name, every session that matches it |
+| `/send <name or id>: <message>` | Send a message to another session |
+| `/rename [new name]` | Rename this session; alone, it makes the title in the top bar editable |
 | `/schedules` | The scheduled tasks and their next run |
 | a mod's commands | Listed in the menu with the mod's name |
 
@@ -46,9 +47,12 @@ A message starting with `#` is added to the project's instructions file after a 
 | `skill` | Load a skill |
 | `submit_plan` | Plan mode: hand the plan to you |
 | `schedule_create` `schedule_list` `schedule_update` `schedule_delete` | Scheduled tasks |
-| `session_spawn` `session_send` `session_list` `session_read` `session_merge` | Sub-sessions and messages between sessions |
+| `session_spawn` `session_send` `session_list` `session_read` `session_merge` | Sub-sessions and messages between sessions; `session_list` with a `query` finds sessions by name |
+| `session_rename` | Rename this session when you ask (no approval; the title is locked like a manual rename) |
 | `mod_check` | What is wrong with a mod the agent is writing |
 | `mcp__<server>__<tool>` | MCP server tools |
+
+In the conversation each run of two or more calls in a turn is one line that says what it did, in the order it did it ("Read 3 files, ran 2 commands, edited a file"), with the lines that edits and writes added and removed and how many calls failed or were denied on its right; click it, or focus it and press Enter, to see the rows. While the turn runs the line names the call in flight. A waiting approval card stays in the open under the line; once decided it folds in with its call. A single call stays its own row. Settings → General → Tool activity (`toolActivity`: `summary`, the default, or `all`) shows every call as its own row instead.
 
 Every tool is described to the model in every request. With a context window under 32k tokens the scheduling, session and mod tools are left out and the model is told so; Settings → Context → "Tools offered to the model" (`toolSet`: `auto`, `all`, `essential`) decides.
 
@@ -59,6 +63,7 @@ Every tool is described to the model in every request. With a context window und
 - The built-in browser belongs to the session on screen. A background session's browser call is refused with a message the model can act on.
 - **Forks** copy a conversation and continue on their own. **Sub-sessions** are started by the agent (`session_spawn`) or by `/spawn`; they run in the background, sit under their parent in the sidebar, and report back when they finish a turn. **Merge** summarises what a sub-session or fork did since it split off and adds that to the parent; files need no merging, since sessions share the folder.
 - Nesting stops at two levels; a session may have four sub-sessions running and twelve in all.
+- **Names.** Rename a session in the sidebar (F2, double-click, the menu), in the top bar, with `/rename`, or by asking the agent ("call this session deploy fix"). From any other session you can then name it in plain words ("read the session called deploy fix"): every command and tool that takes a session accepts its name or id. Lookup searches every session not in the trash and tries, in order: the exact id; the start of an id (6 characters or more); the name ignoring case, quotes, punctuation and spacing (`tcg fork`, `"TCG (fork)"` and `tcg-fork` all find `tcg (fork)`); the start of a name; a name holding every word; a small misspelling. When several sessions fit, a related one (parent, sub-session, fork) wins; otherwise the answer lists them with id, folder and last activity, and with no match at all it lists the closest names. Two sessions may share a name; the rename then says that lookup by it is ambiguous.
 
 ## Scheduled tasks
 
@@ -110,7 +115,7 @@ A project's `.mcp.json` servers, its mods and its `settings.json` all stay off u
 }
 ```
 
-- Settable: `provider`, `ollama.*`, `portkey.*`, `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
+- Settable: `provider`, `ollama.*`, `portkey.*`, `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`, and `env`. `workingDirectory` in the user file is the folder the app opens in. An unknown key or a value of the wrong type is skipped and reported in Settings → Configuration files; the rest of the file applies.
 - `env` is applied to the process environment, so a key can live there instead of in `config.json` (`PORTKEY_API_KEY` is a fallback for the gateway key). `${VAR}` and `${VAR:-default}` are expanded in every string. Variables a file set are put back when the file stops applying.
 - **A project's file needs your approval.** Until you trust it in Settings → Configuration files nothing in it applies, and an edit withdraws the approval. A notice in the chat tells you one is waiting.
 - A field a file sets is read-only in Settings and is never written to `config.json`. Changes made while the app runs (the mode chip, the model chip) last until the files are read again.

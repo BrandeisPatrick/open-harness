@@ -4,7 +4,7 @@
 // frame a message comes from (event.source) says which mod and view is asking, never the message itself.
 
 import type { AgentEvent, AppConfig, SessionMeta } from '../shared/types';
-import type { ModInfo, ModLayout, ModRpcRequest, ModSeat, ModTheme, ModCaller } from '../shared/mods';
+import type { ModInfo, ModLayout, ModLookTarget, ModRpcRequest, ModSeat, ModTheme, ModCaller } from '../shared/mods';
 import { bus } from './bus.js';
 import { onPush, rpc } from './rpc.js';
 import { escapeHtml, writeClipboard } from './dom.js';
@@ -13,6 +13,7 @@ import { renderMarkdown } from './markdown.js';
 import { closeMenu, openMenu, type MenuSection } from './popover.js';
 import { appendTranscriptItem, registerTranscriptItem } from './transcript-items.js';
 import { homeDir } from './home.js';
+import { modeOf } from './modes.js';
 import {
   ERR,
   HELLO_TIMEOUT_MS,
@@ -25,8 +26,11 @@ import {
   frameHeight,
   frameSrc,
   iconSource,
+  pointerFraction,
   isHttpUrl,
   isWindowMethod,
+  LOOK_TARGETS,
+  lookAttributes,
   mayReceive,
   methodNeeds,
   modSignature,
@@ -175,7 +179,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
 
   // ---------- Layout (config.mods.layout, written with mods.setLayout) ----------
 
-  const fallbackLayout = (): ModLayout => ({ railOpen: true, railWidth: RAIL_DEFAULT, collapsed: [], background: null, backgroundImage: null, backgroundDim: 0.82 });
+  const fallbackLayout = (): ModLayout => ({ railOpen: true, railWidth: RAIL_DEFAULT, collapsed: [], background: null, backgroundImage: null, backgroundDim: 0.82, looks: { conversation: null, composer: null } });
   let layout: ModLayout = { ...fallbackLayout(), ...(deps.config()?.mods?.layout ?? {}) };
   let writing = 0;
   let widthTimer: number | undefined;
@@ -194,13 +198,16 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     const next = cfg?.mods?.layout;
     if (next && !writing) {
       const before = JSON.stringify(layout);
-      layout = { ...fallbackLayout(), ...next, collapsed: [...(next.collapsed ?? [])] };
+      const looksBefore = JSON.stringify(layout.looks);
+      layout = { ...fallbackLayout(), ...next, collapsed: [...(next.collapsed ?? [])], looks: { ...fallbackLayout().looks, ...(next.looks ?? {}) } };
       if (JSON.stringify(layout) !== before) {
         applyRail();
         syncBackground();
       }
+      if (JSON.stringify(layout.looks) !== looksBefore) void syncLooks();
     }
     syncTheme();
+    syncLookState();
   });
 
   // ---------- Theme: the scheme in effect and the app's tokens as they are now ----------
@@ -235,10 +242,14 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     return [...names].sort();
   }
 
+  function currentScheme(): 'light' | 'dark' {
+    const set = document.documentElement.dataset.theme;
+    return set === 'dark' || set === 'light' ? set : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
   function currentTheme(): ModTheme {
     const root = document.documentElement;
-    const set = root.dataset.theme;
-    const scheme: 'light' | 'dark' = set === 'dark' || set === 'light' ? set : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const scheme = currentScheme();
     tokenNames ??= collectTokenNames();
     const cs = getComputedStyle(root);
     const tokens: Record<string, string> = {};
@@ -258,8 +269,14 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     lastTheme = s;
     deliver('theme.changed', theme);
   }
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => syncTheme());
-  new MutationObserver(() => syncTheme()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    syncTheme();
+    syncLookState();
+  });
+  new MutationObserver(() => {
+    syncTheme();
+    syncLookState();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   // ---------- Styles from mods ----------
 
@@ -275,6 +292,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     if (my !== stylesSeq || !Array.isArray(list)) return;
     const existing = new Map<string, HTMLStyleElement>();
     document.head.querySelectorAll<HTMLStyleElement>('style[data-mod]').forEach((el) => existing.set(el.dataset.mod ?? '', el));
+    const wanted: HTMLStyleElement[] = [];
     let changed = false;
     for (const { key, css } of list) {
       let el = existing.get(key);
@@ -288,18 +306,114 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
         el.textContent = css;
         changed = true;
       }
-      // In load order, after everything the app ships (appendChild moves an element that is already there).
-      if (document.head.lastElementChild !== el || !el.isConnected) document.head.appendChild(el);
+      wanted.push(el);
     }
     for (const el of existing.values()) {
       el.remove();
       changed = true;
     }
+    styleEls = wanted;
+    placeSheets();
     if (changed) {
       tokenNames = null;
       syncTheme();
     }
   }
+
+  let styleEls: HTMLStyleElement[] = [];
+  let lookEls: HTMLStyleElement[] = [];
+
+  /**
+   * Mod styles in load order after everything the app ships, then the looks: a look is the more specific choice of
+   * the two. Elements are moved only when the order is wrong (moving a <style> makes the page parse it again).
+   */
+  function placeSheets(): void {
+    const order = [...styleEls, ...lookEls];
+    const tail = [...document.head.children].slice(-order.length);
+    if (order.length && (tail.length !== order.length || order.some((el, i) => tail[i] !== el))) for (const el of order) document.head.appendChild(el);
+  }
+
+  // ---------- Looks: one stylesheet per region, scoped to it by the main process, and the state it can react to ----------
+
+  let looks: { target: ModLookTarget; ref: string; mod: string; css: string }[] = [];
+  let looksSeq = 0;
+  const lookRoot = (target: ModLookTarget): HTMLElement | null => $(target === 'composer' ? 'chatbar' : 'messages');
+
+  async function syncLooks(): Promise<void> {
+    const my = ++looksSeq;
+    let list: typeof looks = [];
+    try {
+      list = await rpc('mods.looks');
+    } catch {
+      list = [];
+    }
+    if (my !== looksSeq) return;
+    looks = Array.isArray(list) ? list : [];
+    const existing = new Map<string, HTMLStyleElement>();
+    document.head.querySelectorAll<HTMLStyleElement>('style[data-look]').forEach((el) => existing.set(el.dataset.look ?? '', el));
+    const wanted: HTMLStyleElement[] = [];
+    for (const target of LOOK_TARGETS) {
+      const look = looks.find((l) => l.target === target);
+      let el = existing.get(target);
+      existing.delete(target);
+      if (!look) {
+        el?.remove();
+        continue;
+      }
+      if (!el) {
+        el = document.createElement('style');
+        el.dataset.look = target;
+      }
+      el.dataset.ref = look.ref;
+      if (el.textContent !== look.css) el.textContent = look.css;
+      wanted.push(el);
+    }
+    for (const el of existing.values()) el.remove();
+    lookEls = wanted;
+    placeSheets();
+    syncLookState();
+  }
+
+  /** The attributes on each region's root while a look is active there (docs/mods.md, Looks); none without one. */
+  function syncLookState(): void {
+    for (const target of LOOK_TARGETS) {
+      const el = lookRoot(target);
+      if (!el) continue;
+      const look = looks.find((l) => l.target === target);
+      const want = look ? lookAttributes({ ref: look.ref, running: deps.running(), scheme: currentScheme(), mode: modeOf(deps.config()), settings: currentMod(look.mod)?.settings ?? {} }) : {};
+      for (const a of [...el.attributes]) {
+        if ((a.name === 'data-look' || a.name === 'data-running' || a.name === 'data-scheme' || a.name === 'data-mode' || a.name.startsWith('data-set-')) && !(a.name in want)) el.removeAttribute(a.name);
+      }
+      for (const [name, value] of Object.entries(want)) if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+    }
+  }
+
+  // ---------- Pointer: where it is, for a background that follows it (at most 30 times a second) ----------
+
+  const POINTER_MS = 1000 / 30;
+  let pointerAt = 0;
+  let pointerTimer: number | undefined;
+  let pointerLast: { x: number; y: number } | null = null;
+  function sendPointer(): void {
+    pointerTimer = undefined;
+    const f = bgSlot?.frame;
+    if (!f || !pointerLast) return;
+    pointerAt = performance.now();
+    sendEvent(f, 'pointer', pointerLast);
+  }
+  window.addEventListener(
+    'pointermove',
+    (e) => {
+      const f = bgSlot?.frame;
+      if (!f || !f.helloAt || !f.subs.has('pointer')) return;
+      pointerLast = pointerFraction(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
+      if (pointerTimer !== undefined) return;
+      const wait = POINTER_MS - (performance.now() - pointerAt);
+      if (wait <= 0) sendPointer();
+      else pointerTimer = window.setTimeout(sendPointer, wait);
+    },
+    { passive: true, capture: true },
+  );
 
   // ---------- The bridge ----------
 
@@ -1121,6 +1235,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     applyRail();
     if (tabsChanged) deps.paneTabsChanged();
     void syncStyles();
+    void syncLooks();
     syncOffers();
   }
 
@@ -1181,7 +1296,10 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     if (!onScreen || !ready) return;
     for (const out of eventsFromAgent(ev, sessionId)) deliver(out.name, out.data);
     if (ev.type === 'session_changed' && ev.session?.id === deps.currentSessionId()) noteSession();
-    if (ev.type === 'run_start' || ev.type === 'run_end') window.setTimeout(noteSession, 0);
+    if (ev.type === 'run_start' || ev.type === 'run_end') {
+      window.setTimeout(noteSession, 0);
+      window.setTimeout(syncLookState, 0);
+    }
   });
 
   let shownId = '';
@@ -1215,6 +1333,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     lastRelated = relatedSignature(deps.sessions(), id);
     lastPlan = planSig();
     reshowOffers();
+    syncLookState();
   });
 
   function planSig(): string {
@@ -1225,6 +1344,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
   bus.on('sessions', (metas: SessionMeta[]) => {
     if (!ready) return;
     noteSession();
+    syncLookState();
     const rel = relatedSignature(metas, deps.currentSessionId());
     if (rel !== lastRelated) {
       if (rel || lastRelated) deliver('related.changed', {});
@@ -1303,7 +1423,8 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
       .map((l) => `<li class="${l.strong ? 'strong' : ''}">${l.strong ? icon('triangle-alert', 14) : icon('check', 14)}<span>${escapeHtml(l.text)}</span></li>`)
       .join('');
     const seats = [...new Set((m?.contributes?.views ?? []).map((v) => ({ rail: 'a panel in the right-hand rail', tab: 'a tab in the side pane', composer: 'a strip above the composer', background: 'a background' })[v.seat]).filter(Boolean))];
-    const adds = [...seats, ...(m?.contributes?.styles?.length ? ['styles for the app'] : []), ...(m?.contributes?.commands?.length ? [`${m.contributes.commands.length === 1 ? 'a slash command' : 'slash commands'}`] : [])];
+    const lookWords = [...new Set((m?.contributes?.looks ?? []).map((l) => (l.target === 'composer' ? 'a look for the chat bar' : 'a look for the conversation')))];
+    const adds = [...seats, ...lookWords, ...(m?.contributes?.styles?.length ? ['styles for the app'] : []), ...(m?.contributes?.commands?.length ? [`${m.contributes.commands.length === 1 ? 'a slash command' : 'slash commands'}`] : [])];
     el.innerHTML = `
       <div class="mod-offer-head">
         <span class="mod-offer-icon">${iconHtml(m?.icon, info, 16)}</span>
@@ -1431,6 +1552,8 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     toggleRail: (open?: boolean) => toggleRail(open ?? !layout.railOpen),
     offers: () => [...offers.values()].map((o) => ({ key: o.info.key, decided: o.decided, shown: o.el.isConnected })),
     theme: () => currentTheme(),
+    looks: () => looks.map((l) => ({ target: l.target, ref: l.ref, mod: l.mod, bytes: l.css.length })),
+    lookCss: (target: string) => looks.find((l) => l.target === target)?.css ?? null,
     browser: () => deps.browserDebug(),
     open: (key: string) => openView(key),
   };

@@ -11,9 +11,10 @@
 ## Why
 
 - **Local first.** Runs on `qwen3:8b` through Ollama; nothing leaves your Mac. Built for small context windows: compaction that clears old tool output before it summarises, a context breakdown, and a tool set sized to the model.
+- **Made for reading.** One calm column of text on a measured type scale, a chat bar that is a single bar, tool activity folded into one line that opens to the rows. Few boxes, nothing competing with the words.
 - **The Claude Code workflow.** Permission modes, approval cards, plan mode, rewind, a task list in the chat, queued messages, `@` file mentions, `#` memory.
-- **Sessions side by side.** Several run at once. The agent starts sub-sessions and merges them back; forks and sub-sessions nest in the sidebar; scheduled tasks run on a rhythm; your phone can follow along.
-- **Mods.** The rail, the tabs, the chat bar's look and the background are mods: sandboxed folders of web files with a documented protocol, reloaded when a file is saved. Ask the agent for one and turn it on.
+- **Sessions side by side.** Several run at once. The agent starts sub-sessions and merges them back; forks and sub-sessions nest in the sidebar; any session finds another by its name; scheduled tasks run on a rhythm; your phone can follow along.
+- **Mods.** The rail, the tabs, the look of the conversation and of the chat bar, and the background are mods: sandboxed folders of web files with a documented protocol, reloaded when a file is saved. Ask the agent for one and turn it on.
 - **Nothing is lost.** An append-only history log survives crashes, rewinds and compactions; deleted sessions go to a trash.
 - **See everything.** Tool rows with diffs, images inline in replies, a Diff pane with revert, a real Terminal pane, a built-in browser the agent drives, artifacts beside the chat.
 - **Standard extensions.** MCP servers (`.mcp.json`), skills (`SKILL.md`), project instructions (`AGENTS.md` / `CLAUDE.md`), `settings.json`.
@@ -37,6 +38,7 @@ Hosted models: Settings → Model → Gateway. For Portkey, add your Portkey key
 | | |
 | --- | --- |
 | <img src="docs/screenshots/mods.png" width="400"> | **Mods.** Environment, Context, Tasks, Plan, Outputs, Sub-sessions and Skills in the rail; Side chat and Scheduled as tabs. All written against the protocol in [docs/mods.md](docs/mods.md). |
+| <img src="docs/screenshots/hyperspace.png" width="400"> | **Looks.** A mod can restyle just the conversation or just the chat bar, and bring a background; Settings → Appearance picks each one, or a whole set. Hyperspace, a bundled set, jumps to lightspeed while the agent works. |
 | <img src="docs/screenshots/sidebar.png" width="400"> | **Sessions.** Several at once, grouped by day, forks and sub-sessions nested under where they came from, search inside conversations. |
 | <img src="docs/screenshots/images.png" width="400"> | **Images in replies.** The model shows a screenshot or a chart inline; tool rows carry thumbnails. |
 | <img src="docs/screenshots/settings.png" width="400"> | **Settings.** One control per row, applied as you change it, searchable; a Mods section with permissions in plain words. |
@@ -76,4 +78,4 @@ npm run test:live   # the real app, hidden, on a throwaway profile; set ANTHROPI
 npm run package     # the app in release/mac-arm64
 ```
 
-`src/main` is the agent, the session runtime and the features; `src/renderer` the window; `src/shared` the contracts between them; `mods/` the built-in mods; `modkit/` what mod pages load, and a playground. How it fits together: [docs/architecture.md](docs/architecture.md). MIT.
+`src/main` is the agent, the session runtime and the features; `src/renderer` the window; `src/shared` the contracts between them; `mods/` the built-in mods; `modkit/` what mod pages load, and a playground. How it fits together: [docs/architecture.md](docs/architecture.md). Version numbers and the release steps: [docs/releasing.md](docs/releasing.md). MIT.

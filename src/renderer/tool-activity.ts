@@ -1,0 +1,124 @@
+// The words of a folded run of tool calls: "Read 3 files, ran 2 commands, edited a file". One phrase per kind of
+// call, in the order the kinds first appear, with counts; a kind names what the single rows say (tool-labels.ts and
+// toolLabel in tools.ts) in the past tense. Pure (no DOM, no imports), so test/tool-activity.js loads it headless;
+// renderer.ts puts the line together with the diff total and the failed and denied counts.
+
+/** One call in a run, as the summary needs it */
+export interface ActivityCall {
+  name: string;
+  /** The file a read, write or edit was about: the same file twice is one file */
+  path?: string;
+  /** write_file made a new file (its result says "Created …") rather than replacing one */
+  created?: boolean;
+  /** browser_navigate's url, which tells a page from a web search */
+  url?: string;
+  /** A denied call did not happen: it is left out of the words and counted on its own */
+  denied?: boolean;
+}
+
+interface Kind {
+  key: string;
+  one: string;
+  many: (n: number) => string;
+  /** Calls on the same target count once (files) */
+  target?: string;
+}
+
+const files = (verb: string) => ({ one: `${verb} a file`, many: (n: number) => `${verb} ${n} files` });
+const times = (phrase: string) => ({ one: phrase, many: (n: number) => `${phrase} ${n} times` });
+const counted = (verb: string, a: string, noun: string, nouns = `${noun}s`) => ({ one: `${verb} ${a} ${noun}`, many: (n: number) => `${verb} ${n} ${nouns}` });
+
+/** The kinds of the agent's own tools, by tool name */
+const KINDS: Record<string, Omit<Kind, 'key' | 'target'>> = {
+  read_file: files('read'),
+  edit_file: files('edited'),
+  list_directory: counted('listed', 'a', 'directory', 'directories'),
+  glob: counted('ran', 'a', 'search', 'searches'),
+  grep: counted('ran', 'a', 'search', 'searches'),
+  bash: counted('ran', 'a', 'command'),
+  terminal_run: counted('ran', 'a', 'command'),
+  terminal_read: times('read the terminal'),
+  terminal_list: times('listed the terminal tabs'),
+  terminal_stop: counted('stopped', 'a', 'command'),
+  skill: counted('loaded', 'a', 'skill'),
+  create_artifact: counted('made', 'an', 'artifact'),
+  show_image: counted('showed', 'an', 'image'),
+  update_tasks: times('updated the tasks'),
+  submit_plan: counted('wrote', 'a', 'plan'),
+  session_spawn: counted('started', 'a', 'sub-session'),
+  session_send: counted('sent', 'a', 'message'),
+  session_list: times('listed sessions'),
+  session_read: counted('read', 'a', 'session'),
+  session_merge: counted('merged', 'a', 'session'),
+  session_rename: times('renamed the session'),
+  schedule_create: counted('created', 'a', 'schedule'),
+  schedule_list: times('listed schedules'),
+  schedule_update: counted('changed', 'a', 'schedule'),
+  schedule_delete: counted('deleted', 'a', 'schedule'),
+  mod_check: counted('checked', 'a', 'mod'),
+  browser_screenshot: counted('took', 'a', 'screenshot'),
+};
+
+/** Kinds that share a phrase share a key, so "ran 2 searches" counts grep and glob together */
+const SHARED: Record<string, string> = { glob: 'search', grep: 'search', bash: 'command', terminal_run: 'command' };
+
+function kindOf(c: ActivityCall): Kind {
+  const name = c.name;
+  const mcp = /^mcp__(.+?)__(.+)$/.exec(name);
+  if (mcp) return { key: `mcp:${mcp[1]}`, one: `called a tool on ${mcp[1]}`, many: (n) => `called ${n} tools on ${mcp[1]}` };
+  if (name === 'write_file') return { key: c.created ? 'create' : 'write', ...files(c.created ? 'created' : 'wrote'), target: c.path || undefined };
+  if (name === 'read_file' || name === 'edit_file') return { key: name, ...KINDS[name], target: c.path || undefined };
+  if (name === 'browser_navigate') {
+    const url = (c.url ?? '').trim();
+    if (url === 'back' || url === 'forward') return { key: 'browser', ...times('used the browser') };
+    if (url && (/\s/.test(url) || !/[.:/]/.test(url))) return { key: 'web', ...times('searched the web') };
+    return { key: 'page', ...counted('opened', 'a', 'page') };
+  }
+  if (KINDS[name]) return { key: SHARED[name] ?? name, ...KINDS[name] };
+  if (name.startsWith('browser_')) return { key: 'browser', ...times('used the browser') };
+  return { key: 'other', one: 'used another tool', many: (n) => `used ${n} other tools` };
+}
+
+/** More kinds than this: the first MAX_KINDS - 1 are named, then "and N more" */
+export const MAX_KINDS = 4;
+
+export interface ActivityWords {
+  /** The line: "Read 3 files, ran 2 commands, edited a file" */
+  text: string;
+  /** Each kind's phrase, in order (all of them, also those the line leaves out) */
+  phrases: string[];
+  /** Calls that were denied */
+  denied: number;
+}
+
+/** What a run of calls did, in words. Names alone work too (each counts as one call). */
+export function activityWords(input: (ActivityCall | string)[]): ActivityWords {
+  const calls = input.map((c) => (typeof c === 'string' ? { name: c } : c));
+  const kinds = new Map<string, { kind: Kind; n: number; targets: Set<string> }>();
+  let denied = 0;
+  for (const c of calls) {
+    if (c.denied) {
+      denied++;
+      continue;
+    }
+    const kind = kindOf(c);
+    let k = kinds.get(kind.key);
+    if (!k) kinds.set(kind.key, (k = { kind, n: 0, targets: new Set() }));
+    if (kind.target) {
+      if (k.targets.has(kind.target)) continue;
+      k.targets.add(kind.target);
+    }
+    k.n++;
+  }
+  const phrases = [...kinds.values()].map(({ kind, n }) => (n === 1 ? kind.one : kind.many(n)));
+  let text: string;
+  if (!phrases.length) text = denied ? `denied ${denied === 1 ? 'a call' : `${denied} calls`}` : '';
+  else if (phrases.length <= MAX_KINDS) text = phrases.join(', ');
+  else text = `${phrases.slice(0, MAX_KINDS - 1).join(', ')} and ${phrases.length - (MAX_KINDS - 1)} more`;
+  return { text: text.charAt(0).toUpperCase() + text.slice(1), phrases, denied: phrases.length ? denied : 0 };
+}
+
+/** The words alone: "Read 3 files, ran 2 commands, edited a file" */
+export function groupSummary(input: (ActivityCall | string)[]): string {
+  return activityWords(input).text;
+}

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: artifact: mod:; frame-src mod:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: artifact: mod:; font-src 'self' data: mod:; frame-src mod:;">
   <title>Open Harness</title>
   <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="styles.css">
@@ -94,18 +94,21 @@
             <div id="slash-menu" class="slash-menu" role="listbox" hidden></div>
             <div id="mention-menu" class="slash-menu mention-menu" role="listbox" aria-label="Files" hidden></div>
             <div id="mod-strip" class="mod-strip" role="region" aria-label="Mod strip" hidden></div>
-            <div class="composer" id="composer">
-              <div id="attachments" class="attachments" role="group" aria-label="Attached images" hidden></div>
-              <div id="attach-note" class="attach-note" role="status" hidden></div>
-              <textarea id="input" rows="1" placeholder="Describe a task, / for skills, ⇧Tab to change mode" spellcheck="true" aria-label="Message"></textarea>
-              <div class="composer-bar">
-                <button type="button" id="attach-btn" class="icon-btn" aria-label="Attach image" data-tip="Attach image" data-icon="paperclip"></button>
-                <input type="file" id="attach-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden tabindex="-1" aria-hidden="true">
-                <button id="mode-btn" class="chip" aria-haspopup="menu" data-tip="Permission mode" data-tip-kbd="⇧ Tab">Ask before actions</button>
-                <button id="model-btn" class="chip" aria-haspopup="menu" data-tip="Model">…</button>
-                <button type="button" id="context-meter" class="context-meter" aria-haspopup="menu" data-tip="Context" hidden></button>
-                <span class="spacer"></span>
-                <button id="send-btn" class="send" aria-label="Send" data-tip="Send" data-tip-kbd="↵" disabled></button>
+            <div class="chatbar" id="chatbar">
+              <div class="composer" id="composer">
+                <div id="attachments" class="attachments" role="group" aria-label="Attached images" hidden></div>
+                <div id="attach-note" class="attach-note" role="status" hidden></div>
+                <div class="composer-row">
+                  <button type="button" id="attach-btn" class="icon-btn composer-plus" aria-label="Attach image" data-tip="Attach image" data-icon="plus-lg"></button>
+                  <input type="file" id="attach-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden tabindex="-1" aria-hidden="true">
+                  <textarea id="input" rows="1" placeholder="Describe a task, / for skills, @ for files, ⇧Tab to change mode" spellcheck="true" aria-label="Message"></textarea>
+                  <button id="send-btn" class="send" aria-label="Send" data-tip="Send" data-tip-kbd="↵" disabled></button>
+                </div>
+              </div>
+              <div class="composer-foot" id="composer-foot">
+                <button id="model-btn" class="foot-btn" aria-haspopup="menu" data-tip="Model">…</button>
+                <button id="mode-btn" class="foot-btn" aria-haspopup="menu" data-tip="Permission mode" data-tip-kbd="⇧ Tab">Ask</button>
+                <button type="button" id="context-meter" class="foot-btn context-meter" aria-haspopup="menu" data-tip="Context" hidden></button>
               </div>
             </div>
           </div>

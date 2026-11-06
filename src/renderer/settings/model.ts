@@ -3,7 +3,7 @@
 // (test/settings-page.js) loads the compiled file directly.
 
 import type { AppConfig } from '../../shared/types';
-import type { ModInfo, ModPermission, ModSeat } from '../../shared/mods';
+import type { ModInfo, ModLayout, ModLookTarget, ModPermission, ModSeat } from '../../shared/mods';
 import type { ScheduleWhen } from '../../shared/schedules';
 import type { SettingsFileInfo } from '../../shared/settings-info';
 import type { IconName } from '../icons.js';
@@ -145,6 +145,11 @@ export const TOOL_SET: { value: AppConfig['toolSet']; label: string }[] = [
   { value: 'essential', label: 'Essential' },
 ];
 
+export const TOOL_ACTIVITY: { value: AppConfig['toolActivity']; label: string }[] = [
+  { value: 'summary', label: 'Summary' },
+  { value: 'all', label: 'Every call' },
+];
+
 export const KEEP_AWAKE: { value: AppConfig['keepAwake']; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'running', label: 'While running' },
@@ -195,14 +200,100 @@ export const SEAT_WORDS: Record<ModSeat, string> = {
   background: 'a background behind the window',
 };
 
+export const LOOK_WORDS: Record<ModLookTarget, string> = {
+  conversation: 'a look for the conversation',
+  composer: 'a look for the chat bar',
+};
+
+// ---------- Looks (Settings → Appearance → Looks) ----------
+
+export interface LookChoice {
+  value: string;
+  label: string;
+}
+
+const refMod = (ref: string): string => ref.slice(0, Math.max(0, ref.lastIndexOf('/')));
+
+/** The choices of a region's select: every look for it from mods that are on ("<mod>: <look>"), in list order. */
+export function lookChoices(mods: readonly ModInfo[], target: ModLookTarget): LookChoice[] {
+  const out: LookChoice[] = [];
+  for (const m of mods) {
+    if (m.state !== 'on') continue;
+    for (const l of m.manifest?.contributes?.looks ?? []) if (l.target === target) out.push({ value: `${m.key}/${l.id}`, label: `${m.manifest?.name ?? m.id}: ${l.title}` });
+  }
+  return out;
+}
+
+/** A mod's matching parts: its first conversation look, chat bar look and background view. */
+export interface LookSet {
+  key: string;
+  name: string;
+  conversation: string | null;
+  composer: string | null;
+  background: string | null;
+}
+
+function setOf(m: ModInfo): LookSet {
+  const looks = m.manifest?.contributes?.looks ?? [];
+  const look = (t: ModLookTarget) => {
+    const l = looks.find((x) => x.target === t);
+    return l ? `${m.key}/${l.id}` : null;
+  };
+  const bg = m.manifest?.contributes?.views?.find((v) => v.seat === 'background');
+  return { key: m.key, name: m.manifest?.name ?? m.id, conversation: look('conversation'), composer: look('composer'), background: bg ? `${m.key}/${bg.id}` : null };
+}
+
+const parts = (s: LookSet) => [s.conversation, s.composer, s.background].filter(Boolean).length;
+
+/** The sets the Set row offers: every mod that is on and contributes at least two of a conversation look, a chat bar look and a background. */
+export function lookSets(mods: readonly ModInfo[]): LookSet[] {
+  return mods.filter((m) => m.state === 'on' && m.manifest).map(setOf).filter((s) => parts(s) >= 2);
+}
+
+/** What the layout shows in the three places a set covers (a picture of the user's own counts as a background). */
+function shown(layout: Pick<ModLayout, 'looks' | 'background' | 'backgroundImage'>): { conversation: string | null; composer: string | null; background: string | null } {
+  return { conversation: layout.looks?.conversation ?? null, composer: layout.looks?.composer ?? null, background: layout.background ?? (layout.backgroundImage ? 'image' : null) };
+}
+
+/**
+ * The Set row's value: "" (None) when all three are the app's own, a set's mod key when the three are exactly that
+ * set's parts (a part it lacks is the app's own), "off:<mod key>" when they all come from one mod that is not on
+ * (or not installed any more), and "custom" otherwise.
+ */
+export function currentLookSet(mods: readonly ModInfo[], layout: Pick<ModLayout, 'looks' | 'background' | 'backgroundImage'>): string {
+  const now = shown(layout);
+  if (!now.conversation && !now.composer && !now.background) return '';
+  for (const s of lookSets(mods)) if (s.conversation === now.conversation && s.composer === now.composer && s.background === now.background) return s.key;
+  const owners = [now.conversation, now.composer, now.background].filter((r): r is string => !!r).map((r) => (r === 'image' ? '' : refMod(r)));
+  const one = owners.every((k) => k && k === owners[0]) ? owners[0] : '';
+  if (one && owners.length >= 2 && !lookSets(mods).some((s) => s.key === one)) {
+    const m = mods.find((x) => x.key === one);
+    if (!m || m.state !== 'on' || !m.manifest) return `off:${one}`;
+  }
+  return 'custom';
+}
+
+/** The layout change that applies a set (null: None, the app's own look everywhere). */
+export function lookSetPatch(set: LookSet | null): Pick<ModLayout, 'looks' | 'background'> & { backgroundImage?: null } {
+  const patch = { looks: { conversation: set?.conversation ?? null, composer: set?.composer ?? null }, background: set?.background ?? null } as Pick<ModLayout, 'looks' | 'background'> & { backgroundImage?: null };
+  // A set without a background (or None) means no background: the user's own picture goes too, as None does in the Background row.
+  if (!set?.background) patch.backgroundImage = null;
+  return patch;
+}
+
+/** Mods that are off and have looks: the Looks group says where to turn them on. */
+export function offLookMods(mods: readonly ModInfo[]): string[] {
+  return mods.filter((m) => m.state !== 'on' && m.state !== 'invalid' && m.manifest?.contributes?.looks?.length).map((m) => m.manifest?.name ?? m.id);
+}
+
 export type ChipTone = 'neutral' | 'warn' | 'danger' | 'ok';
 
-/** The chip after a mod's name when it is not simply on. */
+/** The chip after a mod's name when it is not simply on. A warning alone (a look for a region this app lacks) is no problem. */
 export function modChip(m: Pick<ModInfo, 'state' | 'problems'>): { label: string; tone: ChipTone } | null {
   if (m.state === 'invalid') return { label: 'Problem', tone: 'danger' };
   if (m.state === 'paused') return { label: 'Paused: wants more access', tone: 'warn' };
   if (m.state === 'off') return { label: 'Off', tone: 'neutral' };
-  if (m.problems.length) return { label: 'Problem', tone: 'danger' };
+  if (m.problems.some((p) => !p.warning)) return { label: 'Problem', tone: 'danger' };
   return null;
 }
 
@@ -217,9 +308,9 @@ export function grantSheet(m: Pick<ModInfo, 'state' | 'manifest' | 'wants' | 'wa
   const resuming = m.state === 'paused';
   const asked = resuming ? m.wants : (m.manifest?.permissions ?? []);
   const lines = asked.map(permissionWords);
-  const contributesStyles = !!m.manifest?.contributes?.styles?.length || !!m.manifest?.contributes?.views?.some((v) => v.seat === 'background');
+  const contributesStyles = !!m.manifest?.contributes?.styles?.length || !!m.manifest?.contributes?.looks?.length || !!m.manifest?.contributes?.views?.some((v) => v.seat === 'background');
   const warnings: string[] = [];
-  if (resuming ? m.wantsStyles : contributesStyles) warnings.push('It adds styles or a background, so it can restyle the whole app, approval cards included.');
+  if (resuming ? m.wantsStyles : contributesStyles) warnings.push('It adds styles, looks or a background, so it can restyle the whole app, approval cards included.');
   if (asked.includes('network')) warnings.push('It can reach the internet, so what it reads can leave this Mac.');
   const name = m.manifest?.name ?? 'This mod';
   return { title: resuming ? `${name} wants more access` : `Turn on ${name}?`, lines, warnings };

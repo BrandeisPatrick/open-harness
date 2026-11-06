@@ -3,8 +3,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ModCommandManifest, ModManifest, ModPermission, ModProblem, ModSeat, ModSettingField, ModViewManifest } from '../../shared/mods';
-import { MOD_PERMISSIONS, MOD_SEATS, RESERVED_SEATS } from './permissions';
+import type { ModCommandManifest, ModLookManifest, ModLookTarget, ModManifest, ModPermission, ModProblem, ModSeat, ModSettingField, ModViewManifest } from '../../shared/mods';
+import { MOD_LOOK_TARGETS, MOD_PERMISSIONS, MOD_SEATS, RESERVED_SEATS } from './permissions';
 
 export const MOD_ID_RE = /^[a-z][a-z0-9-]{1,39}$/;
 /** View ids and command names: lower-case letters, digits and -, starting with a letter or digit */
@@ -88,6 +88,7 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
   const problems: ModProblem[] = [];
   const bad = (message: string) => problems.push({ kind: 'manifest', message });
   const missing = (message: string) => problems.push({ kind: 'file', message });
+  const warn = (message: string) => problems.push({ kind: 'manifest', message, warning: true });
   if (!isObj(raw)) return fail('mod.json must be a JSON object: { "protocol": 1, "id": …, "name": …, "version": … }');
 
   if (raw.protocol === undefined) bad('protocol: missing; add "protocol": 1');
@@ -126,6 +127,7 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
 
   const views: ModViewManifest[] = [];
   const styles: string[] = [];
+  const looks: ModLookManifest[] = [];
   const commands: ModCommandManifest[] = [];
   const settings: ModSettingField[] = [];
   let contributes: Record<string, unknown> = {};
@@ -184,6 +186,43 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
     }
   }
 
+  if (contributes.looks !== undefined) {
+    if (!Array.isArray(contributes.looks)) bad('contributes.looks: must be a list of looks, e.g. [{ "id": "main", "title": "…", "target": "conversation", "styles": ["look.css"] }]');
+    else {
+      const lookIds = new Set<string>();
+      contributes.looks.forEach((l, i) => {
+        const at = `looks[${i}]`;
+        if (!isObj(l)) return bad(`${at}: must be an object { "id", "title", "target", "styles" }`);
+        let ok = true;
+        const no = (m: string) => ((ok = false), bad(m));
+        if (typeof l.id !== 'string' || !NAME_RE.test(l.id)) no(`${at}.id: ${l.id === undefined ? 'missing' : JSON.stringify(l.id) + ' is not valid'}; use lower-case letters, digits and -, e.g. "main"`);
+        else if (lookIds.has(l.id)) no(`${at}.id: "${l.id}" is used by another look of this mod`);
+        else lookIds.add(l.id);
+        if (typeof l.title !== 'string' || !l.title.trim()) no(`${at}.title: missing; add the name shown in Settings, Appearance`);
+        if (l.description !== undefined && typeof l.description !== 'string') no(`${at}.description: must be a string`);
+        const files: string[] = [];
+        if (!Array.isArray(l.styles) || !l.styles.length) no(`${at}.styles: must be a non-empty list of CSS files in the mod, e.g. ["look.css"]`);
+        else {
+          l.styles.forEach((f, j) => {
+            const p = modFileProblem(dir, f, { ext: ['.css'] });
+            if (p) return ((ok = false), /does not exist|is not a file/.test(p) ? missing(`${at}.styles[${j}]: ${p}`) : bad(`${at}.styles[${j}]: ${p}`));
+            if (!files.includes(f as string)) files.push(f as string);
+          });
+        }
+        // A target this app does not know (a later one) is skipped with a warning, so the rest of the mod still loads.
+        if (typeof l.target !== 'string') return no(`${at}.target: missing; use one of ${MOD_LOOK_TARGETS.join(', ')}`);
+        if (!(MOD_LOOK_TARGETS as readonly string[]).includes(l.target)) {
+          if (ok) warn(`${at}.target: "${l.target}" is not a region this version of the app knows (${MOD_LOOK_TARGETS.join(', ')}), so this look is ignored`);
+          return;
+        }
+        if (!ok) return;
+        const look: ModLookManifest = { id: l.id as string, title: (l.title as string).trim(), target: l.target as ModLookTarget, styles: files };
+        if (typeof l.description === 'string') look.description = l.description;
+        looks.push(look);
+      });
+    }
+  }
+
   if (contributes.commands !== undefined) {
     if (!Array.isArray(contributes.commands)) bad('contributes.commands: must be a list of commands');
     else {
@@ -218,7 +257,7 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
     }
   }
 
-  if (problems.length) return { manifest: null, problems };
+  if (problems.some((p) => !p.warning)) return { manifest: null, problems };
   const r = raw as Record<string, unknown>;
   const manifest: ModManifest = { protocol: 1, id: r.id as string, name: (r.name as string).trim(), version: r.version as string };
   for (const k of ['description', 'author', 'homepage', 'license', 'icon'] as const) if (typeof r[k] === 'string') manifest[k] = r[k] as string;
@@ -226,10 +265,11 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
   const c: NonNullable<ModManifest['contributes']> = {};
   if (views.length) c.views = views;
   if (styles.length) c.styles = styles;
+  if (looks.length) c.looks = looks;
   if (commands.length) c.commands = commands;
   if (settings.length) c.settings = settings;
   if (Object.keys(c).length) manifest.contributes = c;
-  return { manifest, problems: [] };
+  return { manifest, problems };
 }
 
 function ids(views: unknown): string[] {
@@ -281,18 +321,18 @@ function settingField(f: unknown, at: string, keys: Set<string>, bad: (m: string
   }
 }
 
-/** Whether the manifest contributes something that needs the "styles" approval: CSS for the app, or a background. */
+/** Whether the manifest contributes something that needs the "styles" approval: CSS for the app, a look, or a background. */
 export function needsStylesApproval(m: ModManifest | null): boolean {
-  return !!m && (!!m.contributes?.styles?.length || !!m.contributes?.views?.some((v) => v.seat === 'background'));
+  return !!m && (!!m.contributes?.styles?.length || !!m.contributes?.looks?.length || !!m.contributes?.views?.some((v) => v.seat === 'background'));
 }
 
 /**
- * A bundled mod that restyles the app itself (a theme, the compact chat bar) starts off: it changes how everything
- * looks, so it is on only once the user turned it on (recorded in `enabled`, like a user mod). Other bundled mods are
- * on unless the user turned them off (`disabledBundled`).
+ * A bundled mod that restyles the app itself (a theme, a set of looks) starts off: it changes
+ * how everything looks, so it is on only once the user turned it on (recorded in `enabled`, like a user mod). Other
+ * bundled mods are on unless the user turned them off (`disabledBundled`).
  */
 export function bundledStartsOff(m: ModManifest | null): boolean {
-  return !!m?.contributes?.styles?.length;
+  return !!m?.contributes?.styles?.length || !!m?.contributes?.looks?.length;
 }
 
 /** Whether `value` fits a setting field (type, options, range). */

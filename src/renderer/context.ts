@@ -1,4 +1,4 @@
-// The context meter in the composer footer (tokens used against the model's window, with a popover to compact
+// The context meter under the chat bar (a ring for the tokens used against the model's window, with a popover to compact
 // or open Settings) and the compaction divider that marks where earlier messages were folded into a summary.
 
 import type { ContextBreakdown } from '../shared/context';
@@ -94,8 +94,8 @@ function ensureStyles(): void {
   const el = document.createElement('style');
   el.id = STYLE_ID;
   el.textContent = `
-.ctx-slices { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 2px; }
-.ctx-slice { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 18px; color: var(--text-200); }
+.ctx-slices { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; }
+.ctx-slice { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-200); }
 .ctx-slice.muted { color: var(--text-400); }
 .ctx-slice-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--text-400); }
 .ctx-slice.muted .ctx-slice-dot { background: transparent; box-shadow: inset 0 0 0 1px var(--text-400); }
@@ -103,7 +103,7 @@ function ensureStyles(): void {
 .ctx-slice-dot[data-key="toolResults"] { background: var(--git-mod); }
 .ctx-slice-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ctx-slice-tokens { flex: none; font-variant-numeric: tabular-nums; }
-.ctx-basis { margin-top: 6px; font-size: 11px; line-height: 14px; color: var(--text-400); }
+.ctx-basis { margin-top: 8px; font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-400); }
 `;
   document.head.appendChild(el);
 }
@@ -165,8 +165,9 @@ export function createContextMeter(o: ContextMeterOptions): ContextMeter {
     btn.dataset.level = u.level;
     btn.classList.toggle('warn', u.level === 'warn');
     btn.classList.toggle('danger', u.level === 'danger');
-    btn.innerHTML = `${ring(info.tokens / info.limit, 14)}<span class="meter-pct">${escapeHtml(u.text)}</span>`;
-    btn.dataset.tip = contextTip(info);
+    // The ring alone; the percentage is in its tooltip
+    btn.innerHTML = ring(info.tokens / info.limit, 12);
+    btn.dataset.tip = `${u.text} used · ${contextTip(info)}`;
     btn.setAttribute('aria-label', `Context: ${u.text} used, ${formatCount(info.tokens)} of ${formatWindow(info.limit)} tokens`);
     if (menu && menuAnchoredTo(btn)) {
       menu.setHeader(header());

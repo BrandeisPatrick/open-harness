@@ -395,9 +395,10 @@
       case 'show_image': return ['Show image', s('path').split(/[\\/]/).pop() || '', true];
       case 'session_spawn': return ['Sub-session', s('title'), false];
       case 'session_send': return ['Message', s('to') ? 'to ' + sessionName(s('to')) : '', false];
-      case 'session_list': return ['Sessions', '', false];
+      case 'session_list': return ['Sessions', s('query'), false];
       case 'session_read': return ['Read session', sessionName(s('id')), false];
       case 'session_merge': return ['Merge', sessionName(s('id')), false];
+      case 'session_rename': return ['Rename session', s('name'), false];
       case 'schedule_create': return ['Schedule', s('name'), false];
       case 'schedule_list': return ['Schedules', '', false];
       // Without a new name in the call, the id stands in until the result names the schedule (scheduleName).

@@ -294,32 +294,14 @@ const KNOWN_TOOLS = new Set([
   ...AGENT_TOOLS,
 ]);
 
-/** Tools whose consecutive rows collapse into one "Read 4 files" group (MCP tools join them: "Called 3 tools on github"). */
+/** Tools whose consecutive rows collapse into one "Read 4 files" group when every call is shown (MCP tools join them). */
 export const GROUPABLE = new Set(['read_file', 'glob', 'grep', 'list_directory']);
 
 export function isGroupable(name: string): boolean {
   return GROUPABLE.has(name) || mcpParts(name) !== null;
 }
 
-export function groupSummary(names: string[]): string {
-  const count = (n: string) => names.filter((x) => x === n).length;
-  const reads = count('read_file');
-  const searches = count('grep') + count('glob');
-  const lists = count('list_directory');
-  const mcp = names.map(mcpParts).filter((p): p is McpToolName => p !== null);
-  const other = names.length - reads - searches - lists - mcp.length;
-  const parts: string[] = [];
-  if (reads) parts.push(`read ${reads} file${reads === 1 ? '' : 's'}`);
-  if (searches) parts.push(`ran ${searches} search${searches === 1 ? '' : 'es'}`);
-  if (lists) parts.push(`listed ${lists} director${lists === 1 ? 'y' : 'ies'}`);
-  if (mcp.length) {
-    const servers = new Set(mcp.map((p) => p.server));
-    parts.push(`called ${mcp.length} tool${mcp.length === 1 ? '' : 's'} on ${servers.size === 1 ? [...servers][0] : `${servers.size} servers`}`);
-  }
-  if (other > 0) parts.push(`used ${other} other tool${other === 1 ? '' : 's'}`);
-  const s = parts.join(', ');
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+export { groupSummary } from './tool-activity.js';
 
 // ---------- Known file contents (for real line numbers in edit diffs) ----------
 
@@ -471,6 +453,15 @@ export interface ToolCard {
   name: string;
   args: Args;
   running: boolean;
+  /**
+   * How the call ended, for a folded run's summary: failed (an error, or a command that exited non-zero), denied (the
+   * user or the mode said no), interrupted (the run ended first)
+   */
+  outcome: 'running' | 'ok' | 'failed' | 'denied' | 'interrupted';
+  /** Lines a write or an edit added and removed, once it went through */
+  diff?: { added: number; removed: number };
+  /** write_file made a new file */
+  created?: boolean;
   finish(res: ToolResult): void;
   /** The run ended before this tool reported back */
   interrupt(): void;
@@ -712,6 +703,19 @@ function terminalBody(name: string, body: HTMLElement, r: string): void {
   } else if (r.trim()) note(r.trim());
 }
 
+/** A refusal (the user denied it, or the mode does not allow it) is not a failure; a command that exited non-zero is. */
+function callOutcome(name: string, res: ToolResult): ToolCard['outcome'] {
+  const r = res.result;
+  if (/^Not permitted/.test(r) || isDeniedResult(r)) return 'denied';
+  if (!res.ok) return 'failed';
+  if (name === 'bash') {
+    const code = bashParts(r).code;
+    return code !== null && code !== '0' ? 'failed' : 'ok';
+  }
+  const code = name === 'terminal_run' ? terminalRunParts(r).code : null;
+  return code !== null && /^-?\d+$/.test(code) && code !== '0' ? 'failed' : 'ok';
+}
+
 function metaHtml(name: string, a: Args, res: ToolResult, edit?: DiffRow[]): string {
   const parts: string[] = [];
   const r = res.result;
@@ -798,6 +802,7 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
   const el = document.createElement('details');
   el.className = 'tool' + (isGroupable(name) ? ' groupable' : '') + (label.server ? ' mcp' : '');
   el.dataset.tool = name;
+  el.dataset.icon = label.icon;
   if (label.server) el.dataset.server = label.server;
   const summary = document.createElement('summary');
   summary.innerHTML =
@@ -860,6 +865,7 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
     name,
     args: a,
     running: true,
+    outcome: 'running',
     noteApproval(detail: string) {
       setArg(agentArgFromApproval(name, detail));
     },
@@ -878,6 +884,12 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
       if (!res.ok) status.innerHTML = icon('circle-alert');
       el.querySelector('.tool-meta')!.innerHTML = metaHtml(name, a, res, editRows);
       if (res.ok) setArg(agentArgFromResult(name, a, res.result));
+      card.outcome = callOutcome(name, res);
+      if (card.outcome === 'ok' && (name === 'edit_file' || name === 'write_file')) {
+        const st = editRows ? diffStats(editRows) : { added: typeof a.content === 'string' ? fileLines(a.content).length : 0, removed: 0 };
+        card.diff = { added: st.added, removed: st.removed };
+        card.created = name === 'write_file' && /^Created\b/.test(res.result);
+      }
       const denied = res.ok && (/^Not permitted/.test(res.result) || isDeniedResult(res.result));
       if (!res.ok || denied) {
         el.classList.toggle('denied', denied);
@@ -952,6 +964,7 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
     interrupt() {
       if (!card.running) return;
       card.running = false;
+      card.outcome = 'interrupted';
       el.hidden = false;
       const status = el.querySelector<HTMLElement>('.tool-status')!;
       status.className = 'tool-status err';

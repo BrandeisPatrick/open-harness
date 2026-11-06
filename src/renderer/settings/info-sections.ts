@@ -1,11 +1,11 @@
 // MCP servers (the existing panel), History, Appearance, Configuration files and About.
 
-import type { ModInfo, ModLayout } from '../../shared/mods';
+import type { ModInfo, ModLayout, ModLookTarget } from '../../shared/mods';
 import type { AppInfo, SettingsFileInfo, SettingsInfo } from '../../shared/settings-info';
 import type { HistoryStats, TrashEntry } from '../../shared/history';
 import { basename, formatBytes, h } from '../dom.js';
 import { onPush } from '../rpc.js';
-import { fileState, relativeDays, TRASH_DAYS } from './model.js';
+import { currentLookSet, fileState, lookChoices, lookSetPatch, lookSets, offLookMods, relativeDays, TRASH_DAYS } from './model.js';
 import { button, chip, group, note, row, sectionTitle, selectControl, tildePath, type Row } from './ui.js';
 import type { Ctx, Section } from './ctx.js';
 
@@ -136,7 +136,27 @@ export function appearanceSection(ctx: Ctx): Section {
 
   let mods: ModInfo[] = [];
   let lastImage: string | null = null;
-  const bgSelect = selectControl<string>([{ value: '', label: 'None' }], '', (v) => void setBackground(v), 240);
+
+  /** A select whose options are rebuilt as mods come and go: it reports the chosen value itself. */
+  const liveSelect = (first: string, onChange: (v: string) => void) => {
+    const c = selectControl<string>([{ value: '', label: first }], '', () => {}, 240);
+    c.select.addEventListener('change', () => onChange(c.select.value));
+    return c;
+  };
+
+  // Looks: a set (one mod's parts together), then each region on its own, then the background rows.
+  const setSelect = liveSelect('None', (v) => void setSet(v));
+  const setRow = row({ id: 'look-set', title: 'Set', desc: 'A mod’s matching conversation, chat bar and background, in one choice.', keywords: 'looks theme skin set conversation chat bar background mod' }, setSelect);
+  const convSelect = liveSelect('Default', (v) => void setLook('conversation', v));
+  const convRow = row({ id: 'look-conversation', title: 'Conversation', desc: 'How the messages, tool rows and code blocks look.', keywords: 'look transcript messages chat style mod' }, convSelect);
+  const barSelect = liveSelect('Default', (v) => void setLook('composer', v));
+  const barRow = row({ id: 'look-composer', title: 'Chat bar', desc: 'How the box you type in looks.', keywords: 'look composer input message box style mod' }, barSelect);
+  const lookRows: Record<ModLookTarget, { row: Row; select: typeof convSelect }> = { conversation: { row: convRow, select: convSelect }, composer: { row: barRow, select: barSelect } };
+  const offText = h('span', {});
+  const offNote = h('p', { class: 'sp-note sp-looks-off', hidden: true }, offText, ' ', h('button', { type: 'button', class: 'link-btn' }, 'Open Mods'));
+  offNote.querySelector('button')!.addEventListener('click', () => ctx.show('mods'));
+
+  const bgSelect = liveSelect('None', (v) => void setBackground(v));
   const bgRow = row({ id: 'background', title: 'Background', desc: 'A picture or a mod’s live background behind the window. The app’s surfaces turn translucent over it.', keywords: 'wallpaper image picture mod' }, bgSelect);
   const pictureName = h('span', { class: 'sp-file-name' });
   const pictureRow = row(
@@ -156,7 +176,7 @@ export function appearanceSection(ctx: Ctx): Section {
     }
   });
   const dimRow = row({ id: 'background-dim', title: 'Dim', desc: 'How strongly the app’s surfaces cover the background.', keywords: 'opacity translucent background' }, h('span', { class: 'sp-control-group' }, dim, dimValue));
-  const bgGroup = group(null, bgRow, pictureRow, dimRow);
+  const bgGroup = group('Looks', setRow, convRow, barRow, bgRow, pictureRow, dimRow, offNote);
   el.append(group(null, theme), bgGroup);
 
   function layout(): ModLayout | null {
@@ -172,9 +192,70 @@ export function appearanceSection(ctx: Ctx): Section {
     return out;
   }
 
+  /** Options with the chosen value kept visible: a choice whose mod is off or gone shows as "… (off)", like the background. */
+  function fill(sel: HTMLSelectElement, choices: { value: string; label: string }[], value: string, offLabel: (v: string) => string): void {
+    sel.innerHTML = '';
+    for (const c of choices) sel.append(h('option', { value: c.value }, c.label));
+    if (value && !choices.some((c) => c.value === value)) sel.append(h('option', { value }, offLabel(value)));
+    sel.value = value;
+  }
+
+  const modName = (key: string) => {
+    const m = mods.find((x) => x.key === key);
+    return m?.manifest?.name ?? key;
+  };
+
+  function renderLooks(): void {
+    const l = layout();
+    if (!l) return;
+    for (const target of ['conversation', 'composer'] as const) {
+      const ref = l.looks?.[target] ?? '';
+      const r = lookRows[target];
+      fill(r.select.select, [{ value: '', label: 'Default' }, ...lookChoices(mods, target)], ref, (v) => {
+        const i = v.lastIndexOf('/');
+        return `${modName(v.slice(0, i))}: ${v.slice(i + 1)} (off)`;
+      });
+    }
+    const sets = lookSets(mods);
+    const now = currentLookSet(mods, l);
+    const choices = [{ value: '', label: 'None' }, ...sets.map((x) => ({ value: x.key, label: x.name }))];
+    if (now === 'custom') choices.push({ value: 'custom', label: 'Custom' });
+    fill(setSelect.select, choices, now, (v) => `${modName(v.replace(/^off:/, ''))} (off)`);
+    const off = offLookMods(mods);
+    offNote.hidden = !off.length;
+    offText.textContent = off.length ? `${off.join(', ')} ${off.length === 1 ? 'has' : 'have'} looks too, and ${off.length === 1 ? 'is' : 'are'} off.` : '';
+  }
+
+  async function setSet(v: string): Promise<void> {
+    if (v === 'custom' || v.startsWith('off:')) return renderLooks();
+    const set = v ? lookSets(mods).find((x) => x.key === v) ?? null : null;
+    if (v && !set) return renderLooks();
+    try {
+      await ctx.call('mods.setLayout', lookSetPatch(set));
+      setRow.saved();
+      setRow.problem(null);
+    } catch (err) {
+      setRow.problem(`Couldn't apply the set: ${ctx.cleanError(err)}`);
+      renderLooks();
+    }
+  }
+
+  async function setLook(target: ModLookTarget, v: string): Promise<void> {
+    const r = lookRows[target].row;
+    try {
+      await ctx.call('mods.setLayout', { looks: { [target]: v || null } as ModLayout['looks'] });
+      r.saved();
+      r.problem(null);
+    } catch (err) {
+      r.problem(`Couldn't change the look: ${ctx.cleanError(err)}`);
+      renderLooks();
+    }
+  }
+
   function renderBackground(): void {
     const l = layout();
     if (!l) return;
+    renderLooks();
     if (l.backgroundImage) lastImage = l.backgroundImage;
     const choices = [{ value: '', label: 'None' }, ...backgrounds(), ...(lastImage ? [{ value: 'image', label: 'Your picture' }] : [])];
     const sel = bgSelect.select;

@@ -275,61 +275,7 @@ kbd {
 }
 .shell.sidebar-collapsed .sidebar-toggle { left: 80px; }
 
-.sidebar-actions { padding: 0 12px 8px; display: flex; flex-direction: column; gap: 8px; }
-.new-session {
-  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px;
-  border: 1px solid var(--border); border-radius: var(--r-control);
-  background: var(--bg-000); box-shadow: var(--shadow-sm);
-  color: var(--text-100); font-size: 13px; line-height: 18px; font-weight: 500;
-  transition: border-color 0.12s, color 0.12s;
-}
-.new-session-icon { display: inline-flex; color: var(--text-200); transition: color 0.12s; }
-.new-session:hover { border-color: var(--accent-line); color: var(--accent); }
-.new-session:hover .new-session-icon { color: var(--accent); }
-.new-session:active { background: var(--surface-hover); }
-.search-field {
-  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px;
-  border: 1px solid var(--border-subtle); border-radius: var(--r-control);
-  color: var(--text-400); cursor: text;
-  transition: border-color 0.12s, background-color 0.12s, box-shadow 0.12s;
-}
-.search-field:hover { border-color: var(--border); }
-.search-field:focus-within { border-color: var(--accent-line); background: var(--bg-000); box-shadow: 0 0 0 2px var(--field-ring); }
-.search-icon { display: inline-flex; }
-.search-field input { flex: 1; min-width: 0; height: 100%; border: none; background: transparent; padding: 0; outline: none; font-size: 13px; color: var(--text-100); }
-.search-field input::placeholder { color: var(--text-400); }
-
-.session-list { flex: 1; overflow-y: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 2px; }
-.session-group { padding: 12px 8px 4px; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-400); }
-.session-empty { padding: 12px 8px; font-size: 12px; line-height: 16px; color: var(--text-400); }
-.session-item {
-  position: relative; display: flex; align-items: center; gap: 8px; flex: none;
-  height: 32px; padding: 0 4px 0 7px;
-  border: 1px solid transparent; border-radius: var(--r-control);
-  color: var(--text-200); font-size: 13px; line-height: 18px; cursor: pointer;
-  transition: background-color 0.1s, color 0.1s;
-}
-.session-item:hover { background: var(--hover); color: var(--text-100); }
-.session-item:active { background: var(--pressed); }
-.session-item.active { background: var(--bg-000); border-color: var(--border-subtle); box-shadow: var(--shadow-sm); color: var(--text-100); }
-.session-item .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session-item .trail { display: inline-flex; align-items: center; gap: 4px; flex: none; min-width: 24px; height: 24px; justify-content: center; color: var(--text-400); }
-.session-item .row-more { display: none; }
-.session-item:hover .row-more, .session-item:focus-within .row-more, .session-item.menu-open .row-more, .session-item .row-more[aria-expanded="true"] { display: inline-flex; }
-.session-item:hover .trail-meta, .session-item:focus-within .trail-meta, .session-item.menu-open .trail-meta { display: none; }
-.session-item .row-more:hover { background: var(--pressed); }
-.session-item.active .row-more:hover { background: var(--hover); }
-.session-item.renaming { background: var(--bg-000); border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--field-ring); }
-.rename-input { flex: 1; min-width: 0; height: 24px; border: none; outline: none; background: transparent; padding: 0; font-size: 13px; color: var(--text-100); }
-
-.sidebar-foot { display: flex; align-items: center; gap: 4px; padding: 8px; border-top: 1px solid var(--border-subtle); flex: none; }
-.foot-row {
-  flex: 1; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px;
-  border-radius: var(--r-control); color: var(--text-200); font-size: 13px; line-height: 18px;
-  transition: background-color 0.12s, color 0.12s;
-}
-.foot-row:hover { background: var(--hover); color: var(--text-100); }
-.foot-row .foot-label { flex: 1; }
+/* The sidebar's navigation rows, session tree, search and footer are styled in sidebar.css */
 
 /* ---------- Main column ---------- */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-100); }
@@ -849,7 +795,7 @@ img.shot { display: block; max-width: 100%; border-radius: var(--r-card); border
 .term-empty-icon { display: inline-flex; opacity: 0.8; }
 
 /* Pressed states for row-like controls */
-.foot-row:active, .toggle-btn:active, .code-copy:active, .stop-hint:active, .slash-item:active,
+.toggle-btn:active, .code-copy:active, .stop-hint:active, .slash-item:active,
 .thinking > summary:active, .tool > summary:active, .tool-group > summary:active { background: var(--pressed); }
 .cwd-btn:active, .link-btn:active { color: var(--text-100); }
 .segmented label:active span { background: var(--hover); }
@@ -1079,9 +1025,9 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 .lightbox-close:active { background: rgba(255, 255, 255, 0.34); }
 
 /* ---------- Queued messages (above the status line) ---------- */
-/* The queue and the task list float over the transcript's foot; it leaves room for both (--queue-h, --tasks-h) */
-.transcript { padding-bottom: calc(56px + var(--queue-h, 0px) + var(--tasks-h, 0px)); }
-.jump-latest { top: calc(-56px - var(--queue-h, 0px) - var(--tasks-h, 0px)); }
+/* The queue floats over the transcript's foot; it leaves room for it (--queue-h) */
+.transcript { padding-bottom: calc(56px + var(--queue-h, 0px)); }
+.jump-latest { top: calc(-56px - var(--queue-h, 0px)); }
 .queue {
   position: absolute; left: 0; right: 0; bottom: 100%; z-index: 3;
   display: flex; flex-direction: column; gap: 4px; padding: 12px 0 4px;
@@ -1361,40 +1307,7 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 /* Rewind needs an idle agent: hidden during a run, a compaction or another rewind */
 .shell.rewind-off .msg-rewind { display: none; }
 
-/* Task list: pinned above the queue and the status line; it floats like them and the transcript leaves room (--tasks-h) */
-.composer-wrap { --status-h: 0px; }
-.composer-wrap:has(> .status-line:not([hidden])) { --status-h: 36px; }
-.task-list {
-  position: absolute; left: 0; right: 0; bottom: calc(100% + var(--status-h) + var(--queue-h, 0px)); z-index: 3;
-  padding: 12px 0 8px;
-  background: linear-gradient(to bottom, transparent, var(--bg-100) 12px);
-}
-.composer-wrap:has(> .queue:not([hidden])) > .task-list { padding-bottom: 4px; }
-.task-card {
-  display: flex; flex-direction: column; max-height: clamp(96px, 30vh, 220px); overflow: hidden;
-  background: var(--bg-000); border: 1px solid var(--border-subtle); border-radius: var(--r-card); box-shadow: var(--shadow-sm);
-  animation: fade-in 0.12s ease-out both;
-}
-.task-head {
-  display: flex; align-items: center; gap: 8px; flex: none; width: 100%; min-width: 0; height: 32px; padding: 0 8px 0 10px;
-  border-radius: calc(var(--r-card) - 1px) calc(var(--r-card) - 1px) 0 0;
-  font-size: 13px; line-height: 18px; color: var(--text-200); user-select: none;
-  transition: background-color 0.12s;
-}
-.task-list.collapsed .task-head { border-radius: calc(var(--r-card) - 1px); }
-.task-head:hover { background: var(--surface-hover); }
-.task-head:active { background: var(--pressed); }
-.task-head:focus-visible { outline-offset: -2px; }
-.task-head-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; color: var(--text-400); }
-.task-head-title { flex: none; font-weight: 600; color: var(--text-100); }
-/* Collapsed, the header names the task in progress */
-.task-head-current { display: none; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-200); }
-.task-list.collapsed .task-head-current:not(:empty) { display: block; }
-.task-list.collapsed .task-head-current:not(:empty)::before { content: '·'; margin-right: 8px; color: var(--text-400); }
-.task-head-count { flex: none; margin-left: auto; padding-left: 8px; font-size: 12px; line-height: 16px; color: var(--text-400); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.task-list.all-done .task-head-count { color: var(--success); }
-.task-head-chev { display: inline-flex; flex: none; color: var(--text-400); transition: transform 0.15s ease; }
-.task-list.collapsed .task-head-chev { transform: rotate(180deg); }
+/* Task rows: the update_tasks snapshot in tool rows (the card in the conversation is styled in tasks.css) */
 .task-rows { position: relative; flex: 1 1 auto; min-height: 0; margin: 0; padding: 4px 0 6px; list-style: none; overflow-y: auto; border-top: 1px solid var(--border-subtle); }
 .task-row { display: flex; align-items: center; gap: 8px; min-height: 24px; padding: 3px 12px 3px 10px; font-size: 13px; line-height: 18px; color: var(--text-200); transition: color 0.15s; }
 .task-glyph { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; color: var(--text-400); }
@@ -1405,9 +1318,6 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 .task-row[data-status="completed"] { color: var(--text-400); }
 .task-row[data-status="completed"] .task-title { text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 55%, transparent); }
 .task-row[data-status="completed"] .task-glyph { color: var(--success); }
-/* While a run is in progress the task in progress spins */
-.task-list.live .task-row[data-status="in_progress"] .task-glyph .spinner { display: inline-block; }
-.task-list.live .task-row[data-status="in_progress"] .task-glyph .icon { display: none; }
 
 /* update_tasks rows in the transcript: the list as it stood at that call */
 .tool-body > .task-snapshot { flex: none; padding: 0; overflow: visible; border-top: none; }
@@ -1415,8 +1325,7 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 .task-row.task-empty { font-size: 12px; line-height: 16px; color: var(--text-400); }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-card, .task-row.fade-in { animation: none; }
-  .task-head-chev { transition: none; }
+  .task-row.fade-in { animation: none; }
 }
 
 /* ---------- Tick 3: the setup strip, the "#" and rewind confirms, the Copied flash, shortcut sheet ---------- */
@@ -1533,10 +1442,6 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 .tool-body .diff-body { max-height: 746px; }
 .out.expanded > pre, .code-view.expanded, pre.args.expanded, .tool-body .diff.expanded .diff-body { max-height: none; }
 
-/* Concurrent sessions: who sent a user message that was not typed here, and the sidebar's per-session status */
+/* Concurrent sessions: who sent a user message that was not typed here (the sidebar's status marks are in sidebar.css) */
 .msg.user.has-origin { margin-top: 24px; }
 .msg.user .msg-origin { position: absolute; top: -17px; right: 2px; font-size: 11px; line-height: 14px; color: var(--text-400); white-space: nowrap; }
-.session-item .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
-.session-item .status-dot.attention { background: var(--accent); }
-.session-item .status-dot.unread { background: var(--text-400); }
-.session-item .trail-meta:has(.spinner) .status-dot { margin-left: 4px; }

@@ -43,7 +43,7 @@ Protocol version: **1**.
     show();
   });
   harness.on('message.assistant', (m) => { words += count(m.text); show(); });
-  harness.on('session.changed', () => location.reload());
+  harness.on('session.switched', () => location.reload());
 </script>
 ```
 
@@ -144,17 +144,19 @@ Every mod origin serves the kit under `/@harness/`:
 | `/@harness/harness.js` | the `harness` object (a classic script: `<script src="/@harness/harness.js"></script>`) |
 | `/@harness/harness.css` | the app's design tokens for light and dark, a transparent page, and small classes so a panel looks native |
 
-The stylesheet follows the app's theme by itself, including a theme mod's colours. Its classes: `h-row` (a label/value line), `h-label`, `h-value`, `h-muted`, `h-title` (a small heading), `h-list` and `h-item` (clickable rows), `h-btn` (`.primary`, `.ghost`, `.sm`), `h-input`, `h-switch`, `h-chip`, `h-bar` with `h-bar-seg` children (a segmented meter), `h-dot` (a colour swatch), `h-empty` (an empty state), `h-spin` (a spinner), `h-mono`. Tokens: `--bg-000 … --bg-400`, `--text-100`, `--text-200`, `--text-400`, `--border`, `--border-subtle`, `--accent`, `--danger`, `--success`, `--font`, `--mono`, `--r-control`, `--r-card`.
+The stylesheet follows the app's theme by itself, including a theme mod's colours. Its classes: `h-row` (a label/value line), `h-label`, `h-value`, `h-muted`, `h-title` (a small heading), `h-list` and `h-item` (clickable rows), `h-btn` (`.primary`, `.ghost`, `.sm`), `h-input`, `h-switch`, `h-chip`, `h-bar` with `h-bar-seg` children (a segmented meter), `h-bar-mark` (a tick on the meter), `h-dot` (a colour swatch), `h-chev` (a disclosure chevron), `h-icon` (`.sm`), `h-segmented` (buttons with `aria-pressed`), `h-empty` (an empty state), `h-spin` (a spinner), `h-mono`. `h-chip` takes `.accent`, `.success`, `.danger`; `h-btn` also `.icon`. Tokens: `--bg-000 … --bg-400`, `--text-100`, `--text-200`, `--text-400`, `--border`, `--border-subtle`, `--accent`, `--danger`, `--success`, `--warn`, `--font`, `--mono`, `--r-control`, `--r-card`, and `--h-inset-x`, `--h-inset-top`, `--h-inset-bottom` for the page's own padding.
 
 Rail and composer views are sized to their content automatically. Keep them compact: 13 px text, 8 px gaps, no page padding beyond what `harness.css` gives.
 
 ## harness
 
-`harness.ready` resolves once the app has answered the page's hello; until then calls wait. Every call returns a promise. A call the mod has no permission for rejects with `code: 'permission'`, naming the permission.
+`harness.ready` resolves once the app has answered the page's hello; until then calls wait (the hello itself never times out; every other call gives up after 30 seconds, except `model.complete`). Every call returns a promise. A failed call rejects with an `Error` whose `code` is `'permission'` (with `.permission` naming it), `'unavailable'`, `'timeout'`, `'unknown-method'`, `'bad-params'` or `'error'`.
 
-`harness.info` → `{ protocol, mod: { id, name, version, scope }, view: { id, seat, title }, app: { name, version }, granted: [...] }`
+`harness.info` is the hello's answer: `{ protocol, mod: { id, name, version, scope }, view: { id, seat, title }, app: { name, version }, granted: [...], theme, settings, visible }`
 
-`harness.on(event, handler)` subscribes and returns a function that unsubscribes. The app only sends events a view has subscribed to.
+`harness.on(event, handler)` subscribes and returns a function that unsubscribes. The app only sends events a view has subscribed to. Subscribing to an event the mod has no permission for does nothing (a console warning says so); an unknown event name is accepted and never arrives.
+
+`harness.call(method, params)` sends any bridge method by name, for the rare case the object has no helper for it.
 
 ### Always available
 
@@ -168,10 +170,10 @@ Rail and composer views are sized to their content automatically. Keep them comp
 | `harness.ui.copy(text)` | copy to the clipboard |
 | `harness.ui.openExternal(url)` | open an http(s) link in the default browser |
 | `harness.ui.markdown(text)` | `{ html }` rendered the way the chat renders Markdown |
-| `harness.storage.get(key, fallback)`, `.set(key, value)`, `.remove(key)`, `.keys()` | this mod's own JSON storage, kept across sessions; `harness.storage.session` is the same per session |
+| `harness.storage.get(key, fallback)`, `.set(key, value)`, `.remove(key)`, `.keys()` | this mod's own JSON storage, kept across sessions; `get` resolves with the value (or `fallback` when nothing is stored), `keys` with an array; `harness.storage.session` is the same per session. A value may be up to 256 KB, a mod's storage 5 MB |
 | `harness.settings.get()` | the values of the mod's settings; event `settings.changed` |
 
-Events: `theme.changed`, `settings.changed`, `visibility.changed` `{ visible }`, `command` `{ name, args }`.
+Events: `theme.changed`, `settings.changed`, `visibility.changed` `{ visible }`, `command` `{ name, args }`, and `session.switched` `{ id }` when another session comes on screen (it carries nothing but the id, so a view without `session:read` can still reset itself).
 
 ### session:read
 
@@ -182,11 +184,11 @@ Events: `theme.changed`, `settings.changed`, `visibility.changed` `{ visible }`,
 | `harness.session.tasks()` | `{ tasks: [{ id, title, status }] }` |
 | `harness.session.plan()` | `{ plan: { id, title, markdown, status } \| null }` |
 | `harness.session.outputs()` | `{ outputs: [{ kind: 'artifact' \| 'image' \| 'file', id, title, detail, updatedAt }] }` |
-| `harness.session.context()` | `{ tokens, limit, threshold, autoCompact, basis, slices: [{ key, label, tokens, items? }], messages, compactions, updatedAt }` |
+| `harness.session.context()` | `{ tokens, limit, threshold, autoCompact, basis, slices: [{ key, label, tokens, items? }], messages, compactable, compactions, updatedAt }` |
 | `harness.session.related()` | `{ parent, children, forks }` (sub-sessions and forks of the session on screen) |
 | `harness.outputs.open({ kind, id })` | show an output: an artifact in the Browser, an image in the viewer, a file in the Diff |
 
-Events: `session.changed` (another session came on screen, or this one's title or state changed), `run.started`, `run.ended` `{ reason, text }`, `message.user` `{ text, origin }`, `message.assistant` `{ text }`, `message.delta` `{ text }` (streaming), `tool.started` `{ id, name, args }`, `tool.ended` `{ id, name, ok, durationMs }`, `tasks.changed` `{ tasks }`, `plan.changed` `{ plan }`, `outputs.changed`, `context.changed` `{ tokens, limit }`.
+Events: `session.changed` (another session came on screen, or this one's title or state changed; reload only when its `id` differs), `related.changed` (a sub-session, fork or the parent changed state), `run.started` `{ sessionId }`, `run.ended` `{ sessionId, reason, text }` (`reason` is `done`, `aborted`, `max_turns`, `error` or `plan`), `message.user` `{ text, origin }`, `message.assistant` `{ text }`, `message.delta` `{ text }` (streaming), `tool.started` `{ id, name, args }`, `tool.ended` `{ id, name, ok, durationMs }`, `tasks.changed` `{ tasks }`, `plan.changed` `{ plan }`, `outputs.changed`, `context.changed` `{ tokens, limit }`.
 
 "The session" is always the one on screen; the events follow it when the user switches.
 
@@ -204,17 +206,17 @@ Events: `session.changed` (another session came on screen, or this one's title o
 
 ### model
 
-`harness.model.complete({ messages, system, maxTokens, context }, onDelta)` → `{ text, usage }`. One reply from the configured model, with no tools. `messages` is `[{ role: 'user' | 'assistant', content }]`; `context: 'session'` puts the open session's conversation in front of them (read-only: nothing is added to the session); `onDelta(text)` receives the reply as it streams. `harness.model.cancel()` stops the call in progress. This spends tokens, which the permission says when the mod is turned on.
+`harness.model.complete({ messages, system, maxTokens, context }, onDelta)` → `{ text, usage }`. One reply from the configured model, with no tools. `messages` is `[{ role: 'user' | 'assistant', content }]`; `context: 'session'` puts the open session's conversation in front of them (read-only: nothing is added to the session); `onDelta(text)` receives the reply as it streams. `harness.model.cancel()` stops the call in progress, which then resolves with what had arrived and `stopped: true`. This spends tokens, which the permission says when the mod is turned on.
 
 ### skills:read
 
-`harness.skills.list()` → `[{ name, description, source }]`. `harness.skills.usage({ scope: 'session' | 'all' })` → `{ items: [{ name, count, lastUsedAt }] }`. Event `skills.used` `{ name }`.
+`harness.skills.list()` → `[{ name, description, path, source }]`. `harness.skills.usage({ scope: 'session' | 'all' })` → `{ items: [{ name, count, lastUsedAt }] }`. Event `skills.used` `{ name }`.
 
 ### config:read and config:write
 
-`harness.config.get()` → `{ provider, model, workingDirectory, permissionMode, theme, autoCompact, compactThreshold, keepAwake, notifications, background, contextLimit }`. Keys and other secrets are never included. Event `config.changed`.
+`harness.config.get()` → `{ provider, model, workingDirectory, home, permissionMode, theme, autoCompact, compactThreshold, keepAwake, notifications, background, contextLimit }` (`workingDirectory` is the folder of the session on screen, `home` the user's home folder for showing paths as `~/…`). Keys and other secrets are never included. Event `config.changed`.
 
-`harness.config.set(patch)` changes `theme`, `autoCompact`, `compactThreshold`, `keepAwake`, `notifications` or `background`, and nothing else: a mod cannot change the permission mode, the provider, or what is trusted.
+`harness.config.set(patch)` changes `theme`, `autoCompact`, `compactThreshold`, `keepAwake`, `notifications` or `background`, and nothing else (any other key is refused as bad params): a mod cannot change the permission mode, the provider, or what is trusted.
 
 ### schedules
 
@@ -261,7 +263,7 @@ page → app   { "jsonrpc": "2.0", "id": 3, "method": "events.subscribe", "param
 app → page   { "jsonrpc": "2.0", "method": "event", "params": { "name": "tasks.changed", "data": { "tasks": [] } } }
 ```
 
-Method names are the call names above (`ui.setBadge`, `storage.get`, `session.transcript`, `model.complete`, …) with their arguments as a `params` object. Errors use `{ "code", "message", "data" }` with these codes: `-32601` unknown method, `-32602` bad params, `4003` permission needed (`data.permission`), `4004` not available right now, `4008` timed out, `4000` anything else. The app identifies the caller by the frame the message came from, never by what the message says.
+Method names are the call names above (`ui.setBadge`, `storage.get`, `session.transcript`, `model.complete`, …) with their arguments as a `params` object. Every result is an object or nothing; `harness.js` hands most of them back as they are and unwraps three: `storage.get` (`{ value }`), `storage.keys` (`{ keys }`) and `skills.list` (`{ skills }`). `events.subscribe` for an event the mod has no permission for is refused with `4003`. Errors use `{ "code", "message", "data" }` with these codes: `-32601` unknown method, `-32602` bad params, `4003` permission needed (`data.permission`), `4004` not available right now, `4008` timed out, `4000` anything else. The app identifies the caller by the frame the message came from, never by what the message says.
 
 ## Building one with the agent
 

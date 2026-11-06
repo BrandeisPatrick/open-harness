@@ -210,7 +210,10 @@ export interface OutputItem {
 export interface PublicConfig {
   provider: string;
   model: string;
+  /** The folder of the session on screen */
   workingDirectory: string;
+  /** The user's home folder, for showing paths as ~/… */
+  home: string;
   permissionMode: PermissionMode;
   theme: 'system' | 'light' | 'dark';
   autoCompact: boolean;
@@ -290,7 +293,8 @@ export interface ModBridge {
   'sessions.list': () => { sessions: ModSession[] };
   'sessions.search': (p: { query: string; limit?: number }) => { hits: SearchHit[] };
 
-  'model.complete': (p: ModelRequest) => { text: string; usage?: { promptTokens: number; completionTokens: number } };
+  /** After model.cancel the call still resolves, with what had arrived and `stopped: true` */
+  'model.complete': (p: ModelRequest) => { text: string; usage?: { promptTokens: number; completionTokens: number }; stopped?: boolean };
   'model.cancel': (p: { requestId?: string }) => void;
 
   'skills.list': () => { skills: SkillInfo[] };
@@ -318,8 +322,13 @@ export interface ModEvents {
   'settings.changed': Record<string, unknown>;
   'visibility.changed': { visible: boolean };
   command: { name: string; args: string };
+  /** Another session came on screen. Needs no permission (it carries only the id), so any view can reset itself. */
+  'session.switched': { id: string };
 
+  /** The session on screen changed: its title, its state, or which session it is */
   'session.changed': ModSession;
+  /** A sub-session, fork or the parent of the session on screen changed state: read session.related() again */
+  'related.changed': Record<string, never>;
   'run.started': { sessionId: string };
   'run.ended': { sessionId: string; reason: string; text?: string };
   'message.user': { text: string; origin: string };

@@ -31,6 +31,8 @@ export interface ContextBreakdown {
   slices: ContextSlice[];
   /** Messages in the live conversation */
   messages: number;
+  /** Whether compacting now could free anything (false while a run is going or when the conversation is too short) */
+  compactable: boolean;
   compactions: number;
   lastCompaction?: { at: number; reason: 'auto' | 'manual'; tokensBefore: number; tokensAfter: number };
   updatedAt: number;

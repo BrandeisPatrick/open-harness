@@ -1,8 +1,10 @@
 // The context meter in the composer footer (tokens used against the model's window, with a popover to compact
 // or open Settings) and the compaction divider that marks where earlier messages were folded into a summary.
 
+import type { ContextBreakdown } from '../shared/context';
 import type { CompactionInfo, ContextInfo } from '../shared/types';
 import { escapeHtml, formatCount } from './dom.js';
+import { rpc } from './rpc.js';
 import { icon } from './icons.js';
 import { renderMarkdown } from './markdown.js';
 import { closeMenu, menuAnchoredTo, openMenu, type MenuHandle, type MenuSection } from './popover.js';
@@ -70,6 +72,42 @@ function popoverHeader(c: ContextInfo): string {
   );
 }
 
+/** The breakdown list under the bar: one row per slice (label, tokens), the reserve and free space last. */
+export function breakdownList(b: ContextBreakdown | null): string {
+  if (!b || !Array.isArray(b.slices) || !b.slices.length) return '';
+  const rows = b.slices
+    .filter((sl) => sl && Number(sl.tokens) > 0)
+    .map((sl) => {
+      const muted = sl.key === 'reserve' || sl.key === 'free' ? ' muted' : '';
+      const tip = Array.isArray(sl.items) && sl.items.length ? ` title="${escapeHtml(sl.items.map((it) => `${it.label}: ${formatCount(Math.round(it.tokens))}`).join('\n'))}"` : '';
+      return `<div class="ctx-slice${muted}"${tip}><span class="ctx-slice-dot" data-key="${escapeHtml(String(sl.key))}"></span><span class="ctx-slice-label">${escapeHtml(sl.label)}</span><span class="ctx-slice-tokens">${escapeHtml(formatCount(Math.round(sl.tokens)))}</span></div>`;
+    })
+    .join('');
+  const basis = b.basis === 'reported' ? 'Scaled to the last request’s reported size' : 'Estimated, about four characters per token';
+  return `<div class="ctx-slices" role="list">${rows}</div><div class="ctx-basis">${escapeHtml(basis)}</div>`;
+}
+
+const STYLE_ID = 'compaction-styles';
+/** The breakdown rows' styles live with the module (the feature has no stylesheet of its own). */
+function ensureStyles(): void {
+  if (document.getElementById(STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = STYLE_ID;
+  el.textContent = `
+.ctx-slices { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 2px; }
+.ctx-slice { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 18px; color: var(--text-200); }
+.ctx-slice.muted { color: var(--text-400); }
+.ctx-slice-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--text-400); }
+.ctx-slice.muted .ctx-slice-dot { background: transparent; box-shadow: inset 0 0 0 1px var(--text-400); }
+.ctx-slice-dot[data-key="messages"], .ctx-slice-dot[data-key="summary"] { background: var(--accent); }
+.ctx-slice-dot[data-key="toolResults"] { background: var(--git-mod); }
+.ctx-slice-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-slice-tokens { flex: none; font-variant-numeric: tabular-nums; }
+.ctx-basis { margin-top: 6px; font-size: 11px; line-height: 14px; color: var(--text-400); }
+`;
+  document.head.appendChild(el);
+}
+
 export interface ContextMeterOptions {
   /** #context-meter */
   button: HTMLButtonElement;
@@ -91,6 +129,25 @@ export function createContextMeter(o: ContextMeterOptions): ContextMeter {
   const btn = o.button;
   let info: ContextInfo | null = null;
   let menu: MenuHandle | null = null;
+  /** The last breakdown for the open popover; dropped when it closes */
+  let breakdown: ContextBreakdown | null = null;
+  /** False once the main process did not know context.breakdown: the list stays away */
+  let breakdownKnown = true;
+  let fetchSeq = 0;
+  const header = () => (info ? popoverHeader(info) + breakdownList(breakdown) : '');
+  const fetchBreakdown = () => {
+    if (!breakdownKnown) return;
+    const my = ++fetchSeq;
+    rpc('context.breakdown')
+      .then((b) => {
+        if (my !== fetchSeq || !menu || !menuAnchoredTo(btn)) return;
+        breakdown = b && typeof b === 'object' && Array.isArray(b.slices) ? b : null;
+        menu.setHeader(header());
+      })
+      .catch((err: unknown) => {
+        if (/No handler registered|Unknown (?:RPC )?method|unknown method/i.test(String((err as Error)?.message ?? err))) breakdownKnown = false;
+      });
+  };
 
   const render = () => {
     if (!info) {
@@ -108,7 +165,10 @@ export function createContextMeter(o: ContextMeterOptions): ContextMeter {
     btn.innerHTML = `${ring(info.tokens / info.limit, 14)}<span class="meter-pct">${escapeHtml(u.text)}</span>`;
     btn.dataset.tip = contextTip(info);
     btn.setAttribute('aria-label', `Context: ${u.text} used, ${formatCount(info.tokens)} of ${formatWindow(info.limit)} tokens`);
-    if (menu && menuAnchoredTo(btn)) menu.setHeader(popoverHeader(info));
+    if (menu && menuAnchoredTo(btn)) {
+      menu.setHeader(header());
+      fetchBreakdown();
+    }
   };
 
   const sections = (): MenuSection[] => [
@@ -123,15 +183,21 @@ export function createContextMeter(o: ContextMeterOptions): ContextMeter {
   btn.addEventListener('click', () => {
     if (menuAnchoredTo(btn)) return closeMenu();
     if (!info) return;
+    ensureStyles();
+    breakdown = null;
     menu = openMenu(sections(), {
       anchor: btn,
       placement: 'top-start',
       boundary: o.boundary,
       minWidth: 280,
       className: 'context-menu',
-      header: popoverHeader(info),
-      onClose: () => (menu = null),
+      header: header(),
+      onClose: () => {
+        menu = null;
+        breakdown = null;
+      },
     });
+    fetchBreakdown();
   });
 
   return {
@@ -145,17 +211,28 @@ export function createContextMeter(o: ContextMeterOptions): ContextMeter {
 
 // ---------- Compaction divider ----------
 
-/** "Context compacted · 14.2k → 2.1k tokens" over a thin rule; the chevron opens the summary (collapsed by default). */
+/** "Compacted · 14 messages summarised, 6 kept · 21k → 6k tokens" (older compactions kept nothing and say less). */
+export function compactionLabel(c: CompactionInfo): string {
+  const before = Math.max(0, Math.round(Number(c?.tokensBefore) || 0));
+  const after = Math.max(0, Math.round(Number(c?.tokensAfter) || 0));
+  const folded = Math.max(0, Math.round(Number(c?.messages) || 0));
+  const kept = Math.max(0, Math.round(Number(c?.kept) || 0));
+  const verb = c?.stage === 'dropped' ? 'dropped' : 'summarised';
+  const what = folded ? `${folded} message${folded === 1 ? '' : 's'} ${verb}${kept ? `, ${kept} kept` : ''}` : '';
+  return ['Compacted', what, `${formatCount(before)} → ${formatCount(after)} tokens`].filter(Boolean).join(' · ');
+}
+
+/** The divider over a thin rule; the chevron opens the brief (collapsed by default). */
 export function createCompactionDivider(c: CompactionInfo): HTMLDetailsElement {
   const el = document.createElement('details');
   el.className = 'compaction';
   if (c?.id) el.dataset.compactionId = String(c.id);
-  const before = Math.max(0, Math.round(Number(c?.tokensBefore) || 0));
-  const after = Math.max(0, Math.round(Number(c?.tokensAfter) || 0));
-  const label = `Context compacted · ${formatCount(before)} → ${formatCount(after)} tokens`;
-  const folded = Math.max(0, Math.round(Number(c?.messages) || 0));
+  if (c?.stage) el.dataset.stage = String(c.stage);
+  const label = compactionLabel(c);
   const meta: string[] = [c?.reason === 'auto' ? 'Compacted automatically near the context limit' : 'Compacted with /compact'];
-  if (folded) meta.push(`${folded} earlier message${folded === 1 ? '' : 's'} summarised`);
+  if (c?.stage === 'dropped') meta.push('no summary could be produced, so the oldest messages were dropped');
+  const pruned = Math.round(Number(c?.pruned) || 0);
+  if (pruned > 0) meta.push(`${formatCount(pruned)} tokens of old tool output cleared first`);
   const at = Number(c?.createdAt);
   if (at > 0) meta.push(new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
   el.innerHTML =

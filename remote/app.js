@@ -311,14 +311,47 @@
 
   const ORIGIN_LABEL = { remote: 'Sent from this device', schedule: 'From a schedule', session: 'From another session', mod: 'From a mod', command: 'From a command' };
 
-  function userEl(text, images, origin) {
+  // A sub-session's report, a message from another session, a merged summary and a scheduled prompt reach the
+  // conversation inside a frame written for the model (the sender's id, which tools to use next). The page shows
+  // what was said, as the desktop window does: these are the patterns of src/renderer/origin.ts there, and
+  // test/live/remote-page.js runs the frames the app really writes through both.
+  const FRAME = {
+    report: /^\[Sub-session "[\s\S]*?" \([\w-]+\) finished a turn: ([^\]\n]+)\]\n([\s\S]*?)\n\nNext: read more with session_read[^\n]*$/,
+    message: /^\[Message from (?:another session|session "[\s\S]*?" \([\w-]+\)[^\]\n]*)\]\n([\s\S]*)$/,
+    merged: /^\[Merged from "[\s\S]*?"\]\n\n([\s\S]*)$/,
+    scheduled: /^\[Scheduled task "[\s\S]*?" \([^\n]*\)\. This message was sent automatically[^\n]*\]\n[^\n]*\n\n([\s\S]*)$/,
+  };
+
+  function unframe(origin, text) {
+    const raw = String(text == null ? '' : text);
+    let m = null;
+    if (origin === 'session') {
+      if ((m = FRAME.report.exec(raw))) return { text: m[2].trim(), note: m[1] === 'done' ? 'finished a turn' : m[1] };
+      if ((m = FRAME.message.exec(raw))) return { text: m[1].trim() };
+    } else if (origin === 'command') {
+      if ((m = FRAME.merged.exec(raw))) return { text: m[1].trim() };
+    } else if (origin === 'schedule') {
+      if ((m = FRAME.scheduled.exec(raw))) return { text: m[1].trim() };
+    }
+    return { text: raw };
+  }
+
+  function userEl(text, images, origin, from) {
     const wrap = h('div', 'msg user');
     const bubble = h('div', 'bubble');
-    bubble.textContent = text;
+    const shown = unframe(origin, text);
+    // Another session's words and a merged summary were written by a model: Markdown, like a reply
+    if (origin === 'session' || origin === 'command') {
+      bubble.classList.add('md', 'rich');
+      bubble.innerHTML = markdown(shown.text);
+    } else bubble.textContent = shown.text;
     wrap.append(bubble);
     const notes = [];
     if (images) notes.push(images === 1 ? '1 image (on your Mac)' : `${images} images (on your Mac)`);
-    if (origin && ORIGIN_LABEL[origin]) notes.push(ORIGIN_LABEL[origin]);
+    const title = from && sessionName(from) !== from ? sessionName(from) : '';
+    if (origin === 'session') notes.push(`${title ? `From session ${title}` : ORIGIN_LABEL.session}${shown.note ? ` · ${shown.note}` : ''}`);
+    else if (origin === 'command' && title) notes.push(`Merged from ${title}`);
+    else if (origin && ORIGIN_LABEL[origin]) notes.push(ORIGIN_LABEL[origin]);
     if (notes.length) wrap.append(h('div', 'from', esc(notes.join(' · '))));
     return wrap;
   }
@@ -558,7 +591,7 @@
 
   function itemEl(item) {
     switch (item.role) {
-      case 'user': return userEl(item.text, item.images);
+      case 'user': return userEl(item.text, item.images, item.origin, item.from);
       case 'assistant': return assistantEl(item.text);
       case 'tool': return toolEl(item.name, item.args, item.result, item.ok);
       case 'plan': {
@@ -695,7 +728,7 @@
       case 'user_message':
         endStreaming();
         V.assistant = null;
-        append(userEl(ev.text, ev.images, ev.origin));
+        append(userEl(ev.text, ev.images, ev.origin, ev.from));
         break;
       case 'thinking_delta':
         if (!V.thinking) {

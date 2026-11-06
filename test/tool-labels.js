@@ -106,7 +106,7 @@ const { check, done } = require('./support/check.js');
   check('mod_check: problems across mods and page errors add up', meta('mod_check', `${broken}\n\n${healthy}\nErrors its pages reported (latest 1 of 3):\n- x`) === '5 problems');
   check('mod_check: not found', meta('mod_check', 'No mod with the id "x". Mods are folders…') === 'not found');
   check('a denied card reads denied', meta('session_spawn', 'Not started: Not permitted: the user denied this action.') === 'denied' && isDeniedResult('Not scheduled: Not permitted: the user denied this action.'));
-  check('a refusal reads error', meta('schedule_create', 'Error frequency_too_high: every 3 minutes is too often') === 'error' && meta('session_merge', 'Error: "L" is running.') === 'error');
+  check('a refusal reads error', meta('schedule_create', 'Error: frequency_too_high: every 3 minutes is too often') === 'error' && meta('session_merge', 'Error: "L" is running.') === 'error');
   check('other tools get no summary here', agentToolMeta('bash', {}, 'x') === null);
 
   // ---------- Bodies ----------

@@ -1,14 +1,14 @@
 // What of a session the remote page gets to see. Images stay on the Mac (a phone on a shared network should not pull
 // screenshots and pasted pictures), long tool results are cut, and stored-file paths are left out.
 
-import type { AgentEvent, ArtifactInfo, LiveState, TranscriptItem } from '../../shared/types';
+import type { AgentEvent, ArtifactInfo, LiveState, MessageOrigin, TranscriptItem } from '../../shared/types';
 import type { ImageInfo } from '../../shared/images';
 
 export const MAX_RESULT = 20_000;
 
 /** A transcript item as the remote page receives it: a user item has an image count instead of data URLs. */
 export type RemoteItem =
-  | { role: 'user'; text: string; images?: number; turn?: number }
+  | { role: 'user'; text: string; images?: number; turn?: number; origin?: MessageOrigin; from?: string }
   | Exclude<TranscriptItem, { role: 'user' } | { role: 'artifact' } | { role: 'image' }>
   | { role: 'artifact'; artifact: RemoteArtifact }
   | { role: 'image'; image: RemoteImage };
@@ -29,6 +29,9 @@ export function remoteItem(item: TranscriptItem): RemoteItem {
       const out: Extract<RemoteItem, { role: 'user' }> = { role: 'user', text: item.text };
       if (item.images?.length) out.images = item.images.length;
       if (item.turn !== undefined) out.turn = item.turn;
+      // Where it came from when it was not typed (another session, a schedule, …), so the page can label it
+      if (item.origin && item.origin !== 'user' && item.origin !== 'queue') out.origin = item.origin;
+      if (item.from) out.from = item.from;
       return out;
     }
     case 'tool':

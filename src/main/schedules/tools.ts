@@ -63,7 +63,7 @@ async function guarded(fn: () => Promise<ToolResult>): Promise<ToolResult> {
   try {
     return await fn();
   } catch (err) {
-    if (err instanceof ScheduleError) return { content: `Error ${err.message}` };
+    if (err instanceof ScheduleError) return { content: `Error: ${err.message}` };
     throw err;
   }
 }

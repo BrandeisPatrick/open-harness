@@ -13,6 +13,8 @@ const projectDir = path.join(__dirname, '..', '..');
 const shots = path.resolve(process.argv[2] || path.join(require('node:os').tmpdir(), 'oa-remote-shots'));
 fs.mkdirSync(shots, { recursive: true });
 const { setupRemote } = require(path.join(projectDir, 'dist/main/remote.js'));
+const { Subagents, messageHead, mergedText } = require(path.join(projectDir, 'dist/main/subagents/service.js'));
+const { frameMessage } = require(path.join(projectDir, 'dist/main/schedules/service.js'));
 const { fakeApp } = require(path.join(projectDir, 'test/support/fake-app.js'));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -90,6 +92,19 @@ function seed(store) {
     ...tools.map(([call, result]) => ({ role: 'tool', tool_call_id: call.id, content: result })),
     { role: 'assistant', content: 'Done: 6 modules under `src/api/`, all imports updated, tests pass.' },
   );
+  // Messages that were not typed, in the frames the app really writes around them (the sender's id, which tools to
+  // use next): a sub-session's report, a message from another session, a merged summary, a scheduled prompt.
+  const framed = [
+    ['session', Subagents.prototype.noteText.call(null, b, { type: 'run_end', reason: 'done', text: 'The plan is ready: **tokens first**, then the settings page.' }), b.id],
+    ['session', `${messageHead(a, 'peer session')}\nThe login fix is merged; rebase before you go on.`, a.id],
+    ['command', mergedText(b.title, 'Dark mode needs two new tokens and one stylesheet.'), b.id],
+    ['schedule', frameMessage({ name: 'Nightly API smoke test', describe: 'every day at 03:00', prompt: 'Run the API smoke test and report failures.' }), undefined],
+  ];
+  c.turns = c.turns ?? [];
+  for (const [origin, text, from] of framed) {
+    c.turns.push({ at: c.messages.length, createdAt: Date.now(), text, files: {}, origin, from });
+    c.messages.push({ role: 'user', content: text }, { role: 'assistant', content: 'Noted.' });
+  }
   store.save(c);
   // Oldest first in updatedAt so the list order is: login (running), dark mode, refactor.
   c.updatedAt = Date.now() - 3 * 3600_000;
@@ -280,6 +295,15 @@ async function main() {
   const passed = toolRows.find((r) => r.row === 'Bash npm test');
   check('a stored command that exited 1 shows as failed with "exit 1"; one that exited 0 as done', lint && lint.err && lint.meta === 'exit 1' && passed && !passed.err && passed.meta === '', { lint, passed });
   check('a failed show_image says failed', toolRows.find((r) => r.row === 'Show image before.png')?.meta === 'failed');
+  // Messages from elsewhere: what was said and who said it, not the frame written for the model
+  const bubbles = await js(win, `[...document.querySelectorAll('#transcript .msg.user')].map((m) => ({ text: m.querySelector('.bubble').innerText.trim(), from: m.querySelector('.from')?.innerText ?? '', bold: m.querySelector('.bubble strong')?.innerText ?? '' }))`);
+  const said = (text) => bubbles.find((x) => x.text === text);
+  const report = said('The plan is ready: tokens first, then the settings page.');
+  check('a sub-session report shows what it said, as Markdown, labelled with its session', report && report.bold === 'tokens first' && report.from === 'From session Add dark mode to the settings page · finished a turn', bubbles.slice(-4));
+  check('a message from another session shows its text and sender', said('The login fix is merged; rebase before you go on.')?.from === 'From session Fix the flaky login test', bubbles.slice(-3));
+  check('a merged summary shows the summary and where it came from', said('Dark mode needs two new tokens and one stylesheet.')?.from === 'Merged from Add dark mode to the settings page', bubbles.slice(-2));
+  check('a scheduled run shows the prompt the schedule holds', said('Run the API smoke test and report failures.')?.from === 'From a schedule', bubbles.slice(-1));
+  check('no frame, id or tool hint is left on the page', !/\[Sub-session "|\[Message from|\[Merged from|\[Scheduled task|session_read|Carry out the task below/.test(await js(win, `document.getElementById('transcript').innerText`)));
   await js(win, `document.querySelector('#scroll').scrollTop = 0`);
   await shot(win, '4b-tools');
 

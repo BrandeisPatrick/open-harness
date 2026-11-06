@@ -239,7 +239,8 @@ export class ModBridgeHandler {
       case 'session.transcript': {
         const limit = int(p, 'limit', 1, 100_000);
         const s = this.session();
-        const items = s ? toModTranscript(toTranscript(s)) : [];
+        // Calls still in flight are left out, as in the window: tool.started and tool.ended report them
+        const items = s ? toModTranscript(toTranscript(s, { running: this.app.runtime.isRunning(s.id) })) : [];
         return { items: limit ? items.slice(-limit) : items };
       }
       case 'session.tasks':

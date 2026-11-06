@@ -148,6 +148,10 @@ h1, h2 { margin: 0; }
   max-width: 88%; padding: 10px 14px; background: var(--bubble); color: var(--text-100);
   border-radius: 18px 18px 4px 18px; white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* Another session's words (a report, a merged summary): Markdown inside the bubble */
+.msg.user .bubble.rich { white-space: normal; }
+.msg.user .bubble.rich > :first-child { margin-top: 0; }
+.msg.user .bubble.rich > :last-child { margin-bottom: 0; }
 .msg.user .from { margin-top: 4px; padding-right: 4px; font-size: 12px; line-height: 16px; color: var(--text-400); }
 .msg.assistant { color: var(--text-100); }
 .msg.assistant.streaming > .md > :last-child::after {

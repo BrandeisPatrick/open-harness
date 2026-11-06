@@ -81,6 +81,7 @@
   harness.on('outputs.changed', load);
   harness.on('session.changed', (s) => { if (s && s.id === lastId) return; lastId = s && s.id; load(); });
   harness.ready.then(async () => {
+    render(); // the empty state at once: the first answer can take a while in a large repository
     const s = await harness.session.get().catch(() => null);
     lastId = s && s.id;
     load();

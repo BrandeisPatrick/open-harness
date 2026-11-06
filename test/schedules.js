@@ -604,7 +604,7 @@ function rig(opts = {}) {
   ];
   for (const [args, code] of codes) {
     const res = await run('schedule_create', args);
-    check(`schedule_create ${JSON.stringify(args).slice(0, 70)} -> ${code}`, res.content.startsWith(`Error ${code}: `), res.content);
+    check(`schedule_create ${JSON.stringify(args).slice(0, 70)} -> ${code}`, res.content.startsWith(`Error: ${code}: `), res.content);
   }
   check('validation errors ask nothing and store nothing', approvals.length === 0 && svc.list().length === 0);
 
@@ -665,8 +665,8 @@ function rig(opts = {}) {
   check('refused update changes nothing', refusedUpd.content.startsWith('Not changed:') && svc.get(made.id).prompt.startsWith('Write the standup'));
   answer = { ok: true };
   const badUpd = await run('schedule_update', { id: made.id, every_minutes: 2 });
-  check('update validation: frequency_too_high before any card', badUpd.content.startsWith('Error frequency_too_high:') && approvals.length === 3);
-  check('update unknown id: not_found', (await run('schedule_update', { id: 'nope', name: 'x' })).content.startsWith('Error not_found:'));
+  check('update validation: frequency_too_high before any card', badUpd.content.startsWith('Error: frequency_too_high:') && approvals.length === 3);
+  check('update unknown id: not_found', (await run('schedule_update', { id: 'nope', name: 'x' })).content.startsWith('Error: not_found:'));
   const moved = await run('schedule_update', { id: made.id, target: 'this_session' });
   check('update target to this session', moved.content.startsWith('Updated:') && svc.get(made.id).target === 'session' && svc.get(made.id).sessionId === 'main');
 
@@ -674,12 +674,12 @@ function rig(opts = {}) {
   const before = approvals.length;
   const del = await run('schedule_delete', { id: made.id });
   check('delete: gone, no approval', del.content.startsWith('Deleted') && !svc.get(made.id) && approvals.length === before);
-  check('delete unknown id: not_found', (await run('schedule_delete', { id: made.id })).content.startsWith('Error not_found:'));
+  check('delete unknown id: not_found', (await run('schedule_delete', { id: made.id })).content.startsWith('Error: not_found:'));
 
   // too_many through the tool
   while (svc.list().length < 50) svc.create({ name: 'filler', prompt: 'p', when: { kind: 'every', minutes: 60 } }, 'user');
   const full = await run('schedule_create', { name: 'one more', prompt: 'p', every_minutes: 60 });
-  check('schedule_create at 50: too_many, no card', full.content.startsWith('Error too_many:') && approvals.length === before);
+  check('schedule_create at 50: too_many, no card', full.content.startsWith('Error: too_many:') && approvals.length === before);
 
   // prompt section and /schedules
   const section = h.prompts.schedules({ cwd: '/proj', mode: 'ask', sessionId: 'main' });

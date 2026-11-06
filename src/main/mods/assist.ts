@@ -8,29 +8,40 @@ import type { ModRegistry } from './registry';
 
 const RUNTIME_SHOWN = 5;
 
-function describe(m: ModInfo): string {
+/** `looks`: the layout's look per region ("<mod key>/<look id>"), so a look can say whether it is the active one. */
+function describeMod(m: ModInfo, chosen?: Record<string, string | null>): string {
   const lines: string[] = [];
   const name = m.manifest ? `${m.manifest.name} (${m.id} ${m.manifest.version})` : m.id;
   lines.push(`## ${name}`);
   lines.push(`Folder: ${m.dir}`);
   lines.push(`Scope: ${m.scope}${m.overrides ? ' (replaces the bundled mod with this id)' : ''} · key: ${m.key} · origin: ${m.origin}/`);
   lines.push(`State: ${m.state}`);
-  const manifestProblems = m.problems.filter((p) => p.kind !== 'runtime');
+  const manifestProblems = m.problems.filter((p) => p.kind !== 'runtime' && !p.warning);
+  const warnings = m.problems.filter((p) => p.warning);
   const runtime = m.problems.filter((p) => p.kind === 'runtime');
   if (manifestProblems.length) {
     lines.push(`Problems in mod.json (${manifestProblems.length}):`);
     for (const p of manifestProblems) lines.push(`- ${p.message}`);
     if (m.manifest) lines.push('(The last valid version of mod.json is still in use until these are fixed.)');
   } else lines.push('mod.json: valid');
+  if (warnings.length) {
+    lines.push(`Warnings in mod.json (${warnings.length}; the rest of the mod loads):`);
+    for (const p of warnings) lines.push(`- ${p.message}`);
+  }
   lines.push(`Permissions granted: ${m.granted.join(', ') || 'none'}`);
   if (m.wants.length) lines.push(`Permissions asked for and not granted: ${m.wants.join(', ')}`);
-  if (m.wantsStyles) lines.push('Contributes styles or a background that the user has not approved yet.');
+  if (m.wantsStyles) lines.push('Contributes styles, looks or a background that the user has not approved yet.');
   const views = m.manifest?.contributes?.views ?? [];
   if (views.length) {
     lines.push('Views:');
     for (const v of views) lines.push(`- ${v.id}: "${v.title}" in the ${v.seat} seat, page ${v.entry}`);
   } else lines.push('Views: none');
   if (m.manifest?.contributes?.styles?.length) lines.push(`Styles: ${m.manifest.contributes.styles.join(', ')}`);
+  const looks = m.manifest?.contributes?.looks ?? [];
+  if (looks.length) {
+    lines.push('Looks (scoped to their region; the user picks one per region in Settings → Appearance → Looks):');
+    for (const l of looks) lines.push(`- ${l.id}: "${l.title}" for the ${l.target === 'composer' ? 'chat bar (@scope #chatbar)' : 'conversation (@scope #messages)'}, ${l.styles.join(', ')}${chosen?.[l.target] === `${m.key}/${l.id}` ? ' · active' : ''}`);
+  }
   if (m.manifest?.contributes?.commands?.length) lines.push(`Commands: ${m.manifest.contributes.commands.map((c) => `/${c.name}`).join(', ')}`);
   if (runtime.length) {
     lines.push(`Errors its pages reported (latest ${Math.min(RUNTIME_SHOWN, runtime.length)} of ${runtime.length}):`);
@@ -45,13 +56,17 @@ function nextStep(m: ModInfo, problems: number, runtime: number): string {
   if (problems) return 'Fix the problems above in mod.json, then call mod_check again.';
   if (m.state === 'off') return 'The mod is written but off: the user turns it on from the card in the chat or in Settings → Mods. Tell them so; do not try to turn it on yourself.';
   if (m.state === 'paused')
-    return `The mod is paused because it now asks for more than the user approved (${[...m.wants, ...(m.wantsStyles ? ['styles/background'] : [])].join(', ')}). The user approves the change from the card in the chat or in Settings → Mods.`;
+    return `The mod is paused because it now asks for more than the user approved (${[...m.wants, ...(m.wantsStyles ? ['styles/looks/background'] : [])].join(', ')}). The user approves the change from the card in the chat or in Settings → Mods.`;
   if (runtime) return 'Fix the errors above in the page; it reloads when you save. Then call mod_check again (errors from before the fix stay listed until the app restarts, so compare the times).';
   return 'The mod is on and healthy. Pages reload as you save them.';
 }
 
-/** The text mod_check returns: one mod by id, or every mod that is not bundled. */
-export function modCheckText(registry: ModRegistry, id?: string): string {
+/**
+ * The text mod_check returns: one mod by id, or every mod that is not bundled. `looks` is the layout's choice per
+ * region ("<mod key>/<look id>"), so a look can say whether it is the active one.
+ */
+export function modCheckText(registry: ModRegistry, id?: string, looks?: Record<string, string | null>): string {
+  const describe = (m: ModInfo) => describeMod(m, looks);
   const all = registry.scan();
   const roots = registry.roots();
   const where = roots.filter((r) => r.scope !== 'bundled').map((r) => `${r.scope}: ${r.dir}/<id>/`).join('; ');
@@ -65,7 +80,7 @@ export function modCheckText(registry: ModRegistry, id?: string): string {
   return mine.map(describe).join('\n\n');
 }
 
-export function modCheckTool(registry: ModRegistry): Tool & { readOnly: true } {
+export function modCheckTool(registry: ModRegistry, looks?: () => Record<string, string | null>): Tool & { readOnly: true } {
   return {
     name: 'mod_check',
     description:
@@ -77,7 +92,7 @@ export function modCheckTool(registry: ModRegistry): Tool & { readOnly: true } {
     readOnly: true,
     async run(args) {
       const id = typeof args?.id === 'string' && args.id.trim() ? args.id.trim() : undefined;
-      return { content: modCheckText(registry, id) };
+      return { content: modCheckText(registry, id, looks?.()) };
     },
   };
 }
@@ -86,7 +101,7 @@ export function modCheckTool(registry: ModRegistry): Tool & { readOnly: true } {
 export function modsPrompt(list: ModInfo[]): string {
   const named = list.filter((m) => m.manifest).slice(0, 30).map((m) => `${m.id} (${m.scope}, ${m.state})`);
   return [
-    'Mods: the user can extend Open Harness with mods, folders of web pages (mod.json plus HTML) that add a panel in the right rail, a side-pane tab, a strip above the composer, a background, a theme or slash commands.',
+    'Mods: the user can extend Open Harness with mods, folders of web pages (mod.json plus HTML) that add a panel in the right rail, a side-pane tab, a strip above the composer, a background, a theme, a look for the conversation or the chat bar, or slash commands.',
     'Before writing or changing a mod, load the create-mod skill with the skill tool, and check every change with the mod_check tool.',
     `Installed mods: ${named.length ? named.join(', ') : 'none'}.`,
   ].join('\n');

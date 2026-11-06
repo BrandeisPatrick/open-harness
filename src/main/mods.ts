@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dialog, protocol, shell } from 'electron';
 import type { App } from './app';
-import type { ModCaller, ModInfo, ModLayout, ModPermission, ModSeat, ModsConfig } from '../shared/mods';
+import type { ModCaller, ModInfo, ModLayout, ModLookTarget, ModPermission, ModSeat, ModsConfig } from '../shared/mods';
 import type { AppConfig } from '../shared/types';
 import { configDir, projectConfigDir } from './paths';
 import { loadSkills } from './skills';
@@ -21,7 +21,8 @@ import { publicConfig } from './mods/public-config';
 import { ModCommands, modCheckTool, modsPrompt } from './mods/assist';
 import { ManageError, createMod, customiseMod, installMod } from './mods/manage';
 import { installModLockdown } from './mods/lockdown';
-import { MOD_EVENT_PERMISSIONS, MOD_METHOD_PERMISSIONS } from './mods/permissions';
+import { MOD_EVENT_PERMISSIONS, MOD_LOOK_TARGETS, MOD_METHOD_PERMISSIONS } from './mods/permissions';
+import { LOOK_ROOTS, cleanCss, modUrlRewriter, scopeCss } from './mods/css';
 
 export { MOD_SCHEME, MOD_SCHEME_PRIVILEGES };
 export { MOD_METHOD_PERMISSIONS } from './mods/permissions';
@@ -67,13 +68,22 @@ function electronHost(app: App): ModsHost {
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
+/** Every region with the app's own look */
+export const noLooks = (): Record<ModLookTarget, string | null> => ({ conversation: null, composer: null });
+
+/** The mod key and look id in "<mod key>/<look id>" (a project mod's key holds "/" itself, so the last one splits). */
+export function splitRef(ref: string): { key: string; id: string } | null {
+  const i = ref.lastIndexOf('/');
+  return i > 0 && i < ref.length - 1 ? { key: ref.slice(0, i), id: ref.slice(i + 1) } : null;
+}
+
 /** A copy of the mods section to change (never the live one). */
 function cloneMods(m: ModsConfig): ModsConfig {
   return {
     enabled: { ...(m.enabled ?? {}) },
     disabledBundled: [...(m.disabledBundled ?? [])],
     settings: { ...(m.settings ?? {}) },
-    layout: { ...m.layout, collapsed: [...(m.layout?.collapsed ?? [])] },
+    layout: { ...m.layout, collapsed: [...(m.layout?.collapsed ?? [])], looks: { ...noLooks(), ...(m.layout?.looks ?? {}) } },
     safeMode: !!m.safeMode,
   };
 }
@@ -200,7 +210,8 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
     h('mods.setLayout', (patch) => {
       const layout = checkLayout(patch, backgroundsDir);
       return change((c) => {
-        c.layout = { ...c.layout, ...layout };
+        // looks is merged region by region: { looks: { conversation: … } } leaves the chat bar's look as it is.
+        c.layout = { ...c.layout, ...layout, looks: { ...noLooks(), ...c.layout.looks, ...(layout.looks ?? {}) } };
       }).mods.layout;
     }),
     h('mods.setSafeMode', (on) => {
@@ -232,7 +243,7 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
       const root = scope === 'project' ? path.join(projectConfigDir(app.config().workingDirectory), 'mods') : userRoot();
       const id = String(input.id ?? '');
       if (registry.list().some((m) => m.id === id && (m.scope === scope || (scope === 'user' && m.scope === 'bundled')))) throw new ManageError(`A mod with the id "${id}" already exists.`);
-      createMod(root, { id, name: input.name, seat: input.seat as ModSeat });
+      createMod(root, { id, name: input.name, seat: input.seat as ModSeat, look: input.look as ModLookTarget | undefined });
       registry.scan();
       const made = registry.list().find((m) => m.id === id && m.scope === scope);
       if (!made) throw new Error('The starter mod was written but could not be read back.');
@@ -286,24 +297,52 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
         if (m.state !== 'on') continue;
         const parts: string[] = [];
         for (const rel of m.manifest?.contributes?.styles ?? []) {
-          const r = resolveModUrl(`${m.origin}/${rel.split('/').map(encodeURIComponent).join('/')}`, serve);
-          if (!r.file) continue;
-          try {
-            const buf = fs.readFileSync(r.file);
-            parts.push(`/* ${m.id}/${rel} */\n${buf.subarray(0, STYLE_MAX_BYTES).toString('utf8')}`);
-          } catch {
-            /* gone since the scan */
-          }
+          const css = readStyle(m, rel);
+          if (css !== null) parts.push(`/* ${m.id}/${rel} */\n${cleanCss(css, { url: modUrlRewriter(m.origin, rel) })}`);
         }
         if (parts.length) out.push({ key: m.key, css: parts.join('\n') });
       }
       return out;
     }),
+    h('mods.looks', () => activeLooks()),
   );
+
+  // ---------- Styles and looks ----------
+
+  /** A CSS file of an on mod, as text (null when it is not there any more) */
+  function readStyle(m: ModInfo, rel: string): string | null {
+    const r = resolveModUrl(`${m.origin}/${rel.split('/').map(encodeURIComponent).join('/')}`, serve);
+    if (!r.file) return null;
+    try {
+      return fs.readFileSync(r.file).subarray(0, STYLE_MAX_BYTES).toString('utf8');
+    } catch {
+      return null; // gone since the scan
+    }
+  }
+
+  /** The look the layout names for each region, when its mod is on and has that look for that region, scoped to the region. */
+  function activeLooks(): { target: ModLookTarget; ref: string; mod: string; css: string }[] {
+    const chosen = app.config().mods.layout.looks ?? noLooks();
+    const out: { target: ModLookTarget; ref: string; mod: string; css: string }[] = [];
+    for (const target of MOD_LOOK_TARGETS) {
+      const ref = chosen[target];
+      const at = ref ? splitRef(ref) : null;
+      const m = at ? registry.get(at.key) : undefined;
+      const look = m?.state === 'on' ? m.manifest?.contributes?.looks?.find((l) => l.id === at!.id && l.target === target) : undefined;
+      if (!m || !look || !ref) continue;
+      const parts: string[] = [];
+      for (const rel of look.styles) {
+        const css = readStyle(m, rel);
+        if (css !== null) parts.push(`/* ${m.id}/${rel} */\n${scopeCss(css, LOOK_ROOTS[target], { url: modUrlRewriter(m.origin, rel) })}`);
+      }
+      out.push({ target, ref, mod: m.key, css: parts.join('\n') });
+    }
+    return out;
+  }
 
   // ---------- For the agent ----------
 
-  disposers.push(app.tools.register({ ...modCheckTool(registry), optional: true }));
+  disposers.push(app.tools.register({ ...modCheckTool(registry, () => app.config().mods.layout.looks ?? noLooks()), optional: true }));
   disposers.push(app.prompt.add('mods', () => modsPrompt(registry.list()), { optional: true }));
   disposers.push(app.provide('skill-usage', usage));
   disposers.push(app.events.on((sessionId, ev) => usage.handle(sessionId, ev)));
@@ -361,6 +400,18 @@ export function checkLayout(patch: unknown, backgroundsDir: string): Partial<Mod
     // Only a picture chooseBackgroundImage copied in (the window cannot point the app at an arbitrary file).
     if (p !== null && (typeof p !== 'string' || path.dirname(path.resolve(p)) !== path.resolve(backgroundsDir) || !fs.existsSync(p))) throw new Error('backgroundImage must be null or a picture chosen with chooseBackgroundImage.');
     out.backgroundImage = p as string | null;
+  }
+  if ('looks' in patch) {
+    const l = patch.looks;
+    if (!isObj(l)) throw new Error('looks must be an object, e.g. { "conversation": "<mod key>/<look id>" }.');
+    const looks: Partial<Record<ModLookTarget, string | null>> = {};
+    for (const [target, ref] of Object.entries(l)) {
+      // A region this app does not know is ignored, like an unknown field.
+      if (!(MOD_LOOK_TARGETS as readonly string[]).includes(target)) continue;
+      if (ref !== null && (typeof ref !== 'string' || !splitRef(ref))) throw new Error(`looks.${target} must be "<mod key>/<look id>" or null.`);
+      looks[target as ModLookTarget] = ref as string | null;
+    }
+    out.looks = looks as Record<ModLookTarget, string | null>;
   }
   if ('backgroundDim' in patch) {
     const d = Number(patch.backgroundDim);

@@ -898,6 +898,125 @@ const resetHome = () => {
     check('turning the mod off disposes them', !f.commands.has('words'));
   }
 
+  // ---------- Looks: the manifest, the grant, the layout, mods.looks, mod_check, the starter ----------
+  {
+    const css = { 'holo.css': ':scope { --glow: #4cf } .msg.user .bubble { border: 1px solid var(--glow) } @keyframes k { to { opacity: 1 } } @import url(x.css);', 'bar.css': '#composer { border-color: red }', 'panel.html': page };
+    const lookMan = (id, looks, extra = {}) => ({ protocol: 1, id, name: id.toUpperCase(), version: '0.1.0', ...extra, contributes: { looks, ...(extra.contributes ?? {}) } });
+    const holo = { id: 'holo', title: 'Holo', target: 'conversation', styles: ['holo.css'], description: 'd' };
+    const bar = { id: 'bar', title: 'Bar', target: 'composer', styles: ['bar.css'] };
+
+    // manifest
+    let r = readManifest(writeMod(tmp(), 'lk', lookMan('lk', [holo, bar]), css));
+    check('looks: a valid manifest keeps both looks', !!r.manifest && r.problems.length === 0 && r.manifest.contributes.looks.length === 2 && r.manifest.contributes.looks[0].description === 'd' && r.manifest.contributes.looks[1].styles.join() === 'bar.css', r.problems);
+    r = readManifest(writeMod(tmp(), 'lk', lookMan('lk', [holo, { ...bar, id: 'side', target: 'sidebar' }]), css));
+    check('looks: an unknown target is a warning and that look is left out', !!r.manifest && r.manifest.contributes.looks.length === 1 && r.problems.length === 1 && r.problems[0].warning === true && /looks\[1\]\.target: "sidebar" is not a region this version of the app knows/.test(r.problems[0].message), r.problems);
+    r = readManifest(writeMod(tmp(), 'lk', lookMan('lk', [{ ...bar, target: 'sidebar' }]), css));
+    check('looks: a mod with only an unknown-target look still loads', !!r.manifest && !r.manifest.contributes, r);
+    const lookCases = [
+      ['looks not a list', (m) => (m.contributes.looks = {}), /^contributes.looks: must be a list/],
+      ['look not an object', (m) => (m.contributes.looks = ['holo.css']), /^looks\[0\]: must be an object/],
+      ['look id', (m) => (m.contributes.looks[0].id = 'Holo Look'), /^looks\[0\]\.id:/],
+      ['look id twice', (m) => m.contributes.looks.push({ ...holo }), /^looks\[1\]\.id: "holo" is used by another look/],
+      ['look title', (m) => delete m.contributes.looks[0].title, /^looks\[0\]\.title: missing/],
+      ['look target missing', (m) => delete m.contributes.looks[0].target, /^looks\[0\]\.target: missing; use one of conversation, composer/],
+      ['look target not a string', (m) => (m.contributes.looks[0].target = 3), /^looks\[0\]\.target: missing/],
+      ['look styles empty', (m) => (m.contributes.looks[0].styles = []), /^looks\[0\]\.styles: must be a non-empty list/],
+      ['look style missing', (m) => (m.contributes.looks[0].styles = ['gone.css']), /^looks\[0\]\.styles\[0\]: gone.css does not exist/],
+      ['look style not css', (m) => (m.contributes.looks[0].styles = ['panel.html']), /^looks\[0\]\.styles\[0\]: panel.html must be a .css file/],
+      ['look style escapes', (m) => (m.contributes.looks[0].styles = ['../holo.css']), /leaves the mod's folder/],
+      ['look description', (m) => (m.contributes.looks[0].description = 1), /^looks\[0\]\.description: must be a string/],
+    ];
+    for (const [label, mutate, re] of lookCases) {
+      const m = lookMan('lk', [{ ...holo }]);
+      mutate(m);
+      const out = readManifest(writeMod(tmp(), 'lk', m, css));
+      check(`looks invalid: ${label}`, !out.manifest && out.problems.some((p) => re.test(p.message) && !p.warning), out.problems.map((p) => p.message));
+    }
+    const fileProblem = readManifest(writeMod(tmp(), 'lk', lookMan('lk', [{ ...holo, styles: ['gone.css'] }]), css));
+    check('looks: a missing stylesheet is a "file" problem', fileProblem.problems[0].kind === 'file');
+
+    // state, grant and pause
+    const g = fakeApp();
+    writeMod(g.roots.bundled, 'set', lookMan('set', [holo, bar], { contributes: { views: [{ id: 'bg', title: 'Bg', entry: 'panel.html', seat: 'background' }], settings: [{ key: 'glow', type: 'select', title: 'Glow', options: ['blue', 'green'], default: 'blue' }] } }), css);
+    writeMod(g.roots.user, 'look-user', man('look-user'), css);
+    const gctl = createMods(g.app, g.host);
+    const st = (key) => rpc(g, 'mods.list').find((m) => m.key === key);
+    check('looks: a bundled mod with looks starts off', st('set').state === 'off');
+    rpc(g, 'mods.setEnabled', 'set', true);
+    check('looks: turning it on records the styles grant', st('set').state === 'on' && g.app.config().mods.enabled.set.styles === true);
+    rpc(g, 'mods.setEnabled', 'look-user', true);
+    check('looks: a user mod without looks is on without the styles grant', st('look-user').state === 'on' && g.app.config().mods.enabled['look-user'].styles === false);
+    writeMod(g.roots.user, 'look-user', lookMan('look-user', [holo], { contributes: { views: man('x').contributes.views } }), css);
+    rpc(g, 'mods.reload');
+    check('looks: a newly contributed look pauses the mod until approved', st('look-user').state === 'paused' && st('look-user').wantsStyles === true && st('look-user').wants.length === 0, st('look-user'));
+    rpc(g, 'mods.setEnabled', 'look-user', true);
+    check('looks: approving records the styles grant', st('look-user').state === 'on' && g.app.config().mods.enabled['look-user'].styles === true);
+
+    // the layout
+    check('looks: the layout starts with the app\'s own look everywhere (an older config has no looks)', JSON.stringify(rpc(g, 'mods.setLayout', {}).looks) === JSON.stringify({ conversation: null, composer: null }));
+    let lay = rpc(g, 'mods.setLayout', { looks: { conversation: 'set/holo' } });
+    lay = rpc(g, 'mods.setLayout', { looks: { composer: 'set/bar', sidebar: 'x/y' } });
+    check('looks: a region is set on its own, the other kept, an unknown region ignored', lay.looks.conversation === 'set/holo' && lay.looks.composer === 'set/bar' && !('sidebar' in lay.looks), lay.looks);
+    const layoutErr = (patch) => {
+      try {
+        rpc(g, 'mods.setLayout', patch);
+        return '';
+      } catch (e) {
+        return e.message;
+      }
+    };
+    check('looks: setLayout refuses a malformed choice', /looks must be an object/.test(layoutErr({ looks: 'set/holo' })) && /looks.conversation must be/.test(layoutErr({ looks: { conversation: 'noslash' } })) && /looks.composer must be/.test(layoutErr({ looks: { composer: 5 } })));
+    check('looks: checkLayout passes a valid choice through', JSON.stringify(checkLayout({ looks: { conversation: null } }, '/x').looks) === '{"conversation":null}');
+
+    // mods.looks
+    let looks = rpc(g, 'mods.looks');
+    const conv = looks.find((l) => l.target === 'conversation');
+    check('mods.looks: one per chosen region, with the ref and the mod', looks.length === 2 && conv.ref === 'set/holo' && conv.mod === 'set' && looks.find((l) => l.target === 'composer').ref === 'set/bar', looks.map((l) => l.ref));
+    check('mods.looks: the conversation look is scoped to #messages, the chat bar to #chatbar', /@scope \(#messages\) \{/.test(conv.css) && /@scope \(#chatbar\) \{[\s\S]*#composer \{ border-color: red \}/.test(looks.find((l) => l.target === 'composer').css));
+    check('mods.looks: @keyframes hoisted, @import dropped', conv.css.indexOf('@keyframes k') < conv.css.indexOf('@scope') && !/@import/.test(conv.css), conv.css);
+    rpc(g, 'mods.setLayout', { looks: { composer: 'set/holo' } });
+    check('mods.looks: a look chosen for the wrong region is not applied', rpc(g, 'mods.looks').length === 1);
+    rpc(g, 'mods.setLayout', { looks: { composer: 'look-user/holo' } });
+    check('mods.looks: …nor one that does not exist there', rpc(g, 'mods.looks').length === 1);
+    rpc(g, 'mods.setLayout', { looks: { conversation: 'look-user/holo', composer: 'set/bar' } });
+    check('mods.looks: a user mod\'s look applies while it is on', rpc(g, 'mods.looks').some((l) => l.ref === 'look-user/holo'));
+    rpc(g, 'mods.setSafeMode', true);
+    looks = rpc(g, 'mods.looks');
+    check('mods.looks: safe mode leaves the user mod\'s look out, the bundled one stays', looks.length === 1 && looks[0].ref === 'set/bar', looks.map((l) => l.ref));
+    rpc(g, 'mods.setSafeMode', false);
+    rpc(g, 'mods.setEnabled', 'set', false);
+    check('mods.looks: a mod turned off takes its looks with it (the choice is kept)', !rpc(g, 'mods.looks').some((l) => l.mod === 'set') && g.app.config().mods.layout.looks.composer === 'set/bar');
+    rpc(g, 'mods.setEnabled', 'set', true);
+    fs.writeFileSync(path.join(g.roots.bundled, 'set', 'bar.css'), '#send-btn { color: lime }');
+    check('mods.looks: reads the file as it is now (an edit shows on the next call)', /#send-btn \{ color: lime \}/.test(rpc(g, 'mods.looks').find((l) => l.target === 'composer').css));
+
+    // mod_check
+    const tool = g.tools.find((t) => t.name === 'mod_check');
+    writeMod(g.roots.user, 'look-user', lookMan('look-user', [holo, { ...bar, target: 'status' }], { contributes: { views: man('x').contributes.views } }), css);
+    const text = (await tool.run({ id: 'look-user' })).content;
+    check('mod_check lists the looks, the active one, and the warning', /Looks \(scoped/.test(text) && /- holo: "Holo" for the conversation \(@scope #messages\), holo\.css · active/.test(text) && /Warnings in mod.json \(1; the rest of the mod loads\)/.test(text) && /"status" is not a region/.test(text) && /mod.json: valid/.test(text), text);
+    writeMod(g.roots.user, 'look-user', lookMan('look-user', [{ ...holo, styles: ['nope.css'] }]), css);
+    const missingText = (await tool.run({ id: 'look-user' })).content;
+    check('mod_check reports a look\'s missing stylesheet', /looks\[0\]\.styles\[0\]: nope.css does not exist/.test(missingText), missingText);
+
+    // the starter
+    const made = rpc(g, 'mods.create', { id: 'look-starter', name: 'Look starter', look: 'conversation', scope: 'user' });
+    const lookCss = fs.readFileSync(path.join(g.roots.user, 'look-starter', 'look.css'), 'utf8');
+    check('mods.create with a look: a valid mod with one look, off', made.state === 'off' && made.problems.length === 0 && made.manifest.contributes.looks[0].target === 'conversation' && made.wantsStyles === true, made.problems);
+    check('… whose stylesheet shows the hooks', /data-running/.test(lookCss) && /data-set-tint/.test(lookCss) && /:scope/.test(lookCss));
+    const bar2 = rpc(g, 'mods.create', { id: 'bar-starter', name: 'Bar starter', look: 'composer', scope: 'user' });
+    check('mods.create with a chat bar look', bar2.manifest.contributes.looks[0].target === 'composer' && fs.existsSync(path.join(g.roots.user, 'bar-starter', 'look.css')));
+    let createErr = '';
+    try {
+      rpc(g, 'mods.create', { id: 'bad-starter', name: 'x', look: 'sidebar', scope: 'user' });
+    } catch (e) {
+      createErr = e.message;
+    }
+    check('mods.create refuses an unknown region', /region must be one of conversation, composer/.test(createErr), createErr);
+    for (const id of ['look-user', 'look-starter', 'bar-starter']) fs.rmSync(path.join(g.roots.user, id), { recursive: true, force: true });
+    gctl.close();
+  }
+
   // ---------- Quit ----------
   {
     await call(f, 'noperm', 'storage.set', { key: 'last', value: 'quit' });

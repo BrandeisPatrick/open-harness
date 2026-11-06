@@ -1,7 +1,7 @@
 // What each bridge method needs, shared by the main process and (through the build) the window-side host.
 // src/shared is types only, so the runtime tables live here.
 
-import type { ModMethod, ModPermission, ModSeat } from '../../shared/mods';
+import type { ModLookTarget, ModMethod, ModPermission, ModSeat } from '../../shared/mods';
 
 export const MOD_PROTOCOL = 1;
 
@@ -20,6 +20,8 @@ export const MOD_PERMISSIONS: readonly ModPermission[] = [
 ];
 
 export const MOD_SEATS: readonly ModSeat[] = ['rail', 'tab', 'composer', 'background'];
+/** The regions a look can restyle (docs/mods.md, Looks); a manifest naming another one gets a warning, not an error. */
+export const MOD_LOOK_TARGETS: readonly ModLookTarget[] = ['conversation', 'composer'];
 /** Seats a later protocol version will define; a manifest naming one gets a clearer message than "unknown". */
 export const RESERVED_SEATS: readonly string[] = ['transcript', 'status', 'sidebar'];
 
@@ -105,6 +107,7 @@ export function isWindowMethod(method: string): boolean {
 export const MOD_EVENT_PERMISSIONS: Record<string, ModPermission | null> = {
   'theme.changed': null,
   'settings.changed': null,
+  pointer: null,
   'visibility.changed': null,
   command: null,
   'session.switched': null,

@@ -7,9 +7,9 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ModManifest, ModSeat } from '../../shared/mods';
+import type { ModLookTarget, ModManifest, ModSeat } from '../../shared/mods';
 import { MOD_ID_RE, readManifest } from './manifest';
-import { MOD_SEATS } from './permissions';
+import { MOD_LOOK_TARGETS, MOD_SEATS } from './permissions';
 
 const GIT_TIMEOUT_MS = 90_000;
 
@@ -95,19 +95,91 @@ ${
   };
 }
 
-/** Writes a starter mod into `root/<id>`; refuses an id that is taken there. */
-export function createMod(root: string, input: { id: unknown; name: unknown; seat: unknown }): string {
+/** The starter of a look: a manifest with one look for `target` and a small stylesheet that shows the hooks a look has. */
+export function starterLook(id: string, name: string, target: ModLookTarget): { manifest: ModManifest; css: string } {
+  const conversation = target === 'conversation';
+  const manifest: ModManifest = {
+    protocol: 1,
+    id,
+    name,
+    version: '0.1.0',
+    description: conversation ? 'A look for the conversation.' : 'A look for the chat bar.',
+    contributes: {
+      looks: [{ id: 'main', title: name, target, styles: ['look.css'] }],
+      settings: [{ key: 'tint', type: 'select', title: 'Tint', options: ['accent', 'green'], default: 'accent' }],
+    },
+  };
+  const css = conversation
+    ? `/*
+ * A look for the conversation. The app wraps this file in @scope (#messages), so these rules reach the transcript
+ * and nothing else. :scope is #messages itself; the app keeps these attributes on it while the look is active:
+ *   data-running="true|false"  a run is in progress in the session on screen
+ *   data-scheme="light|dark"   the colour scheme in effect
+ *   data-mode="ask|…"          the permission mode
+ *   data-set-<key>="<value>"   each of this mod's settings (Settings → Mods → this mod)
+ * Keep text at the app's size and line height: dress the conversation, do not make it harder to read.
+ */
+
+/* Tokens set here cascade through the transcript only. */
+:scope { --look-tint: var(--accent); }
+:scope[data-set-tint="green"] { --look-tint: var(--success); }
+
+/* The user's messages */
+.msg.user .bubble { border: 1px solid color-mix(in srgb, var(--look-tint) 45%, transparent); }
+
+/* A thin rule beside each reply, in the gutter so the text does not move */
+.msg.assistant::before {
+  content: ''; position: absolute; left: -14px; top: 4px; bottom: 4px; width: 2px; border-radius: 1px;
+  background: color-mix(in srgb, var(--look-tint) 40%, transparent);
+}
+
+/* While the agent works, the rule of the newest reply pulses */
+@keyframes look-pulse { 50% { opacity: 0.35; } }
+:scope[data-running="true"] .msg.assistant:not(:has(~ .msg.assistant))::before { animation: look-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { :scope .msg.assistant::before { animation: none; } }
+`
+    : `/*
+ * A look for the chat bar. The app wraps this file in @scope (#chatbar), so these rules reach the chat bar and
+ * nothing else. :scope is #chatbar itself; the app keeps these attributes on it while the look is active:
+ *   data-running="true|false", data-scheme="light|dark", data-mode="ask|…", data-set-<key>="<value>"
+ */
+
+:scope { --look-tint: var(--accent); }
+:scope[data-set-tint="green"] { --look-tint: var(--success); }
+
+/* The composer's edge in the tint, brighter while a run is in progress */
+#composer { border-color: color-mix(in srgb, var(--look-tint) 35%, var(--border)); }
+:scope[data-running="true"] #composer { border-color: var(--look-tint); }
+
+#send-btn:not(:disabled) { background: var(--look-tint); }
+`;
+  return { manifest, css };
+}
+
+/** Writes a starter mod into `root/<id>`: a view in `seat`, or a look for `look`. Refuses an id that is taken there. */
+export function createMod(root: string, input: { id: unknown; name: unknown; seat?: unknown; look?: unknown }): string {
   const id = String(input.id ?? '').trim();
   const name = String(input.name ?? '').trim();
+  const look = input.look as ModLookTarget | undefined;
   const seat = input.seat as ModSeat;
   if (!MOD_ID_RE.test(id)) throw new ManageError('The id must be 2 to 40 lower-case letters, digits and -, starting with a letter.');
   if (!name) throw new ManageError('Give the mod a name.');
-  if (!MOD_SEATS.includes(seat)) throw new ManageError(`The seat must be one of ${MOD_SEATS.join(', ')}.`);
+  if (look !== undefined && look !== null) {
+    if (!MOD_LOOK_TARGETS.includes(look)) throw new ManageError(`The look's region must be one of ${MOD_LOOK_TARGETS.join(', ')}.`);
+  } else if (!MOD_SEATS.includes(seat)) throw new ManageError(`The seat must be one of ${MOD_SEATS.join(', ')}.`);
   const dir = path.join(root, id);
   if (fs.existsSync(dir)) throw new ManageError(`There is already a folder ${dir}.`);
-  const { manifest, page } = starterFiles(id, name.slice(0, 80), seat);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'index.html'), page);
+  let manifest: ModManifest;
+  if (look) {
+    const starter = starterLook(id, name.slice(0, 80), look);
+    manifest = starter.manifest;
+    fs.writeFileSync(path.join(dir, 'look.css'), starter.css);
+  } else {
+    const starter = starterFiles(id, name.slice(0, 80), seat);
+    manifest = starter.manifest;
+    fs.writeFileSync(path.join(dir, 'index.html'), starter.page);
+  }
   fs.writeFileSync(path.join(dir, 'mod.json'), JSON.stringify(manifest, null, 2) + '\n');
   return dir;
 }

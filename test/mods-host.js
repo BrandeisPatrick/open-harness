@@ -135,6 +135,29 @@ process.emitWarning = () => {};
     check('icons: built-in, an SVG in the mod, or nothing', L.iconSource('gauge', 'mod://a.user', builtin).builtin === 'gauge' && L.iconSource('img/i.svg', 'mod://a.user', builtin).url === 'mod://a.user/img/i.svg' && L.iconSource('../x.svg', 'mod://a.user', builtin) === null && L.iconSource('nope', 'mod://a.user', builtin) === null && L.iconSource('https://e.com/i.svg', 'mod://a.user', builtin) === null);
   }
 
+  // --- looks: the active one per region, the state attributes, the pointer, the card's words ---
+  {
+    const looks = [{ id: 'holo', title: 'Holo', target: 'conversation', styles: ['a.css'] }, { id: 'bar', title: 'Bar', target: 'composer', styles: ['b.css'] }];
+    const set = mod('set', [], { contributes: { looks } });
+    const offSet = mod('offset', [], { state: 'off', contributes: { looks } });
+    const lay = { looks: { conversation: 'set/holo', composer: 'set/holo' } };
+    check('activeLook: the chosen look of an on mod, for its own region only', L.activeLook([set], lay, 'conversation')?.id === 'holo' && L.activeLook([set], lay, 'composer') === null);
+    check('activeLook: none for an off mod, a missing mod, or no choice', L.activeLook([offSet], { looks: { conversation: 'offset/holo' } }, 'conversation') === null && L.activeLook([set], { looks: { conversation: 'gone/holo' } }, 'conversation') === null && L.activeLook([set], { looks: { conversation: null } }, 'conversation') === null && L.activeLook([set], {}, 'conversation') === null);
+    const proj = mod('p@/Users/me/code/app', [], { contributes: { looks } });
+    check('activeLook: a project mod key with "/" in it', L.activeLook([proj], { looks: { conversation: 'p@/Users/me/code/app/holo' } }, 'conversation')?.mod === proj);
+    const attrs = L.lookAttributes({ ref: 'set/holo', running: true, scheme: 'dark', mode: 'auto', settings: { glow: 'green', motion: 'calm', 'Odd Key!': 3, on: false, obj: { a: 1 } } });
+    check('lookAttributes: data-look, data-running, data-scheme, data-mode', attrs['data-look'] === 'set/holo' && attrs['data-running'] === 'true' && attrs['data-scheme'] === 'dark' && attrs['data-mode'] === 'auto', attrs);
+    check('lookAttributes: one data-set-<key> per setting, lower case, values as text, objects left out', attrs['data-set-glow'] === 'green' && attrs['data-set-motion'] === 'calm' && attrs['data-set-odd-key-'] === '3' && attrs['data-set-on'] === 'false' && !('data-set-obj' in attrs), attrs);
+    check('lookAttributes: not running is "false"', L.lookAttributes({ ref: 'a/b', running: false, scheme: 'light', mode: 'ask', settings: {} })['data-running'] === 'false');
+    check('pointerFraction: fractions of the window, clamped', JSON.stringify(L.pointerFraction(720, 225, 1440, 900)) === '{"x":0.5,"y":0.25}' && JSON.stringify(L.pointerFraction(-5, 2000, 1440, 900)) === '{"x":0,"y":1}' && JSON.stringify(L.pointerFraction(10, 10, 0, 0)) === '{"x":0.5,"y":0.5}');
+    check('pointer is always available, like theme.changed', MOD_EVENT_PERMISSIONS.pointer === null && L.mayReceive(MOD_EVENT_PERMISSIONS, mod('none', []), 'pointer'));
+    check('LOOK_TARGETS', L.LOOK_TARGETS.join() === 'conversation,composer');
+    const asks = L.askLines(mod('lk', [], { state: 'off', contributes: { looks } }));
+    check('asks: a mod with looks gets a clear restyle line', asks.some((l) => l.strong && /restyle the conversation or the chat bar/.test(l.text)), asks);
+    const asksBg = L.askLines(mod('lk', [v('bg', 'background', 'Bg')], { state: 'off', contributes: { looks } }));
+    check('asks: looks and a background together', asksBg.some((l) => l.strong && /restyle the conversation or the chat bar and draw behind the window/.test(l.text)), asksBg);
+  }
+
   done();
 })().catch((err) => {
   console.log(`FAIL crashed | ${err && err.stack}`);

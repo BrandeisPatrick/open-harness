@@ -51,7 +51,7 @@ export function defaultConfig(): AppConfig {
       enabled: {},
       disabledBundled: [],
       settings: {},
-      layout: { railOpen: true, railWidth: 300, collapsed: [], background: null, backgroundImage: null, backgroundDim: 0.82 },
+      layout: { railOpen: true, railWidth: 300, collapsed: [], background: null, backgroundImage: null, backgroundDim: 0.82, looks: { conversation: null, composer: null } },
       safeMode: false,
     },
     remote: { enabled: false, bind: 'lan', port: 0 },
@@ -82,6 +82,19 @@ export function withRecentDir(list: string[] | undefined, dir: string, previous?
 
 function isRecord(v: unknown): v is Record<string, any> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/** The mods section of a stored config over the defaults: an older file has none of it, a hand-edited one part of it. */
+function modsSection(d: AppConfig['mods'], raw: unknown): AppConfig['mods'] {
+  const m = isRecord(raw) ? raw : {};
+  const layout = isRecord(m.layout) ? m.layout : {};
+  const looks = isRecord(layout.looks) ? layout.looks : {};
+  const ref = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+  return {
+    ...d,
+    ...m,
+    layout: { ...d.layout, ...layout, looks: { conversation: ref(looks.conversation), composer: ref(looks.composer) } },
+  } as AppConfig['mods'];
 }
 
 function normalizeOllamaHost(host: string): string {
@@ -124,7 +137,7 @@ function storedConfig(): AppConfig {
       ollama: { ...d.ollama, ...(raw.ollama ?? {}) },
       portkey: { ...d.portkey, ...(raw.portkey ?? {}) },
       // Sections added after 0.1: an older file has none of them, a hand-edited one may have part of one.
-      mods: { ...d.mods, ...(isRecord(raw.mods) ? raw.mods : {}), layout: { ...d.mods.layout, ...(isRecord(raw.mods) && isRecord(raw.mods.layout) ? raw.mods.layout : {}) } },
+      mods: modsSection(d.mods, raw.mods),
       remote: { ...d.remote, ...(isRecord(raw.remote) ? raw.remote : {}) },
       settingsTrusted: isRecord(raw.settingsTrusted) ? (raw.settingsTrusted as Record<string, string>) : {},
     });

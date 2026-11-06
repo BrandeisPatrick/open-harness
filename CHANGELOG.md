@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+The window is white and grey now, like Claude Code: neutral surfaces in light and dark, grey buttons, and colour only where it means something. The warm look of 0.4.0 is a bundled theme you can turn back on.
+
+### White and grey
+
+- **Neutral surfaces.** The transcript, the top bar, the rail, cards and the chat bar are white, the sidebar a light grey, the user's bubble and code a lighter one; in dark, a neutral near-black with the sidebar and controls a step lighter. No warm tint anywhere.
+- **Grey buttons.** A button is white with a hairline; the one that confirms (Allow, Apply, Apply all, Save, Turn on, Compact now …) is a grey fill with the text colour. A dangerous action has red text and a red hairline rather than a red fill. The same goes for the mod kit's `h-btn`, the bundled mods' pages and the phone page.
+- **Colour where it means something.** Blue for links, the focus ring, a switch that is on, the context ring and progress; green and red for diffs, success and failure; amber for the Auto mode, a context window filling up and a session waiting for you; the unread dot stays blue. The spinner, selected rows and tabs, the icon on a card and the mark beside the model name are neutral.
+- **The phone page** has the same palette.
+
+### Themes
+
+- **Paper theme.** A bundled theme mod, off by default, that brings back 0.4.0's paper surfaces and terracotta accent on buttons, switches, spinners and marks. Turn it on in Settings → Mods.
+- New tokens for themes and mod pages, so a theme can colour each role again: `--button-fill`, `--button-fill-hover` and `--button-text` (the button that confirms), `--switch-on`, `--spinner`, `--badge-bg` and `--badge-ink`, `--mark` and `--mark-ink`, `--segment-on`, `--attention`, and the sidebar's `--side-hover`, `--side-active` and `--tree-line`, now on `:root`. `--accent` is the blue. `docs/mods.md` lists them; Midnight sets them and keeps its blue buttons.
+
 ## 0.4.0
 
 The app can now look back over your sessions, once a day or when you ask, and suggest what would make the agent work better for you: skills, mods and memory, each for you to apply or dismiss.

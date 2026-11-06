@@ -252,7 +252,8 @@ async function waitFor(fn, ms = 5000, what = 'condition') {
   // (compacted in C: replies are matched by a session's first message, which a compaction replaces)
   const cr = await rt.agentFor(C).compactNow();
   const rp = ops.find((o) => o.kind === 'replace');
-  check('9: a compaction replaces through the store', cr.ok && rp && rp.op.reason === 'compaction' && rp.op.messages.length === 1 && rp.op.removed.length > 1, cr);
+  // Changed on purpose: a compaction keeps the last turn after the brief.
+  check('9: a compaction replaces through the store', cr.ok && rp && rp.op.reason === 'compaction' && rp.op.messages[0].content.startsWith('[Context compacted]') && rp.op.messages.length < rp.op.removed.length + 1 && rp.op.removed.length > 1, cr);
   const fork = app.store.fork(A);
   const fo = ops.find((o) => o.kind === 'fork');
   check('9: fork fires on the new session with the seed length', fo && fo.id === fork.id && fo.op.from === A && fo.op.seedLength === sA.messages.length && fork.seedLength === sA.messages.length);

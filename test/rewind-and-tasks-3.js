@@ -73,18 +73,19 @@ module.exports = async ({ check, done }) => {
   state.summary = '## Request\nStuff.\n\n## Progress\nDone.\n\n## Current state\nFine.\n\n## Next steps\nNone.';
   const before = agent.session.turns.length;
   const cr = await agent.compactNow();
-  check('compaction drops the checkpoints', cr.ok && before > 0 && agent.session.turns.length === 0 && !toTranscript(agent.session).some((i) => i.turn !== undefined));
+  // Changed on purpose: the last turn is kept after the brief, and its checkpoint with it (renumbered); earlier ones go.
+  check('compaction drops the checkpoints of the folded part and keeps the kept turn\'s', cr.ok && before > 1 && agent.session.turns.length === 1 && agent.session.turns[0].text === 'bad' && agent.session.turns[0].at === 1 && toTranscript(agent.session).filter((i) => i.turn !== undefined).map((i) => i.turn).join() === '0');
 
   state.replies.push({ toolCalls: [call('update_tasks', { tasks: [{ title: 'A', status: 'pending' }] })] });
   state.replies.push({ content: 'ok' });
   await agent.run('after');
   const forked = store.fork(agent.session.id);
-  check('fork copies checkpoints and tasks', forked.turns.length === 1 && forked.tasks.length === 1 && forked.turns !== agent.session.turns);
+  check('fork copies checkpoints and tasks', forked.turns.length === 2 && forked.tasks.length === 1 && forked.turns !== agent.session.turns);
   state.replies.push({ toolCalls: [call('update_tasks', { tasks: [{ title: 'A', status: 'completed' }, { title: 'B', status: 'in_progress' }] })] });
   state.replies.push({ content: 'ok' });
   await agent.run('more');
-  check('a checkpoint remembers the task list at its start', agent.session.turns[1].tasks.length === 1 && agent.session.tasks.length === 2);
-  rewindSession(agent.session, cwd, 1);
+  check('a checkpoint remembers the task list at its start', agent.session.turns[2].tasks.length === 1 && agent.session.tasks.length === 2);
+  rewindSession(agent.session, cwd, 2);
   check('rewind restores the task list of that point', agent.session.tasks.length === 1 && agent.session.tasks[0].title === 'A' && agent.session.tasks[0].status === 'pending');
   mock.close();
   done();

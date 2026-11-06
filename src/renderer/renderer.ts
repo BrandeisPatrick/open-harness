@@ -1826,8 +1826,9 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       endCompaction();
       if (ev.compaction && typeof ev.compaction === 'object') {
         addCompaction(ev.compaction);
-        // The checkpoints pointed into the folded messages
+        // Checkpoints in the folded part are gone and the kept ones were renumbered: read them back (a run does at its end).
         clearTurns();
+        void syncTurns();
       } else if (ev.error) {
         compactErrorShown = true;
         addSystemMessage(String(ev.error), 'error');

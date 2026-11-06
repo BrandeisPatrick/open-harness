@@ -43,7 +43,11 @@ const { launch, checker, sleep } = require('./rig.js');
       await sleep(800);
       rel = await related(P);
       check('both finished and merged into the parent', rel.children.every((c) => c.mergedInto === P && !c.status?.running), rel.children.map((c) => [c.title, c.mergedInto]));
-      const notes = await app.evaluate(`[...document.querySelectorAll('.msg.user')].filter((e) => /\\[Sub-session "/.test(e.innerText)).length`);
+      // On screen a report is a labelled bubble with what the sub-session said: the frame written for the model (its
+      // id, which tools to use next) stays out of sight.
+      const reports = await app.evaluate(`[...document.querySelectorAll('.msg.user.has-origin')].map((e) => ({ label: e.querySelector('.msg-origin')?.innerText ?? '', text: e.querySelector('.bubble')?.innerText ?? e.innerText }))`);
+      const notes = reports.filter((r) => /^from session .+ · /.test(r.label)).length;
+      check('reports on screen are labelled and show no frame, id or tool name', notes >= 2 && !reports.some((r) => /\[Sub-session "|session_read|session_merge|[0-9a-f]{8}-[0-9a-f]{4}-/.test(r.text)), reports.map((r) => [r.label, r.text.slice(0, 80)]));
       const transcript = await app.evaluate(`oc.rpc('sessions.transcript', ${JSON.stringify(P)})`);
       const noteItems = transcript.filter((i) => i.role === 'user' && /^\[Sub-session "/.test(i.text));
       check('the parent got both notes', noteItems.length >= 2 && new Set(noteItems.map((i) => /\(([0-9a-f-]{36})\)/.exec(i.text)?.[1])).size >= 2, { onScreen: notes, stored: noteItems.length });
@@ -76,7 +80,7 @@ const { launch, checker, sleep } = require('./rig.js');
     await app.waitFor(`[...document.querySelectorAll('.msg.system')].some((e) => /Merged "|could not|Nothing to merge/.test(e.innerText))`, 120_000, 'the /merge notice');
     relS = await related(S);
     check('/merge merged it', relS.children[0].mergedInto === S, await app.evaluate(`[...document.querySelectorAll('.msg.system')].map((e) => e.innerText).slice(-2)`));
-    check('the merge summary shows in the transcript', await app.evaluate(`[...document.querySelectorAll('.msg.user')].some((e) => /\\[Merged from "/.test(e.innerText))`));
+    check('the merge summary shows in the transcript, labelled, without its frame', await app.evaluate(`[...document.querySelectorAll('.msg.user.has-origin')].some((e) => /^merged from /.test(e.querySelector('.msg-origin')?.innerText ?? '') && !/\\[Merged from "/.test(e.innerText))`));
     await shot('2-commands');
     const metas = await list();
     check('the sidebar list carries parentId and mergedInto', metas.some((m) => m.parentId === S && m.mergedInto === S));

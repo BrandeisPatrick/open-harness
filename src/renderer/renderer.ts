@@ -76,6 +76,7 @@ import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } f
 import { createModsHost, type ModPaneTabs } from './mods-host.js';
 import { createSettingsPage } from './settings-page.js';
 import { agentApproval, setNameLookup } from './tool-labels.js';
+import { unframe } from './origin.js';
 
 declare global {
   interface Window {
@@ -384,6 +385,8 @@ interface UserMessageOptions {
   local?: boolean;
   /** Where the message came from when it was not typed here ("from schedule", …), shown above the bubble */
   originLabel?: string;
+  /** The text was written by a model (another session's report or message, a merged summary): drawn as Markdown */
+  markdown?: boolean;
 }
 
 const REWIND_BUTTON = `<button type="button" class="icon-btn sm msg-rewind" aria-label="Rewind to this message" data-tip="Rewind">${icon('rotate-ccw', 14)}</button>`;
@@ -443,7 +446,10 @@ function addUserMessage(text: string, images: BubbleImage[] = [], mentions?: str
     });
     bubble.appendChild(grid);
   }
-  if (text) appendWithMentions(bubble, text, { mentions: Array.isArray(mentions) ? mentions : null, known: pickedPaths, cwd: config?.workingDirectory ?? '' });
+  if (text && opts.markdown) {
+    bubble.classList.add('rich');
+    bubble.insertAdjacentHTML('beforeend', `<div class="md">${renderMarkdown(text)}</div>`);
+  } else if (text) appendWithMentions(bubble, text, { mentions: Array.isArray(mentions) ? mentions : null, known: pickedPaths, cwd: config?.workingDirectory ?? '' });
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
   // An images-only message has no text to copy (the row stays empty, and hidden, unless it gets Rewind)
@@ -1084,7 +1090,8 @@ function renderTranscript(items: TranscriptItem[]): void {
   items.forEach((item, i) => {
     if (item.role === 'user') {
       const images = Array.isArray(item.images) ? item.images.filter((src): src is string => typeof src === 'string' && Boolean(src)) : [];
-      addUserMessage(item.text ?? '', images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn, originLabel: item.origin ? originLabel(item.origin, item.from) : undefined });
+      const shown = unframe(item.origin, item.text ?? '');
+      addUserMessage(shown.text, images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn, originLabel: item.origin ? originLabel(item.origin, item.from, shown.note) : undefined, markdown: writtenByModel(item.origin) });
     } else if (item.role === 'assistant') {
       appendAssistantText(item.text);
       endAssistant();
@@ -1116,12 +1123,20 @@ function appendExtraNode(el: HTMLElement): void {
 }
 setTranscriptSink(appendExtraNode);
 
-/** "from schedule", "from session Fix the tests", … for a user message that was not typed here. */
-function originLabel(origin: MessageOrigin, from?: string): string | undefined {
+/** A message another session sent, or a summary a merge wrote: a model's words, which come as Markdown. */
+function writtenByModel(origin: MessageOrigin | undefined): boolean {
+  return origin === 'session' || origin === 'command';
+}
+
+/**
+ * "from schedule", "from session Fix the tests", … for a user message that was not typed here. `note` is what the
+ * message's frame said about the sender (a sub-session "finished a turn", "was stopped").
+ */
+function originLabel(origin: MessageOrigin, from?: string, note?: string): string | undefined {
   if (origin === 'user' || origin === 'queue') return undefined;
   if (origin === 'session') {
     const title = from ? sessions.find((m) => m.id === from)?.title : undefined;
-    return `from session ${title ?? from ?? 'another session'}`;
+    return `from session ${title ?? from ?? 'another session'}${note ? ` · ${note}` : ''}`;
   }
   if (origin === 'mod') return from ? `from mod ${from}` : 'from a mod';
   if (origin === 'schedule') return from ? `scheduled: ${from}` : 'scheduled';
@@ -1750,11 +1765,12 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       break;
     case 'user_message': {
       // A message typed here (or queued from here) already has its bubble; one from elsewhere gets one now, labelled.
-      const label = originLabel(ev.origin, ev.from);
+      const shown = unframe(ev.origin, String(ev.text ?? ''));
+      const label = originLabel(ev.origin, ev.from, shown.note);
       if (!label) break;
       finishThinking();
       endAssistant();
-      addUserMessage(String(ev.text ?? ''), [], null, { turn: ev.turn, originLabel: label });
+      addUserMessage(shown.text, [], null, { turn: ev.turn, originLabel: label, markdown: writtenByModel(ev.origin) });
       break;
     }
     case 'thinking_delta':

@@ -22,6 +22,19 @@ export type Relation = 'parent' | 'sub-session' | 'fork' | 'forked from' | 'othe
 /** A refusal the caller (tool, command, RPC) shows as it is. */
 export class SubagentError extends Error {}
 
+// The frames below (and the report in Subagents.noteText) tell the model who is speaking. The window takes them off
+// again for display (src/renderer/origin.ts); test/origin.js holds the two together.
+
+/** The line above a message from another session */
+export function messageHead(from: Pick<Session, 'title' | 'id'> | undefined, relation: string): string {
+  return from ? `[Message from session "${from.title}" (${from.id}), your ${relation}]` : '[Message from another session]';
+}
+
+/** What a merge adds to the target session: where it came from, then the summary */
+export function mergedText(title: string, report: string): string {
+  return `[Merged from "${title}"]\n\n${report}`;
+}
+
 export interface MergeOutcome {
   ok: boolean;
   error?: string;
@@ -292,7 +305,7 @@ export class Subagents {
     const to = this.app.store.get(String(toId));
     if (!to) return { ok: false, error: `No session with id "${toId}".` };
     if (from && from.id === to.id) return { ok: false, error: 'A session cannot send a message to itself.' };
-    const head = from ? `[Message from session "${from.title}" (${from.id}), your ${this.relationWord(to.id, from)}]` : '[Message from another session]';
+    const head = messageHead(from, from ? this.relationWord(to.id, from) : '');
     return this.app.runtime.send(to.id, `${head}\n${body}`, [], { origin: 'session', from: from?.id });
   }
 
@@ -358,7 +371,7 @@ export class Subagents {
     }
     if (from.mergedInto) return { ok: false, error: `"${from.title}" was merged meanwhile.` };
     if (!this.app.store.get(into.id)) return { ok: false, error: 'The target session was deleted.' };
-    const text = `[Merged from "${from.title}"]\n\n${report}`;
+    const text = mergedText(from.title, report);
     if (!opts.viaTool) this.notice(into.id, text, from.id);
     from.mergedInto = into.id;
     from.mergedAt = Date.now();

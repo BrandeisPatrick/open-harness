@@ -353,6 +353,12 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
   border-radius: 18px 18px 4px 18px;
   font-size: 14px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* A bubble holding another session's words (a report, a merged summary): Markdown, laid out like a reply */
+.msg.user .bubble.rich { white-space: normal; }
+.msg.user .bubble.rich .md p, .msg.user .bubble.rich .md ul, .msg.user .bubble.rich .md ol, .msg.user .bubble.rich .md .code-block { margin-bottom: 8px; }
+.msg.user .bubble.rich .md > :last-child { margin-bottom: 0; }
+.msg.user .bubble.rich .md h1, .msg.user .bubble.rich .md h2 { margin: 12px 0 4px; font-size: 14px; line-height: 20px; }
+.msg.user .bubble.rich .md > :first-child { margin-top: 0; }
 .msg.assistant { position: relative; margin-bottom: 16px; font-size: 14px; line-height: 20px; color: var(--text-100); }
 .msg-actions {
   position: absolute; top: -14px; right: -4px; display: flex; gap: 2px; padding: 2px;

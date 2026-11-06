@@ -16,6 +16,14 @@ The window is white and grey now, like Claude Code: neutral surfaces in light an
 - **Paper theme.** A bundled theme mod, off by default, that brings back 0.4.0's paper surfaces and terracotta accent on buttons, switches, spinners and marks. Turn it on in Settings → Mods.
 - New tokens for themes and mod pages, so a theme can colour each role again: `--button-fill`, `--button-fill-hover` and `--button-text` (the button that confirms), `--switch-on`, `--spinner`, `--badge-bg` and `--badge-ink`, `--mark` and `--mark-ink`, `--segment-on`, `--attention`, and the sidebar's `--side-hover`, `--side-active` and `--tree-line`, now on `:root`. `--accent` is the blue. `docs/mods.md` lists them; Midnight sets them and keeps its blue buttons.
 
+### Settings → Mods, by kind
+
+- **A tab for each kind of mod.** Settings → Mods opens on a strip of tabs: Mods (panels, side-pane tabs, composer strips and slash commands), Backgrounds, Chat bar, Conversation and Themes. A mod is in each tab its manifest calls for, so Hyperspace is under Backgrounds, Chat bar and Conversation, and not among the general mods. The arrow keys move between the tabs, and Settings remembers the last one while the app runs.
+- **Pick it where it lives.** Each special tab starts with its picker: the background (with your own picture and the Dim slider), the chat bar look or the conversation look in use, each with that mod's own settings right under it; on Themes, the theme mods with their switches in the order they apply, the later one winning where two overlap. Below the picker are the mods of that kind, with the same cards as before.
+- **Use the whole set.** A mod that brings a conversation look, a chat bar look and a background has "Use the whole set" on its card, in each of its tabs, in place of the Set row.
+- **New and Install on every tab.** The New form starts at the tab's kind, and can now write a starter theme too.
+- **Appearance is shorter.** It keeps Light, Dark and System, and shows the current background, chat bar look, conversation look and themes, each with a row that opens its tab. Search still finds the rows inside the tabs, and choosing a hit (click it, or press Enter for the first one) opens its tab. The card in the chat for a new background or look links to its tab.
+
 ## 0.4.0
 
 The app can now look back over your sessions, once a day or when you ask, and suggest what would make the agent work better for you: skills, mods and memory, each for you to apply or dismiss.

@@ -85,7 +85,7 @@ A dream is a background session that reads what happened in recent sessions and 
 
 ## Mods
 
-Panels in the right-hand rail, tabs beside the Browser, a strip above the composer, backgrounds, themes and slash commands are mods: folders of web files that run sandboxed and reload when a file is saved. The built-in ones (Environment, Context, Tasks, Plan, Outputs, Sub-sessions, Skills, Side chat, Scheduled) are written against the same protocol as yours. Ask the agent to build one, or see [mods.md](mods.md). `node modkit/playground/serve.js` hosts mods outside the app while you work on them.
+Panels in the right-hand rail, tabs beside the Browser, a strip above the composer, backgrounds, themes and slash commands are mods: folders of web files that run sandboxed and reload when a file is saved. The built-in ones (Environment, Context, Tasks, Plan, Outputs, Sub-sessions, Skills, Side chat, Scheduled) are written against the same protocol as yours. Settings → Mods has a tab per kind: Mods, Backgrounds, Chat bar, Conversation and Themes; the special tabs are where you pick the background (with your own picture and Dim), the chat bar look, the conversation look and the themes, and Settings → Appearance shows each choice with a row that opens its tab. Ask the agent to build one, or see [mods.md](mods.md). `node modkit/playground/serve.js` hosts mods outside the app while you work on them.
 
 ## History
 

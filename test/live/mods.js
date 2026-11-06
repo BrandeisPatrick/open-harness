@@ -517,7 +517,9 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
       const tr = await app.transcript();
       const text = tr.map((t) => t.text).join('\n');
       check('agent: loaded the create-mod skill', /create-mod/.test(text), text.slice(0, 300));
-      check('agent: called mod_check', /mod_check/i.test(text));
+      // The row reads "Check mod <id>" on screen; what was called is in the stored transcript.
+      const calls = await app.evaluate(`(async () => (await oc.rpc('sessions.transcript', (await oc.sessions.current()).id)).filter((i) => i.role === 'tool').map((i) => i.name))()`);
+      check('agent: called mod_check', calls.includes('mod_check') && /Check mod/.test(text), calls);
       await app.waitFor(`Boolean(document.querySelector('.mod-offer:not(.done) .mod-offer-on'))`, 15_000, 'the offer card for the new mod').catch(() => {});
       const key = await app.evaluate(`document.querySelector('.mod-offer:not(.done)')?.dataset.mod || ''`);
       check('agent: an offer card for the new mod', !!key, key);

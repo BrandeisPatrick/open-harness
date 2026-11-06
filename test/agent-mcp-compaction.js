@@ -131,49 +131,63 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const end = events.find((e) => e.type === 'run_end');
   check('F: stop aborts the MCP call promptly', end && end.reason === 'aborted' && Date.now() - t0 < 3000, Date.now() - t0);
 
-  // ---- G: auto compaction (Ollama path, 4096 window) ----
+  // ---- G: auto compaction (Ollama path, 16384 window): the earlier turn is summarised, the current one kept ----
   reset();
   config = { ...config, provider: 'ollama', permissionMode: 'bypass', ollama: { ...config.ollama, numCtx: 16384 } };
   agent.session = store.create();
+  state.ollamaPromptTokens = 100;
+  state.replies.push({ content: 'Noted, the widget is blue. ' + 'The widget spec is long. '.repeat(200) });
+  await agent.run('Remember: the widget is blue.');
+  reset();
   state.ollamaPromptTokens = 14000; // ≥ 80% of 16384 after the first reply
-  state.summary = '## Request\nBuild the widget.\n\n## Progress\nRead a.ts; edited a.ts to add foo().\n\n## Current state\nTests not run.\n\n## Next steps\nRun npm test.';
+  state.summary = '## 1. Request and intent\nBuild the widget; it is blue.\n\n## 2. Key facts and concepts\n(none)\n\n## 6. Pending work\nRun npm test.';
   state.replies.push({ toolCalls: [{ name: 'mcp__test__echo', args: { text: 'one' } }] });
   state.replies.push({ content: 'All done after compaction.' });
   await agent.run('Build the widget please');
   const chat = state.requests.filter((r) => r.url === '/api/chat');
   const summaryReq = chat.find((r) => r.payload.stream === false);
-  check('G: a non-streaming summary request was made with the transcript', summaryReq && /handoff brief/.test(summaryReq.payload.messages[0].content) && /Transcript:/.test(summaryReq.payload.messages[1].content) && /USER: Build the widget please/.test(summaryReq.payload.messages[1].content) && /RESULT OF mcp__test__echo: echo: one/.test(summaryReq.payload.messages[1].content), summaryReq && summaryReq.payload.messages[1].content.slice(0, 200));
+  // Changed on purpose: only the earlier turn goes to the summariser; the current turn (with its tool result) is kept verbatim.
+  check('G: a non-streaming summary request was made with the earlier transcript only', summaryReq && /handoff brief/.test(summaryReq.payload.messages[0].content) && /Transcript:/.test(summaryReq.payload.messages[1].content) && /USER: Remember: the widget is blue\./.test(summaryReq.payload.messages[1].content) && !/RESULT OF mcp__test__echo/.test(summaryReq.payload.messages[1].content) && /Current task list:/.test(summaryReq.payload.messages[1].content), summaryReq && summaryReq.payload.messages[1].content.slice(0, 200));
   check('G: summary request has no tools and thinking off', summaryReq && !summaryReq.payload.tools && summaryReq.payload.think === false && summaryReq.payload.options.num_ctx === 16384);
   const after = chat[chat.length - 1].payload;
-  check('G: the next model call sees only the system prompt and the compacted brief', after.stream === true && after.messages.length === 2 && after.messages[1].role === 'user' && after.messages[1].content.startsWith('[Context compacted]') && /Build the widget\./.test(after.messages[1].content), after.messages.map((m) => m.role));
+  // Changed on purpose: brief + kept tail (user, call, result) instead of the brief alone.
+  check('G: the next model call sees the system prompt, the brief and the kept tail', after.stream === true && after.messages.map((m) => m.role).join(',') === 'system,user,user,assistant,tool' && after.messages[1].content.startsWith('[Context compacted]') && /Build the widget; it is blue\./.test(after.messages[1].content) && after.messages[2].content === 'Build the widget please', after.messages.map((m) => m.role));
   const cs = events.filter((e) => e.type === 'compact_start');
   const ce = events.filter((e) => e.type === 'compact_end');
-  check('G: compact events', cs.length === 1 && cs[0].reason === 'auto' && ce.length === 1 && ce[0].compaction && ce[0].compaction.reason === 'auto' && ce[0].compaction.messages === 3 && ce[0].compaction.tokensBefore >= 14000 && ce[0].compaction.tokensAfter < ce[0].compaction.tokensBefore / 2, ce[0]);
-  check('G: session stores the compaction with folded messages', agent.session.compactions.length === 1 && agent.session.compactions[0].folded.length === 3 && agent.session.messages.length === 2 && toMeta(agent.session).compactions === 1);
+  check('G: compact events', cs.length === 1 && cs[0].reason === 'auto' && ce.length === 1 && ce[0].compaction && ce[0].compaction.reason === 'auto' && ce[0].compaction.messages === 2 && ce[0].compaction.kept === 3 && ce[0].compaction.stage === 'summary' && ce[0].compaction.tokensBefore >= 14000 && ce[0].compaction.tokensAfter < ce[0].compaction.tokensBefore / 2, ce[0]);
+  check('G: session stores the compaction with folded messages', agent.session.compactions.length === 1 && agent.session.compactions[0].folded.length === 2 && agent.session.messages.length === 5 && toMeta(agent.session).compactions === 1);
   const items = toTranscript(agent.session);
-  check('G: transcript: folded user + tool, divider, then the reply', items.map((i) => i.role).join(',') === 'user,tool,compaction,assistant' && items[2].compaction.summary === state.summary && !items[2].compaction.folded, items.map((i) => i.role));
+  check('G: transcript: folded turn, divider, then the kept turn and the reply', items.map((i) => i.role).join(',') === 'user,assistant,compaction,user,tool,assistant' && items[2].compaction.summary === state.summary && !items[2].compaction.folded, items.map((i) => i.role));
+  check('G: the kept user message can still be rewound to', items[3].turn === 0 && agent.session.turns.length === 1 && agent.session.turns[0].at === 1, items[3]);
   check('G: run ended done with the reply after compaction', events.find((e) => e.type === 'run_end').reason === 'done' && events.some((e) => e.type === 'text_delta' && /after compaction/.test(e.text)));
   const endIdx = events.findIndex((e) => e.type === 'compact_end');
   const ctxAfterCompact = events.slice(endIdx).find((e) => e.type === 'context');
   check('G: context event right after compaction shows a small context', ctxAfterCompact && ctxAfterCompact.context.tokens < 8000 && ctxAfterCompact.context.limit === 16384, ctxAfterCompact && ctxAfterCompact.context);
-  check('G: title prompt uses the folded first message', /Build the widget please/.test(titlePrompt(agent.session)));
+  check('G: title prompt uses the folded first message', /Remember: the widget is blue/.test(titlePrompt(agent.session)));
   const forked = store.fork(agent.session.id);
-  check('G: fork copies compactions', forked.compactions.length === 1 && forked.messages.length === 2);
+  check('G: fork copies compactions', forked.compactions.length === 1 && forked.messages.length === 5);
 
   // ---- H: manual /compact, errors and abort ----
   reset();
   state.ollamaPromptTokens = 100;
+  agent.session.lastPrompt = undefined; // G's last reply reported 14000 prompt tokens; this turn should not auto-compact
+  state.replies.push({ content: 'More. ' + 'Details follow. '.repeat(100) });
+  await agent.run('Tell me more');
+  reset();
   let r = await agent.compactNow('keep the file names');
-  check('H: manual compaction ok and focused', r.ok && agent.session.compactions.length === 2 && /focus on: keep the file names/.test(state.requests.find((q) => q.payload.stream === false).payload.messages[1].content) && events.find((e) => e.type === 'compact_start').reason === 'manual');
+  check("H: manual compaction ok and focused", r.ok && agent.session.compactions.length === 2 && /focus on: keep the file names/.test(state.requests.find((q) => q.payload.stream === false).payload.messages[1].content) && events.find((e) => e.type === 'compact_start').reason === 'manual', r);
   r = await agent.compactNow();
-  check('H: nothing to compact with one message', !r.ok && /Nothing to compact/.test(r.error));
+  // Changed on purpose: what is left is the brief and the kept last turn, and folding the brief alone is pointless.
+  check('H: nothing to compact with only the brief before the last request', !r.ok && /Nothing to compact/.test(r.error) && !state.requests.some((q) => q.payload.stream === false && q !== state.requests.find((x) => x.payload.stream === false)));
   agent.session = store.create();
   state.replies.push({ content: 'hi' });
   await agent.run('hey');
+  state.replies.push({ content: 'hi again' });
+  await agent.run('hey again');
   reset();
   state.summaryFails = true;
   r = await agent.compactNow();
-  check('H: a failed summary leaves the conversation alone', !r.ok && /summary failed|HTTP 500/.test(r.error) && agent.session.messages.length === 2 && events.some((e) => e.type === 'compact_end' && e.error));
+  check('H: a failed summary leaves the conversation alone', !r.ok && /summary failed|HTTP 500/.test(r.error) && agent.session.messages.length === 4 && events.some((e) => e.type === 'compact_end' && e.error));
   // a failed auto compaction does not retry every turn
   reset();
   state.ollamaPromptTokens = 15000;
@@ -181,7 +195,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   state.replies.push({ toolCalls: [{ name: 'mcp__test__echo', args: { text: 'b' } }] });
   state.replies.push({ content: 'end' });
   await agent.run('go');
-  check('H: failed auto compaction tried once per run', state.requests.filter((q) => q.url === '/api/chat' && q.payload.stream === false).length === 1 && events.filter((e) => e.type === 'compact_end' && e.error).length === 1 && events.find((e) => e.type === 'run_end').reason === 'done');
+  // Changed on purpose: over the limit, a failed summary falls back (here: nothing worth dropping) and says so in a notice.
+  check('H: failed auto compaction tried once per run', state.requests.filter((q) => q.url === '/api/chat' && q.payload.stream === false).length === 1 && events.filter((e) => e.type === 'compact_end').length === 1 && events.filter((e) => e.type === 'error' && e.kind === 'notice' && /summary could not be produced/.test(e.message)).length === 1 && events.find((e) => e.type === 'run_end').reason === 'done', events.filter((e) => e.type === 'error'));
   state.summaryFails = false;
   // auto-compact off
   reset();

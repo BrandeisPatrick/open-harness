@@ -131,6 +131,12 @@ export interface CompactionInfo {
   summary: string;
   /** How many messages were folded into the summary */
   messages: number;
+  /** Messages after the brief that were kept word for word (older compactions kept none) */
+  kept?: number;
+  /** Tokens of old tool output cleared by pruning just before this compaction */
+  pruned?: number;
+  /** summary: the folded part was summarised; dropped: no summary could be produced, so it was dropped */
+  stage?: 'summary' | 'dropped';
 }
 
 export interface AppConfig {

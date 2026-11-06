@@ -1,17 +1,43 @@
 import { randomUUID } from 'node:crypto';
 import type OpenAI from 'openai';
+import type { ContextBreakdown, ContextSlice } from '../shared/context';
 import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, CompactionInfo, ContextInfo, ImageAttachment, MessageOrigin, PermissionMode, PlanInfo, QueuedMessage, TaskItem } from '../shared/types';
 import { expandMentions } from './mentions';
 import { makeClient, modelCapabilities } from './providers';
 import { contextSize, ollamaChat, ollamaComplete, type Usage } from './ollama';
 import { McpManager } from './mcp';
-import { COMPACT_THRESHOLD, cleanSummary, compactedPreamble, estimateSpecTokens, estimateTokens, summaryBudgetChars, summaryRequest } from './compact';
+import {
+  PRUNE_HARD,
+  PRUNE_NORMAL,
+  PRUNE_THRESHOLD,
+  TAIL_FRACTION,
+  cleanSummary,
+  compactThreshold,
+  compactedPreamble,
+  droppedPreamble,
+  estimateMessageTokens,
+  estimateSpecTokens,
+  estimateTokens,
+  filesTouched,
+  findCut,
+  formatTokens,
+  isCompactPreamble,
+  isContextLengthError,
+  isSyntheticUser,
+  lastUserIndex,
+  pruneMessages,
+  scaleTo,
+  summaryBudgetChars,
+  summaryMaxTokens,
+  summaryRequest,
+  type PruneOptions,
+} from './compact';
 import { instructionsPrompt, loadInstructions } from './instructions';
 import { allTools, toSpec, type ApprovalResult, type ApproveOptions, type Tool, type ToolContext, type ToolResult } from './tools';
 import { truncate } from './tools/types';
 import type { BrowserController } from './browser';
 import { expandSlashCommand, type Skill } from './skills';
-import { clip, toMeta, turnSnapshot, type Session, type SessionStore, type Turn } from './sessions';
+import { clip, latestPlan, toMeta, turnSnapshot, type Session, type SessionStore, type Turn } from './sessions';
 import { generateTitle, titlePrompt } from './titles';
 import { guardCommand, guardWrite, isReadOnlyCommand, programsOf } from './guard';
 import { TerminalManager } from './terminal';
@@ -46,8 +72,25 @@ export function contextLimit(cfg: AppConfig): number {
   return Math.max(4096, Number(cfg.portkey.contextWindow) || 128000);
 }
 
+/** The system prompt in the pieces the context breakdown counts separately; joined in this order they are the prompt. */
+interface PromptParts {
+  base: string;
+  skills: string;
+  mcp: string;
+  mode: string;
+  userExtra: string;
+  /** One chunk per instructions file */
+  instructions: { label: string; text: string }[];
+  sections: string;
+}
+
 /** `cfg.workingDirectory` is the session's folder here (see Agent.sessionConfig). `extra` is the app's registered sections. */
 function systemPrompt(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = ''): string {
+  const p = systemPromptParts(cfg, skills, mcp, extra);
+  return p.base + p.skills + p.mcp + p.mode + p.userExtra + p.instructions.map((i) => i.text).join('') + p.sections;
+}
+
+function systemPromptParts(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = ''): PromptParts {
   const base = `You are OpenAgent, an autonomous coding agent running on the user's Mac.
 Working directory: ${cfg.workingDirectory}
 Today: ${new Date().toISOString().slice(0, 10)}
@@ -79,9 +122,9 @@ How to work:
     ? `\n\nMCP servers provide extra tools named mcp__<server>__<tool> (their descriptions say what they do). Use them when they fit the task; the user approves calls that can change something.\n${servers}`
     : '';
   const userExtra = cfg.systemPromptExtra ? `\n\n${cfg.systemPromptExtra}` : '';
-  const instructions = instructionsPrompt(loadInstructions(cfg.workingDirectory));
+  const instructions = loadInstructions(cfg.workingDirectory).map((f) => ({ label: f.label, text: instructionsPrompt([f]) }));
   const sections = extra.trim() ? `\n\n${extra.trim()}` : '';
-  return base + skillList + mcpText + modeText + userExtra + instructions + sections;
+  return { base, skills: skillList, mcp: mcpText, mode: modeText, userExtra, instructions, sections };
 }
 
 /** A user message: plain text, or text plus image parts when images are attached. */
@@ -173,6 +216,8 @@ export class Agent {
   private autoCompactFailed = false;
   /** Message count right after the last compaction of this run: no second one until the conversation grew again */
   private compactedAt = -1;
+  /** Message count when this run was told that nothing could be dropped: not repeated until the conversation grew */
+  private stuckAt = -1;
   /** Sessions told that the window is too small for the prompt and tools (once each) */
   private smallWindowNoticed = new Set<string>();
   /** The checkpoint that file changes are recorded on during a run (the latest user message) */
@@ -239,6 +284,14 @@ export class Agent {
 
   private prompt(cfg: AppConfig, skills: Skill[]): string {
     return systemPrompt(cfg, skills, this.mcp, this.promptExtra(cfg));
+  }
+
+  /** The tools a run in this mode offers: built-in, registered and MCP ones (plan mode: the read-only ones). */
+  private toolsFor(cfg: AppConfig): Tool[] {
+    const mcpTools = this.mcp?.tools() ?? [];
+    const plan = cfg.permissionMode === 'plan';
+    const extraTools = this.opts.tools?.() ?? [];
+    return [...allTools(cfg.permissionMode), ...(plan ? extraTools.filter((t) => t.readOnly) : extraTools), ...(plan ? mcpTools.filter((t) => t.mcp?.readOnly) : mcpTools)];
   }
 
   /** True while the approval card `id` is waiting for this agent. */
@@ -413,6 +466,7 @@ export class Agent {
     this.store.append(this.session, userMessage(content, attachments));
     this.autoCompactFailed = false;
     this.compactedAt = -1;
+    this.stuckAt = -1;
     this.emit({ type: 'run_start' });
     this.emitUserMessage(userText, attachments.length, origin, opts.from);
     // Saved now, not only at the end: the session gets its title from this message at once, so a sidebar with
@@ -423,10 +477,7 @@ export class Agent {
     try {
       const { client, model } = cfg.provider === 'ollama' ? { client: null, model: cfg.ollama.model } : makeClient(cfg);
       if (!model) throw new Error('No model selected. Open Settings and pick one.');
-      const mcpTools = this.mcp?.tools() ?? [];
-      const plan = cfg.permissionMode === 'plan';
-      const extraTools = this.opts.tools?.() ?? [];
-      const tools = [...allTools(cfg.permissionMode), ...(plan ? extraTools.filter((t) => t.readOnly) : extraTools), ...(plan ? mcpTools.filter((t) => t.mcp?.readOnly) : mcpTools)];
+      const tools = this.toolsFor(cfg);
       const specs = tools.map(toSpec);
       this.specTokens = estimateSpecTokens(specs);
       this.emitContext();
@@ -482,7 +533,21 @@ export class Agent {
         }
         const history: Msg[] = [{ role: 'system', content: this.prompt(cfg, skills) }, ...this.session.messages];
         this.lastUsage = null;
-        const { text, toolCalls } = await this.complete(cfg, client, model, history, activeSpecs, signal, turn);
+        let reply: { text: string; toolCalls: ToolCall[] };
+        try {
+          reply = await this.complete(cfg, client, model, history, activeSpecs, signal, turn);
+        } catch (err) {
+          // The provider says the request does not fit: compact and try this call once more instead of ending the run.
+          if (signal.aborted || cfg.autoCompact === false || !isContextLengthError(err)) throw err;
+          await this.compact('auto', undefined, signal, cfg, client, model, { force: true });
+          if (signal.aborted) {
+            reason = 'aborted';
+            break;
+          }
+          this.lastUsage = null;
+          reply = await this.complete(cfg, client, model, [{ role: 'system', content: this.prompt(cfg, skills) }, ...this.session.messages], activeSpecs, signal, turn);
+        }
+        const { text, toolCalls } = reply;
         this.emit({ type: 'thinking_done' });
 
         if (!text.trim() && !toolCalls.length) {
@@ -560,11 +625,92 @@ export class Agent {
     let tokens: number;
     if (mark && mark.at <= s.messages.length) tokens = mark.tokens + estimateTokens(s.messages.slice(mark.at));
     else tokens = estimateTokens([{ role: 'system', content: this.prompt(cfg, this.getSkills(cfg.workingDirectory)) }, ...s.messages]) + this.specTokens;
-    return { tokens, limit, threshold: COMPACT_THRESHOLD, autoCompact: cfg.autoCompact !== false };
+    return { tokens, limit, threshold: compactThreshold(cfg), autoCompact: cfg.autoCompact !== false };
   }
 
   emitContext(): void {
     this.emit({ type: 'context', context: this.contextInfo() });
+  }
+
+  /**
+   * What fills the context window, slice by slice (the slices add up to the window). With a reported token count
+   * from the last request the estimates are scaled so their total matches it.
+   */
+  contextBreakdown(): ContextBreakdown {
+    const cfg = this.sessionConfig();
+    const s = this.session;
+    const limit = contextLimit(cfg);
+    const threshold = compactThreshold(cfg);
+    const chars = (t: string) => (t ? Math.ceil(t.length / 4) : 0);
+    const parts = systemPromptParts(cfg, this.getSkills(cfg.workingDirectory), this.mcp, this.promptExtra(cfg));
+    const noTools = cfg.provider === 'ollama' && this.toolSupport.get(`${cfg.ollama.baseURL}|${cfg.ollama.model}`) === false;
+    const tools = noTools ? [] : this.toolsFor(cfg);
+    const byServer = new Map<string, Tool[]>();
+    for (const t of tools) if (t.mcp) byServer.set(t.mcp.server, [...(byServer.get(t.mcp.server) ?? []), t]);
+    let summary = 0;
+    let said = 0;
+    let toolTokens = 0;
+    for (const m of s.messages) {
+      if (isCompactPreamble(m)) summary += estimateMessageTokens(m);
+      else if (m.role === 'tool' || isSyntheticUser(m)) toolTokens += estimateMessageTokens(m);
+      else if (m.role === 'assistant' && m.tool_calls?.length) {
+        const total = estimateMessageTokens(m);
+        const own = estimateMessageTokens({ role: 'assistant', content: m.content ?? '' } as Msg);
+        said += own;
+        toolTokens += total - own;
+      } else said += estimateMessageTokens(m);
+    }
+    const instr = parts.instructions.map((i) => ({ label: i.label, tokens: chars(i.text) }));
+    const mcpItems = [...byServer].map(([server, list]) => ({ label: server, tokens: estimateSpecTokens(list.map(toSpec)) }));
+    const skillItems = parts.skills ? [{ label: 'Skills list', tokens: chars(parts.skills) }] : [];
+    const used: ContextSlice[] = [
+      { key: 'system', label: 'System prompt', tokens: chars(parts.base + parts.mcp + parts.mode + parts.userExtra + parts.sections) + 2 },
+      { key: 'instructions', label: 'Instructions files', tokens: instr.reduce((a, b) => a + b.tokens, 0), items: instr },
+      { key: 'skills', label: 'Skills', tokens: chars(parts.skills), items: skillItems },
+      { key: 'tools', label: 'Tool definitions', tokens: estimateSpecTokens(tools.filter((t) => !t.mcp).map(toSpec)) },
+      { key: 'mcpTools', label: 'MCP tools', tokens: mcpItems.reduce((a, b) => a + b.tokens, 0), items: mcpItems },
+      { key: 'summary', label: 'Compaction brief', tokens: summary },
+      { key: 'messages', label: 'Messages', tokens: said },
+      { key: 'toolResults', label: 'Tool calls and results', tokens: toolTokens },
+    ];
+    const estimated = used.reduce((a, b) => a + b.tokens, 0);
+    const mark = s.lastPrompt;
+    const reported = !!mark && mark.at <= s.messages.length && mark.tokens > 0;
+    const total = reported ? this.contextInfo().tokens : estimated;
+    // The slices fill the window exactly: in use (capped at the window), the reserve above the threshold, and free.
+    const fit = Math.min(total, limit);
+    const scaled = scaleTo(used.map((x) => x.tokens), fit);
+    used.forEach((x, i) => {
+      x.tokens = scaled[i];
+      if (x.items?.length) {
+        const inner = scaleTo(x.items.map((it) => it.tokens), x.tokens);
+        x.items = x.items.map((it, k) => ({ ...it, tokens: inner[k] }));
+      }
+      if (!x.items?.length) delete x.items;
+    });
+    const reserve = Math.max(0, Math.min(limit - fit, Math.round(limit * (1 - threshold))));
+    const slices: ContextSlice[] = [
+      ...used.filter((x) => x.tokens > 0 || x.key === 'system' || x.key === 'messages'),
+      { key: 'reserve', label: 'Reserved for compaction', tokens: reserve },
+      { key: 'free', label: 'Free', tokens: limit - fit - reserve },
+    ];
+    const busy = this.running || this.compacting;
+    const foldable = findCut(s.messages, limit * TAIL_FRACTION) > 0 || pruneMessages(s.messages).results + pruneMessages(s.messages).images > 0;
+    const out: ContextBreakdown = {
+      tokens: Math.round(total),
+      limit,
+      threshold,
+      autoCompact: cfg.autoCompact !== false,
+      basis: reported ? 'reported' : 'estimated',
+      slices,
+      messages: s.messages.length,
+      compactable: !busy && s.messages.length >= MIN_COMPACT_MESSAGES && foldable,
+      compactions: s.compactions?.length ?? 0,
+      updatedAt: Date.now(),
+    };
+    const last = s.compactions?.[s.compactions.length - 1];
+    if (last) out.lastCompaction = { at: last.createdAt, reason: last.reason, tokensBefore: last.tokensBefore, tokensAfter: last.tokensAfter };
+    return out;
   }
 
   /** Records what the last model call cost as the base of the context estimate (the reply is now part of the history). */
@@ -585,24 +731,27 @@ export class Agent {
     return estimateTokens([{ role: 'system', content: this.prompt(cfg, this.getSkills(cfg.workingDirectory)) }]) + this.specTokens;
   }
 
+  /**
+   * Before each model call: prune old tool output past 60% of the window, and compact past the threshold when
+   * pruning was not enough.
+   */
   private async autoCompactIfNeeded(cfg: AppConfig, client: OpenAI | null, model: string, signal: AbortSignal): Promise<void> {
     const s = this.session;
-    if (cfg.autoCompact === false || this.autoCompactFailed || s.messages.length < MIN_COMPACT_MESSAGES) return;
-    if (this.compactedAt >= 0 && s.messages.length < this.compactedAt + 4) return;
-    const info = this.contextInfo();
-    if (info.tokens < info.limit * COMPACT_THRESHOLD) return;
+    if (cfg.autoCompact === false || s.messages.length < MIN_COMPACT_MESSAGES) return;
+    const limit = contextLimit(cfg);
+    const threshold = compactThreshold(cfg);
+    if (this.contextInfo().tokens >= limit * PRUNE_THRESHOLD && cfg.pruneToolResults !== false) this.prune(PRUNE_NORMAL, true);
+    if (this.contextInfo().tokens < limit * threshold) return;
     const base = this.baseTokens(cfg);
-    if (base >= info.limit * COMPACT_THRESHOLD) {
+    if (base >= limit * threshold) {
       // Folding the conversation cannot help when the prompt and tools alone fill the window.
       if (!this.smallWindowNoticed.has(s.id)) {
         this.smallWindowNoticed.add(s.id);
-        this.emit({ type: 'error', kind: 'notice', message: `The system prompt and tool definitions take about ${Math.round(base / 1000)}k of the ${Math.round(info.limit / 1000)}k-token context window, so the conversation cannot be compacted. Raise the context size in Settings or disconnect MCP servers you do not need.` });
+        this.emit({ type: 'error', kind: 'notice', message: `The system prompt and tool definitions take about ${Math.round(base / 1000)}k of the ${Math.round(limit / 1000)}k-token context window, so the conversation cannot be compacted. Raise the context size in Settings or disconnect MCP servers you do not need.` });
       }
       return;
     }
-    const r = await this.compact('auto', undefined, signal, cfg, client, model);
-    if (r.info) this.compactedAt = s.messages.length;
-    else this.autoCompactFailed = true;
+    await this.compact('auto', undefined, signal, cfg, client, model);
   }
 
   /** /compact between runs. Resolves with ok=false and a reason when nothing happened. */
@@ -617,7 +766,7 @@ export class Agent {
       const { client, model } = cfg.provider === 'ollama' ? { client: null, model: cfg.ollama.model } : makeClient(cfg);
       if (!model) throw new Error('No model selected. Open Settings and pick one.');
       const r = await this.compact('manual', focus, signal, cfg, client, model);
-      return r.info ? { ok: true } : { ok: false, error: r.error ?? 'The summary could not be produced.' };
+      return r.ok ? { ok: true } : { ok: false, error: r.error ?? 'The summary could not be produced.' };
     } catch (err) {
       const message = errorMessage(err);
       this.emit({ type: 'compact_end', error: message });
@@ -629,60 +778,197 @@ export class Agent {
     }
   }
 
-  /** Replaces the conversation with a handoff brief the model writes. Emits compact_start and compact_end. */
-  private async compact(reason: 'auto' | 'manual', focus: string | undefined, signal: AbortSignal, cfg: AppConfig, client: OpenAI | null, model: string): Promise<{ info?: CompactionInfo; error?: string }> {
+  /**
+   * Shortens old tool output (and old images) in place, through the store with reason 'prune'. Returns the tokens
+   * saved; with `notice` the user sees a quiet note about it.
+   */
+  private prune(o: PruneOptions, notice: boolean): number {
     const s = this.session;
-    const before = this.contextInfo().tokens;
-    this.emit({ type: 'compact_start', reason });
-    try {
-      const summary = await this.summarize(cfg, client, model, focus, signal);
-      if (signal.aborted) throw new Error('Compaction was stopped.');
-      const folded = [...s.messages];
-      const info: CompactionInfo = { id: randomUUID(), createdAt: Date.now(), reason, tokensBefore: before, tokensAfter: 0, summary, messages: folded.length };
-      this.store.replaceAll(s, [{ role: 'user', content: compactedPreamble(summary) }], 'compaction');
-      s.lastPrompt = undefined;
-      // Checkpoints point into the folded messages: nothing before the brief can be rewound to any more.
-      s.turns = [];
-      this.currentTurn = null;
-      info.tokensAfter = this.contextInfo().tokens;
-      s.compactions ??= [];
-      s.compactions.push({ ...info, folded });
-      this.store.save(s, false);
-      this.emit({ type: 'compact_end', compaction: info });
-      this.emitContext();
-      return { info };
-    } catch (err) {
-      const error = signal.aborted ? 'Compaction was stopped.' : errorMessage(err);
-      this.emit({ type: 'compact_end', error });
-      return { error };
+    const r = pruneMessages(s.messages, o);
+    if (!r.results && !r.images) return 0;
+    // The reported size of the last request covered the messages that just got shorter.
+    const mark = s.lastPrompt;
+    if (mark && mark.at <= s.messages.length) mark.tokens = Math.max(0, mark.tokens - (estimateTokens(s.messages.slice(0, mark.at)) - estimateTokens(r.messages.slice(0, mark.at))));
+    this.store.replaceAll(s, r.messages, 'prune');
+    this.store.save(s, false);
+    if (notice) {
+      const images = r.images ? ` and ${r.images} old image${r.images === 1 ? '' : 's'}` : '';
+      this.emit({ type: 'error', kind: 'notice', message: `Cleared ${formatTokens(r.saved)} tokens of old tool output${images} to save context.` });
     }
+    this.emitContext();
+    return r.saved;
   }
 
-  private async summarize(cfg: AppConfig, client: OpenAI | null, model: string, focus: string | undefined, signal: AbortSignal): Promise<string> {
-    const messages = summaryRequest(this.session.messages, focus, summaryBudgetChars(contextLimit(cfg)));
-    const timeout = AbortSignal.any([signal, AbortSignal.timeout(SUMMARY_TIMEOUT_MS)]);
-    let raw: string;
-    if (!client) {
-      const call = (think: boolean | undefined) =>
-        ollamaComplete({
-          baseURL: cfg.ollama.baseURL,
-          model,
-          messages,
-          think,
-          // num_ctx matches the agent's requests so Ollama keeps the model loaded as it is.
-          options: { num_ctx: contextSize(cfg.ollama.numCtx), num_predict: 2000, temperature: 0.2 },
-          signal: timeout,
-        });
+  /**
+   * The compaction pipeline: prune, then summarise everything before a verbatim tail. When the summary fails or is
+   * not smaller, and the session is over the threshold (or `force`: the provider said the request is too long),
+   * prune harder, then drop the oldest messages. Emits compact_start / compact_end around a summary attempt.
+   * `ok` is true when the conversation was folded or, failing that, made small enough.
+   */
+  private async compact(
+    reason: 'auto' | 'manual',
+    focus: string | undefined,
+    signal: AbortSignal,
+    cfg: AppConfig,
+    client: OpenAI | null,
+    model: string,
+    opts: { force?: boolean } = {},
+  ): Promise<{ ok: boolean; info?: CompactionInfo; error?: string }> {
+    const s = this.session;
+    const limit = contextLimit(cfg);
+    const over = () => opts.force === true || this.contextInfo().tokens >= limit * compactThreshold(cfg);
+    const before = this.contextInfo().tokens;
+    const pruned = cfg.pruneToolResults !== false ? this.prune(PRUNE_NORMAL, true) : 0;
+    const tail = limit * TAIL_FRACTION;
+    let cut = findCut(s.messages, tail);
+    let insideTurn = false;
+    if (!cut && reason === 'auto' && over()) {
+      // The last turn alone is too big to keep: fold the start of it as well, with the request kept verbatim.
+      cut = findCut(s.messages, tail, { insideTurn: true });
+      insideTurn = cut > 0;
+    }
+    // A summary failed earlier in this run, or one was just made and the conversation has hardly grown: no new attempt.
+    const recent = this.compactedAt >= 0 && s.messages.length < this.compactedAt + 4;
+    const trySummary = cut > 0 && !(reason === 'auto' && (this.autoCompactFailed || recent));
+    let error: string | undefined;
+    if (trySummary) {
+      this.emit({ type: 'compact_start', reason });
       try {
-        raw = await call(false);
+        const folded = s.messages.slice(0, cut);
+        const summary = await this.summarize(cfg, client, model, folded, focus, signal);
+        if (signal.aborted) throw new Error('Compaction was stopped.');
+        const brief = compactedPreamble(summary, filesTouched(folded), insideTurn ? this.lastRequestText(folded) : undefined);
+        if (estimateMessageTokens({ role: 'user', content: brief }) >= estimateTokens(folded)) throw new Error('The summary was not smaller than the messages it would replace.');
+        const info = this.fold(cut, brief, summary, { reason, before, pruned, stage: 'summary' });
+        return { ok: true, info };
       } catch (err) {
-        // Models without a thinking switch reject the think field.
-        if (timeout.aborted || !/think/i.test(errorMessage(err))) throw err;
-        raw = await call(undefined);
+        error = signal.aborted ? 'Compaction was stopped.' : errorMessage(err);
+        if (reason === 'auto') this.autoCompactFailed = true;
+        if (signal.aborted || !over()) {
+          this.emit({ type: 'compact_end', error });
+          return { ok: false, error };
+        }
+        this.emit({ type: 'compact_end' });
       }
-    } else {
-      const res = await client.chat.completions.create({ model, messages, max_tokens: 2000, stream: false }, { signal: timeout, maxRetries: 1 });
-      raw = res.choices?.[0]?.message?.content ?? '';
+    } else if (!cut) error = 'Nothing to compact yet.';
+    if (!over()) return pruned > 0 ? { ok: true } : { ok: false, error: error ?? 'Nothing to compact yet.' };
+    // Never leave the session over the limit: shorten every old tool result, then drop the oldest messages.
+    const why = error ? `The summary could not be produced (${error.replace(/\.$/, '')})` : 'No summary could be made';
+    const hard = cfg.pruneToolResults !== false ? this.prune(PRUNE_HARD, false) : 0;
+    if (hard > 0 && !over()) {
+      this.emit({ type: 'error', kind: 'notice', message: `${why}, so old tool output was shortened further instead (${formatTokens(hard)} tokens cleared).` });
+      return { ok: true };
+    }
+    let dropAt = findCut(s.messages, tail);
+    let dropInside = false;
+    if (!dropAt) {
+      dropAt = findCut(s.messages, tail, { insideTurn: true });
+      dropInside = dropAt > 0;
+    }
+    const dropped = s.messages.slice(0, dropAt);
+    const count = dropped.filter((m) => !isCompactPreamble(m)).length;
+    const note = droppedPreamble(count, filesTouched(dropped), dropInside ? this.lastRequestText(dropped) : undefined);
+    if (!dropAt || estimateMessageTokens({ role: 'user', content: note }) >= estimateTokens(dropped)) {
+      // Told once until the conversation has grown: every turn of the run would end up here again.
+      if (this.stuckAt < 0 || s.messages.length >= this.stuckAt + 4) {
+        this.stuckAt = s.messages.length;
+        this.emit({ type: 'error', kind: 'notice', message: `${why}, and nothing older is left to drop: the next request may not fit the context window. Raise the context size in Settings or start a new session.` });
+      }
+      return { ok: false, error: error ?? 'Nothing to compact yet.' };
+    }
+    const folded = dropped;
+    const info = this.fold(dropAt, note, `${count} earlier message${count === 1 ? ' was' : 's were'} dropped because a summary could not be produced.`, { reason, before, pruned: pruned + hard, stage: 'dropped' });
+    this.emit({ type: 'error', kind: 'notice', message: `${why}, so the ${count} oldest message${count === 1 ? ' was' : 's were'} dropped to stay inside the context window.` });
+    return { ok: true, info };
+  }
+
+  /** The text of the last request the user sent within `messages` (kept verbatim when the turn itself is folded). */
+  private lastRequestText(messages: Msg[]): string | undefined {
+    const at = lastUserIndex(messages);
+    if (at < 0) return undefined;
+    const c = messages[at].content;
+    if (typeof c === 'string') return c;
+    return Array.isArray(c) ? c.map((p) => ('text' in p ? p.text : '')).join('\n') : undefined;
+  }
+
+  /**
+   * Replaces messages[0..cut) by the brief, keeps the rest word for word, shifts the checkpoints that point into the
+   * kept part and records the compaction (with the folded messages, so the transcript still shows them).
+   */
+  private fold(cut: number, brief: string, summary: string, o: { reason: 'auto' | 'manual'; before: number; pruned: number; stage: 'summary' | 'dropped' }): CompactionInfo {
+    const s = this.session;
+    const folded = s.messages.slice(0, cut);
+    const kept = s.messages.slice(cut);
+    this.store.replaceAll(s, [{ role: 'user', content: brief }, ...kept], 'compaction');
+    s.lastPrompt = undefined;
+    // Checkpoints in the kept part move with it (the brief takes index 0); earlier ones cannot be rewound to any more.
+    const turns: Turn[] = [];
+    for (const t of s.turns ?? []) {
+      if (t.at < cut) continue;
+      t.at = t.at - cut + 1;
+      turns.push(t);
+    }
+    s.turns = turns;
+    if (this.currentTurn && !turns.includes(this.currentTurn)) this.currentTurn = null;
+    const info: CompactionInfo = {
+      id: randomUUID(),
+      createdAt: Date.now(),
+      reason: o.reason,
+      tokensBefore: o.before,
+      tokensAfter: this.contextInfo().tokens,
+      summary,
+      messages: folded.filter((m) => !isCompactPreamble(m)).length,
+      kept: kept.length,
+      stage: o.stage,
+    };
+    if (o.pruned > 0) info.pruned = o.pruned;
+    s.compactions ??= [];
+    s.compactions.push({ ...info, folded });
+    this.compactedAt = s.messages.length;
+    this.store.save(s, false);
+    this.emit({ type: 'compact_end', compaction: info });
+    this.emitContext();
+    return info;
+  }
+
+  private async summarize(cfg: AppConfig, client: OpenAI | null, model: string, folded: Msg[], focus: string | undefined, signal: AbortSignal): Promise<string> {
+    const limit = contextLimit(cfg);
+    const plan = latestPlan(this.session);
+    const extras = { focus, tasks: this.session.tasks, plan: plan ? { title: plan.title, status: plan.status } : undefined };
+    const maxTokens = summaryMaxTokens(limit);
+    const timeout = AbortSignal.any([signal, AbortSignal.timeout(SUMMARY_TIMEOUT_MS)]);
+    const ask = async (budget: number): Promise<string> => {
+      const messages = summaryRequest(folded, extras, budget);
+      if (!client) {
+        const call = (think: boolean | undefined) =>
+          ollamaComplete({
+            baseURL: cfg.ollama.baseURL,
+            model,
+            messages,
+            think,
+            // num_ctx matches the agent's requests so Ollama keeps the model loaded as it is.
+            options: { num_ctx: contextSize(cfg.ollama.numCtx), num_predict: maxTokens, temperature: 0.2 },
+            signal: timeout,
+          });
+        try {
+          return await call(false);
+        } catch (err) {
+          // Models without a thinking switch reject the think field.
+          if (timeout.aborted || !/think/i.test(errorMessage(err))) throw err;
+          return await call(undefined);
+        }
+      }
+      const res = await client.chat.completions.create({ model, messages, max_tokens: maxTokens, stream: false }, { signal: timeout, maxRetries: 1 });
+      return res.choices?.[0]?.message?.content ?? '';
+    };
+    const budget = summaryBudgetChars(limit);
+    let raw: string;
+    try {
+      raw = await ask(budget);
+    } catch (err) {
+      // The summary request itself did not fit (the estimate was off for this model): once more with half the transcript.
+      if (timeout.aborted || !isContextLengthError(err)) throw err;
+      raw = await ask(Math.floor(budget / 2));
     }
     const summary = cleanSummary(raw);
     if (summary.length < 40) throw new Error('The model returned no usable summary.');
@@ -851,7 +1137,7 @@ export class Agent {
       try {
         return await this.completeStreaming(client, model, history, specs, signal, turn, includeUsage, onEmit);
       } catch (err) {
-        if (signal.aborted || emitted) throw err;
+        if (signal.aborted || emitted || isContextLengthError(err)) throw err;
         // A gateway or provider that rejects stream_options still streams without it.
         if (includeUsage && /stream_options|include_usage/i.test(errorMessage(err))) {
           this.noStreamUsage.add(endpoint);

@@ -12,6 +12,7 @@ import type { App, Disposer } from '../app';
 import type { HistoryService } from '../services';
 import type { Msg, Session, SessionMutation } from '../sessions';
 import { HistoryLog, safeId } from './log';
+import { activeModel } from '../providers';
 import { CONVERSATION_TYPES, hasOpenRun, lastSnapshot, missingToolResults, replayConversation } from './replay';
 import { DEFAULT_LIMIT, queryWords, SearchIndex } from './search';
 import { DAY_MS, sizeOf, Trash } from './trash';
@@ -449,7 +450,7 @@ export function createHistory(app: App, opts: HistoryOptions = {}): History {
     let content: string;
     if (format === 'markdown') {
       const cfg = app.config();
-      const model = cfg.provider === 'ollama' ? cfg.ollama?.model : cfg.portkey?.model;
+      const model = activeModel(cfg);
       content = sessionMarkdown(s, { model });
     } else if (format === 'json') content = JSON.stringify(s, null, 2);
     else {

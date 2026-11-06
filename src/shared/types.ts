@@ -6,7 +6,85 @@ import type { DreamingConfig } from './dreaming';
 
 import type { RpcEvents, RpcMethods } from './rpc';
 
-export type ProviderKind = 'ollama' | 'portkey';
+/**
+ * The name of a provider: one of the two built-in ones ('ollama', 'portkey': the `ollama` and `portkey` blocks of the
+ * config) or a key of AppConfig.providers.
+ */
+export type ProviderKind = string;
+
+/** What kind of service a named provider is: each type is a preset with its base URL, key variable and headers. */
+export type ProviderType = 'openrouter' | 'portkey' | 'openai' | 'anthropic' | 'groq' | 'deepseek' | 'together' | 'ollama' | 'lmstudio' | 'openai-compatible';
+
+/**
+ * A named provider (AppConfig.providers[name], or "providers" in settings.json). Only `type` is required; the rest
+ * falls back to the type's preset. See docs/configure.md.
+ */
+export interface NamedProviderConfig {
+  type: ProviderType;
+  /** How the window names it (default: the type's name) */
+  label?: string;
+  /** Overrides the preset's base URL; required for openai-compatible */
+  baseURL?: string;
+  /** The key itself (allowed in the user's own files only) */
+  apiKey?: string;
+  /** The environment variable that holds the key (default: the preset's, e.g. OPENROUTER_API_KEY) */
+  apiKeyEnv?: string;
+  /** The model to run */
+  model?: string;
+  /** Models to offer in the picker */
+  models?: string[];
+  /** Extra request headers (`${VAR}` expanded) */
+  headers?: Record<string, string>;
+  /** The model's context window in tokens (default 128000; Ollama: numCtx) */
+  contextWindow?: number;
+  /** Most tokens one reply may have (sent as max_tokens); unset: the service's default */
+  maxOutput?: number;
+  /** portkey: x-portkey-virtual-key */
+  virtualKey?: string;
+  /** portkey: x-portkey-config */
+  config?: string;
+  /** portkey: x-portkey-provider */
+  provider?: string;
+  /** ollama: num_ctx */
+  numCtx?: number;
+  /** ollama: thinking mode */
+  think?: 'auto' | 'on' | 'off';
+}
+
+/**
+ * A provider as the window sees it: resolved over its preset, with the key reduced to whether it is set. Computed by
+ * the main process (providers.ts) and sent with the window's copy of the config (AppConfig.providerView).
+ */
+export interface ProviderView {
+  name: string;
+  type: ProviderType;
+  label: string;
+  /** 'ollama' or 'portkey', the two blocks of config.json */
+  builtIn: boolean;
+  baseURL: string;
+  model: string;
+  /** The entry's list of models, for the picker (empty when it has none) */
+  models: string[];
+  contextWindow: number;
+  maxOutput?: number;
+  /** none: the service needs no key; set; missing */
+  key: 'none' | 'set' | 'missing';
+  /** Where the key comes from, for showing: a variable name ("OPENROUTER_API_KEY") or a field ("apiKey") */
+  keySource: string;
+  /** Names of the extra headers (never their values) */
+  headers: string[];
+  /** The settings file that defines it, when one does (its fields are read-only in Settings) */
+  owner?: 'user' | 'project';
+  /** Why it cannot be used as it is (no key, no model, no base URL), in plain words */
+  error?: string;
+}
+
+export interface ProvidersView {
+  /** The provider in use (config.provider), resolved */
+  active: ProviderView;
+  /** The built-in ones first, then the named ones in file order */
+  all: ProviderView[];
+}
 
 /**
  * Permission modes, modelled on Claude Code's:
@@ -141,9 +219,14 @@ export interface CompactionInfo {
 }
 
 export interface AppConfig {
+  /** The provider in use: 'ollama', 'portkey' or a name in `providers` */
   provider: ProviderKind;
   ollama: OllamaConfig;
   portkey: PortkeyConfig;
+  /** Named providers (OpenRouter, OpenAI, Anthropic, LM Studio, any OpenAI-compatible service, …) */
+  providers: Record<string, NamedProviderConfig>;
+  /** Only in the window's copy: the providers resolved, keys reduced to set / not set. Never stored. */
+  providerView?: ProvidersView;
   workingDirectory: string;
   /** See PermissionMode. Older files with 'readonly' map to 'plan'; older 'auto' maps to 'bypass'. */
   permissionMode: PermissionMode;

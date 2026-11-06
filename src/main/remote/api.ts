@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { App } from '../app';
 import type { PermissionMode, SessionMeta } from '../../shared/types';
 import { toTranscript } from '../sessions';
+import { activeModel } from '../providers';
 import { bool, HttpError, json, readJson, str } from './guard';
 import { remoteItem, remoteLive } from './sanitize';
 
@@ -109,7 +110,7 @@ export class Api {
       app: this.info,
       sessions: this.app.runtime.list(),
       foreground: this.app.runtime.foregroundId(),
-      model: cfg.provider === 'portkey' ? cfg.portkey.model : cfg.ollama.model,
+      model: activeModel(cfg),
       provider: cfg.provider,
       permissionMode: cfg.permissionMode,
     };

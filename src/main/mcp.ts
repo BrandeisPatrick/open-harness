@@ -16,6 +16,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { AppConfig, McpScope, McpServerConfig, McpServerInfo, McpStatus, McpToolInfo } from '../shared/types';
 import type { Tool, ToolResult } from './tools/types';
 import { words } from './guard';
+import { expandEnvRefs } from './env';
 
 export const PROJECT_FILE = '.mcp.json';
 const NAME_RE = /^[\w.-]{1,64}$/;
@@ -68,9 +69,7 @@ interface ToolIndexEntry {
 const keyOf = (scope: McpScope, name: string) => `${scope}:${name}`;
 
 /** `${VAR}` and `${VAR:-default}` in strings of a config, as Claude Code expands them in .mcp.json. */
-export function expandEnvRefs(s: string, env: NodeJS.ProcessEnv = process.env): string {
-  return s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_m, name: string, fallback?: string) => env[name] ?? fallback ?? '');
-}
+export { expandEnvRefs };
 
 function expandHome(p: string): string {
   return p.replace(/^~(?=$|\/)/, os.homedir());

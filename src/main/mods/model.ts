@@ -8,7 +8,7 @@ import type { ModelRequest } from '../../shared/mods';
 import { contextLimit } from '../agent';
 import { estimateTokens, renderForSummary } from '../compact';
 import { contextSize, ollamaChat } from '../ollama';
-import { makeClient } from '../providers';
+import { isOllama, makeClient, ollamaOf } from '../providers';
 
 type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -94,15 +94,16 @@ export async function completeOnce(
     onDelta(t);
   };
   try {
-    if (cfg.provider === 'ollama') {
-      if (!cfg.ollama.model) throw new ModelCallError('No Ollama model is selected in Settings.', 4004);
+    if (isOllama(cfg)) {
+      const ol = ollamaOf(cfg);
+      if (!ol.model) throw new ModelCallError('No Ollama model is selected in Settings.', 4004);
       let usage: { promptTokens: number; completionTokens: number } | undefined;
       await ollamaChat({
-        baseURL: cfg.ollama.baseURL,
-        model: cfg.ollama.model,
+        baseURL: ol.baseURL,
+        model: ol.model,
         // The same num_ctx as the agent's requests, so Ollama does not reload the model for a mod's call.
-        numCtx: contextSize(cfg.ollama.numCtx),
-        think: cfg.ollama.think ?? 'auto',
+        numCtx: contextSize(ol.numCtx),
+        think: ol.think ?? 'auto',
         messages,
         tools: [],
         signal: both,

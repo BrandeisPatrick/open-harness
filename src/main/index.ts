@@ -22,6 +22,7 @@ import { setupSubagents } from './subagents';
 import { setupRemote } from './remote';
 import { setupPower } from './power';
 import { setupDreaming } from './dreaming';
+import { setupProviders } from './providers-service';
 
 // The app has been renamed (OpenCoder, then OpenAgent, now Open Harness): on the first launch under a new name the
 // old data folder (settings, sessions, history, artifacts, …) is carried over so nothing is lost. Runs before
@@ -271,6 +272,7 @@ app.whenReady().then(() => {
   setupRemote(a);
   setupPower(a);
   setupDreaming(a);
+  setupProviders(a);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

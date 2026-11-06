@@ -5,7 +5,7 @@
 import type OpenAI from 'openai';
 import type { AppConfig } from '../../shared/types';
 import { contextSize, ollamaComplete } from '../ollama';
-import { makeClient } from '../providers';
+import { isOllama, makeClient, ollamaOf } from '../providers';
 
 type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -103,15 +103,16 @@ export async function writeMergeReport(cfg: AppConfig, title: string, kind: 'sub
   const request = mergeRequest(title, kind, messages);
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   let raw: string;
-  if (cfg.provider === 'ollama') {
-    if (!cfg.ollama.model) throw new Error('No Ollama model selected.');
+  if (isOllama(cfg)) {
+    const ol = ollamaOf(cfg);
+    if (!ol.model) throw new Error('No Ollama model selected.');
     raw = await ollamaComplete({
-      baseURL: cfg.ollama.baseURL,
-      model: cfg.ollama.model,
+      baseURL: ol.baseURL,
+      model: ol.model,
       messages: request,
       think: false,
       // The agent's own num_ctx, so Ollama does not reload the model for this call
-      options: { num_ctx: contextSize(cfg.ollama.numCtx), num_predict: 1200, temperature: 0.2 },
+      options: { num_ctx: contextSize(ol.numCtx), num_predict: 1200, temperature: 0.2 },
       signal,
     });
   } else {

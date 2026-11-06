@@ -22,11 +22,12 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AppConfig } from '../shared/types';
 import type { SettingsFileInfo, SettingsInfo } from '../shared/settings-info';
-import { expandEnvRefs } from './mcp';
+import { ENV_NAME, expandEnvRefs } from './env';
+import { between, bool, describe, kind, nonNegative, oneOf, positiveInt, str, timeOfDay, type Check } from './checks';
+import { BUILT_IN_PROVIDERS, providerEntrySchema, validateProviderEntry } from './provider-presets';
 import { configDir, projectConfigDir } from './paths';
 
 type Scope = 'user' | 'project';
-type Check = (v: unknown) => string | null;
 
 /** The user's settings.json (read on every call, so OPEN_HARNESS_CONFIG_DIR may be set late). */
 export function userSettingsPath(): string {
@@ -49,23 +50,15 @@ export function contentHash(raw: string): string {
 
 // ---------- The schema ----------
 
-const kind = (v: unknown): string => (v === null ? 'null' : Array.isArray(v) ? 'a list' : typeof v === 'object' ? 'an object' : typeof v === 'string' ? 'a string' : typeof v === 'number' ? 'a number' : typeof v === 'boolean' ? 'true/false' : typeof v);
-const str: Check = (v) => (typeof v === 'string' ? null : `expected a string, got ${kind(v)}`);
-const bool: Check = (v) => (typeof v === 'boolean' ? null : `expected true or false, got ${kind(v)}`);
-const oneOf =
-  (...values: string[]): Check =>
-  (v) =>
-    typeof v === 'string' && values.includes(v) ? null : `expected one of ${values.map((x) => `"${x}"`).join(', ')}${typeof v === 'string' ? '' : `, got ${kind(v)}`}`;
-const positiveInt: Check = (v) => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? null : `expected a whole number above 0${typeof v === 'number' ? '' : `, got ${kind(v)}`}`);
-const nonNegative: Check = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? null : `expected a number of 0 or more${typeof v === 'number' ? '' : `, got ${kind(v)}`}`);
-const between =
-  (lo: number, hi: number): Check =>
-  (v) =>
-    typeof v === 'number' && v >= lo && v <= hi ? null : `expected a number from ${lo} to ${hi}${typeof v === 'number' ? '' : `, got ${kind(v)}`}`;
+/** The provider in use: a built-in one or a key of `providers` (whether it exists is checked when it is resolved). */
+const providerRef: Check = describe(
+  Object.assign((v: unknown) => (typeof v === 'string' && v.trim() ? null : `expected the name of a provider ("ollama", "portkey" or a key of "providers"), got ${typeof v === 'string' ? 'an empty string' : kind(v)}`), { schema: { type: 'string', minLength: 1 } }),
+  'The provider in use: "ollama", "portkey", or the name of an entry in "providers".',
+);
 
 /** Scalar AppConfig fields a settings file may set. */
 const SCALARS: Record<string, Check> = {
-  provider: oneOf('ollama', 'portkey'),
+  provider: providerRef,
   permissionMode: oneOf('ask', 'acceptEdits', 'auto', 'plan', 'bypass'),
   maxTurns: positiveInt,
   sendScreenshotsToModel: bool,
@@ -83,17 +76,66 @@ const SCALARS: Record<string, Check> = {
 };
 
 /** Sections a settings file may set field by field. */
-const timeOfDay: Check = (v) => (typeof v === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(v.trim()) ? null : `expected a time of day as "HH:MM" (24-hour), e.g. "03:00"${typeof v === 'string' ? '' : `, got ${kind(v)}`}`);
-
 const SECTIONS: Record<'ollama' | 'portkey' | 'dreaming', Record<string, Check>> = {
   ollama: { baseURL: str, model: str, numCtx: positiveInt, think: oneOf('auto', 'on', 'off') },
   portkey: { baseURL: str, apiKey: str, model: str, virtualKey: str, provider: str, providerApiKey: str, configId: str, contextWindow: positiveInt },
   dreaming: { daily: bool, time: timeOfDay, mode: oneOf('auto', 'approve', 'plan'), skills: bool, mods: bool, memory: bool },
 };
 
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** Fields of the built-in blocks that hold a secret: never shown, never accepted from a project's file. */
+export const SECRET_FIELDS = ['portkey.apiKey', 'portkey.providerApiKey'];
+
+/** Variable names that hold a secret by their look; a project's env block may not set them. */
+const SECRET_ENV = /(KEY|TOKEN|SECRET|PASSWORD)$/i;
+
 /** Keys an editor puts in for itself; ignored without a complaint. */
 const IGNORED = new Set(['$schema']);
+
+/**
+ * Checks one settable field path ("maxTurns", "ollama.model", "dreaming.time") the way a settings file is checked.
+ * Returns null when the value is good, the reason otherwise; `unknown` when the path is not settable this way
+ * (workingDirectory, env, providers have their own rules).
+ */
+export function checkSetting(p: string, value: unknown): string | null | 'unknown' {
+  const [a, b, ...rest] = p.split('.');
+  if (rest.length) return 'unknown';
+  if (b === undefined) return a in SCALARS ? SCALARS[a](value) : 'unknown';
+  const sec = (SECTIONS as Record<string, Record<string, Check>>)[a];
+  return sec && b in sec ? sec[b](value) : 'unknown';
+}
+
+/** Every field path checkSetting knows, in schema order. */
+export function settableFields(): string[] {
+  return [...Object.keys(SCALARS), ...Object.entries(SECTIONS).flatMap(([sec, fields]) => Object.keys(fields).map((f) => `${sec}.${f}`))];
+}
+
+/** The JSON Schema of settings.json, built from the checks above (docs/settings.schema.json is this, written out). */
+export function settingsSchema(): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    $schema: { type: 'string', description: 'The schema this file follows (for editors).' },
+    env: { type: 'object', description: 'Environment variables set for the app before the rest of the file is read; keys can live here.', propertyNames: { pattern: ENV_NAME.source }, additionalProperties: { type: 'string' } },
+    workingDirectory: { type: 'string', description: 'Your own settings.json only: the folder the app opens in.' },
+  };
+  for (const [k, c] of Object.entries(SCALARS)) properties[k] = c.schema;
+  for (const [sec, fields] of Object.entries(SECTIONS)) {
+    properties[sec] = { type: 'object', additionalProperties: false, properties: Object.fromEntries(Object.entries(fields).map(([f, c]) => [f, c.schema])) };
+  }
+  properties.providers = {
+    type: 'object',
+    description: 'Named providers. "provider" selects one by its name. The names "ollama" and "portkey" are taken by the built-in blocks.',
+    propertyNames: { pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,47}$', not: { enum: [...BUILT_IN_PROVIDERS] } },
+    additionalProperties: providerEntrySchema(),
+  };
+  return {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    $id: 'https://brandeispatrick.github.io/open-harness/settings.schema.json',
+    title: 'Open Harness settings.json',
+    description: 'Settings for Open Harness: ~/.open-harness/settings.json (yours) and <project>/.open-harness/settings.json (a project\'s, applied once you trust it). See https://github.com/BrandeisPatrick/open-harness/blob/main/docs/configure.md',
+    type: 'object',
+    additionalProperties: false,
+    properties,
+  };
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const rec = (o: object): Record<string, unknown> => o as unknown as Record<string, unknown>;
@@ -176,6 +218,7 @@ function analyse(file: string, scope: Scope, opts: { trustedHash?: string; apply
       const entries: [string, string][] = [];
       for (const [name, v] of Object.entries(parsed.env)) {
         if (!ENV_NAME.test(name)) bad(`env.${name}`, 'not a valid variable name (letters, digits and _, not starting with a digit)');
+        else if (scope === 'project' && SECRET_ENV.test(name)) bad(`env.${name}`, "a project's settings.json may not set a key variable; set it in your own settings.json or your environment");
         else if (typeof v !== 'string') bad(`env.${name}`, `expected a string, got ${kind(v)}`);
         else {
           entries.push([name, v]);
@@ -187,7 +230,8 @@ function analyse(file: string, scope: Scope, opts: { trustedHash?: string; apply
   }
   const expand = (v: unknown): unknown => (typeof v === 'string' ? expandEnvRefs(v) : v);
 
-  for (const [key, value] of Object.entries(parsed)) {
+  for (const [key, rawValue] of Object.entries(parsed)) {
+    let value = rawValue;
     if (key === 'env' || IGNORED.has(key)) continue;
     if (key === 'workingDirectory') {
       if (scope === 'project') bad(key, "only your own settings.json can choose the folder the app opens in");
@@ -211,6 +255,32 @@ function analyse(file: string, scope: Scope, opts: { trustedHash?: string; apply
         info.keys.push(key);
       }
       continue;
+    }
+    if (key === 'providers') {
+      if (!isRecord(value)) {
+        bad(key, `expected an object of named providers, e.g. { "openrouter": { "type": "openrouter" } }, got ${kind(value)}`);
+        continue;
+      }
+      for (const [name, raw] of Object.entries(value)) {
+        const r = validateProviderEntry(name, raw, { scope, expand: expandEnvRefs });
+        for (const pr of r.problems) bad(pr.key, pr.message);
+        if (r.entry) {
+          out.values.push({ path: `providers.${name}`, value: r.entry });
+          info.keys.push(`providers.${name}`);
+        }
+      }
+      continue;
+    }
+    if (key === 'portkey' && scope === 'project' && isRecord(value)) {
+      // A repository must not carry or override a secret; the rest of the block applies.
+      const block: Record<string, unknown> = { ...value };
+      for (const f of ['apiKey', 'providerApiKey']) {
+        if (f in block) {
+          bad(`portkey.${f}`, "a project's settings.json may not hold a key; set it in your own settings.json or with PORTKEY_API_KEY");
+          delete block[f];
+        }
+      }
+      value = block;
     }
     if (key === 'ollama' || key === 'portkey' || key === 'dreaming') {
       if (!isRecord(value)) {

@@ -1,4 +1,3 @@
-import { app } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -60,6 +59,7 @@ export function defaultConfig(): AppConfig {
     remote: { enabled: false, bind: 'lan', port: 0 },
     settingsTrusted: {},
     dreaming: { ...DEFAULT_DREAMING },
+    providers: {},
   };
 }
 
@@ -107,7 +107,12 @@ function normalizeOllamaHost(host: string): string {
   return h.replace(/\/+$/, '') + '/v1';
 }
 
+/**
+ * <userData>/config.json. Electron is loaded here only, and lazily, so the command-line tool (which runs without the
+ * app) can use the rest of this file; it passes the path itself.
+ */
 export function configPath(): string {
+  const { app } = require('electron') as typeof import('electron');
   return path.join(app.getPath('userData'), 'config.json');
 }
 
@@ -121,9 +126,14 @@ export function migrateMode(raw: unknown, autoApprove: unknown, schemaVersion: n
 
 /** config.json on its own, before any settings.json layer. */
 function storedConfig(): AppConfig {
+  return readStoredConfig(configPath());
+}
+
+/** A config.json file over the defaults (the defaults alone when it is missing or unreadable). */
+export function readStoredConfig(file: string): AppConfig {
   const d = defaultConfig();
   try {
-    const raw = JSON.parse(fs.readFileSync(configPath(), 'utf8')) as Partial<AppConfig> & { schemaVersion?: number };
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<AppConfig> & { schemaVersion?: number };
     const version = Number(raw.schemaVersion) || 1;
     delete raw.schemaVersion;
     return normalizeConfig({
@@ -145,6 +155,8 @@ function storedConfig(): AppConfig {
       remote: { ...d.remote, ...(isRecord(raw.remote) ? raw.remote : {}) },
       settingsTrusted: isRecord(raw.settingsTrusted) ? (raw.settingsTrusted as Record<string, string>) : {},
       dreaming: { ...d.dreaming, ...(isRecord(raw.dreaming) ? raw.dreaming : {}) },
+      // Named providers are kept as written, even a broken one: resolving reports what is wrong with it.
+      providers: isRecord(raw.providers) ? (raw.providers as AppConfig['providers']) : {},
     });
   } catch {
     return d;
@@ -182,7 +194,7 @@ export function normalizeDreaming(raw: unknown): DreamingConfig {
 /** Keeps the legacy autoApprove flag consistent with permissionMode, and autoTitles a boolean (default on). */
 export function normalizeConfig(cfg: AppConfig): AppConfig {
   const mode: PermissionMode = (MODES as string[]).includes(cfg.permissionMode) ? cfg.permissionMode : 'ask';
-  return { ...cfg, permissionMode: mode, autoApprove: mode === 'bypass', autoTitles: cfg.autoTitles !== false, toolActivity: cfg.toolActivity === 'all' ? 'all' : 'summary', dreaming: normalizeDreaming(cfg.dreaming) };
+  return { ...cfg, permissionMode: mode, autoApprove: mode === 'bypass', autoTitles: cfg.autoTitles !== false, toolActivity: cfg.toolActivity === 'all' ? 'all' : 'summary', dreaming: normalizeDreaming(cfg.dreaming), providers: isRecord(cfg.providers) ? cfg.providers : {} };
 }
 
 export function saveConfig(cfg: AppConfig): void {

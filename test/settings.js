@@ -169,7 +169,7 @@ const fileOf = (layer, scope) => layer.info().files.find((f) => f.scope === scop
       portkey: { baseURL: 'http://p/v1', apiKey: 'k', model: 'pm', virtualKey: 'v', provider: 'pp', providerApiKey: 'ppk', configId: 'c', contextWindow: 1000 },
     };
     const bad = {
-      provider: 'openai', permissionMode: 'yolo', maxTurns: 'many', sendScreenshotsToModel: 'yes', systemPromptExtra: 5, theme: 'blue', autoTitles: 1, autoCompact: null,
+      provider: 42, permissionMode: 'yolo', maxTurns: 'many', sendScreenshotsToModel: 'yes', systemPromptExtra: 5, theme: 'blue', autoTitles: 1, autoCompact: null,
       compactThreshold: 0.99, pruneToolResults: 'no', notifications: [], keepAwake: 'sometimes', historyTrashDays: -1, toolActivity: 'verbose',
       'ollama.baseURL': 3, 'ollama.model': false, 'ollama.numCtx': 0, 'ollama.think': 'maybe',
       'portkey.baseURL': {}, 'portkey.apiKey': 1, 'portkey.model': null, 'portkey.virtualKey': 2, 'portkey.provider': true, 'portkey.providerApiKey': [], 'portkey.configId': 9, 'portkey.contextWindow': 1.5,

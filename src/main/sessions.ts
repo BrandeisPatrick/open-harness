@@ -24,6 +24,9 @@ export interface Session {
   unread?: boolean;
   /** For a fork: how many messages it was seeded with from its source */
   seedLength?: number;
+  /** Set once this session (a sub-session or fork) was merged into another: that session's id, and when (see subagents) */
+  mergedInto?: string;
+  mergedAt?: number;
   /** Set once the user renamed the session or a title was generated; save() then stops deriving one. */
   titleLocked?: boolean;
   messages: Msg[];
@@ -212,6 +215,7 @@ export function toMeta(s: Session): SessionMeta {
     cwd: s.cwd,
     parentId: s.parentId,
     origin: s.origin,
+    mergedInto: s.mergedInto,
   };
 }
 

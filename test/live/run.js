@@ -38,6 +38,7 @@ const SCRIPTS = [
   { name: 'mods-look', shots: 'env' },
   { name: 'type-scale' },
   { name: 'mods-protocol', shots: 'none' },
+  { name: 'looks', shots: 'env' },
   { name: 'remote-page', electron: true },
 ];
 

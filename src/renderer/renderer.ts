@@ -3445,7 +3445,12 @@ function confirmAction(opts: ConfirmOptions): Promise<boolean> {
       if (confirmDialog.open) confirmDialog.close();
       resolve(value);
     };
-    const onClose = () => finish(false);
+    // Only a close of this confirmation counts. A dialog's 'close' event arrives with the next painted frame, so the
+    // one from the confirmation before this can still be on its way (always in a hidden or covered window, and when
+    // one confirmation follows another at once): it finds the dialog open again and must not cancel it.
+    const onClose = () => {
+      if (!confirmDialog.open) finish(false);
+    };
     ok.onclick = () => finish(true);
     cancel.onclick = () => finish(false);
     confirmDialog.addEventListener('close', onClose);

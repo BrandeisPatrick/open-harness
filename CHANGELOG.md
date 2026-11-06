@@ -30,6 +30,10 @@ Chatting with an agent means reading a lot of text, so the window now gives the 
 - A mod's stylesheet can no longer `@import` another one, and its relative `url()`s point at the mod's own files.
 - Choosing a background from a mod in Settings → Appearance works again.
 
+### Fixes
+
+- A confirmation that followed another one at once (merge twice, delete twice) could close itself without asking: the first one's late "closed" signal cancelled it. Each confirmation now only answers to its own.
+
 ## 0.2.0
 
 The app is now called **Open Harness** (it was OpenAgent). On the first launch your sessions, settings and artifacts are moved from the old data folder to the new one (`~/Library/Application Support/Open Harness`). `OPENAGENT.md` files and `.openagent/skills` folders are still read. The repository is now `BrandeisPatrick/open-harness`; old links redirect.

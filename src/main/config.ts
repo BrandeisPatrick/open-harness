@@ -133,9 +133,9 @@ function storedConfig(): AppConfig {
 }
 
 /**
- * config.json with ~/.openagent/settings.json and then the project's .openagent/settings.json
- * applied over it. Fields a settings file owns are restored before writing, so the Settings
- * panel can never bake an override into config.json.
+ * config.json with the user's settings.json and then the project's (when trusted) applied over it, at launch.
+ * Afterwards settings-service.ts recomputes the layer; saveConfig restores the fields a file owns before writing,
+ * so neither the Settings panel nor a recompute can bake an override into config.json.
  */
 export function loadConfig(): AppConfig {
   return normalizeConfig(applySettings(storedConfig()));

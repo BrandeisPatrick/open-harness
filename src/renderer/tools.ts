@@ -7,6 +7,7 @@ import { highlight, langFromPath } from './highlight.js';
 import { icon, type IconName } from './icons.js';
 import { artifactIcon } from './artifacts.js';
 import { cleanTasks, taskProgress, taskSnapshot, taskSummary } from './tasks.js';
+import { AGENT_TOOLS, agentApproval, agentArgFromApproval, agentArgFromResult, agentBrief, agentStatusVerb, agentToolLabel, agentToolMeta, isDeniedResult } from './tool-labels.js';
 
 export type Args = Record<string, unknown>;
 
@@ -136,6 +137,8 @@ export function toolLabel(name: string, a: Args): ToolLabel {
   if (mcp) return mcpLabel(mcp, a);
   const browser = browserLabel(name, a);
   if (browser) return browser;
+  const agent = agentToolLabel(name, a);
+  if (agent) return agent;
   switch (name) {
     case 'read_file': return { verb: 'Read', arg: displayPath(str(a, 'path')), title: str(a, 'path'), icon: 'file-text', mono: true };
     case 'write_file': return { verb: 'Write', arg: displayPath(str(a, 'path')), title: str(a, 'path'), icon: 'file-plus', mono: true };
@@ -274,6 +277,8 @@ export function statusVerb(name: string): string {
   if (name === 'create_artifact') return 'Making the artifact…';
   if (name === 'update_tasks') return 'Updating tasks…';
   if (name === 'show_image') return 'Showing the image…';
+  const agent = agentStatusVerb(name);
+  if (agent) return agent;
   if (name.startsWith('browser_')) return 'Browsing…';
   const mcp = mcpParts(name);
   if (mcp) return `Calling ${mcp.server}…`;
@@ -285,6 +290,7 @@ const KNOWN_TOOLS = new Set([
   'terminal_run', 'terminal_read', 'terminal_list', 'terminal_stop',
   'browser_navigate', 'browser_get_text', 'browser_read_page', 'browser_find', 'browser_click',
   'browser_type', 'browser_press_key', 'browser_scroll', 'browser_screenshot', 'browser_eval', 'browser_wait_for',
+  ...AGENT_TOOLS,
 ]);
 
 /** Tools whose consecutive rows collapse into one "Read 4 files" group (MCP tools join them: "Called 3 tools on github"). */
@@ -469,6 +475,8 @@ export interface ToolCard {
   finish(res: ToolResult): void;
   /** The run ended before this tool reported back */
   interrupt(): void;
+  /** The approval card for this call arrived: its detail may name what the arguments only gave as an id */
+  noteApproval(detail: string): void;
 }
 
 /** Lines of a file's content, without the empty "line" after a trailing newline. */
@@ -708,8 +716,10 @@ function terminalBody(name: string, body: HTMLElement, r: string): void {
 function metaHtml(name: string, a: Args, res: ToolResult, edit?: DiffRow[]): string {
   const parts: string[] = [];
   const r = res.result;
+  const agent = res.ok ? agentToolMeta(name, a, r) : null;
   if (!res.ok) parts.push('<span class="meta-err">error</span>');
-  else if (/^Not permitted/.test(r)) parts.push('<span>denied</span>');
+  else if (/^Not permitted/.test(r) || isDeniedResult(r)) parts.push('<span>denied</span>');
+  else if (agent) parts.push(agent.err ? `<span class="meta-err">${escapeHtml(agent.text)}</span>` : escapeHtml(agent.text));
   else {
     switch (name) {
       case 'read_file': {
@@ -829,16 +839,31 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
   } else if (name === 'update_tasks' && Array.isArray(a.tasks)) {
     // The list as the agent set it at this point (the pinned card shows the latest one)
     body.appendChild(taskSnapshot(cleanTasks(a.tasks)));
+  } else if (agentBrief(name, a)) {
+    // A sub-session's brief, a message, a schedule's prompt: what was handed over (the result follows it)
+    body.appendChild(outBlock(clip(agentBrief(name, a)), 'note'));
   } else if (!KNOWN_TOOLS.has(name)) {
     // Unknown tools (or arguments that were not valid JSON): show what the model sent.
     if (Object.keys(a).length || typeof rawArgs === 'string') body.appendChild(argsBlock(a, typeof rawArgs === 'string' && !Object.keys(a).length ? rawArgs : undefined));
   }
+
+  /** Replaces the row's argument (and its tooltip) */
+  const setArg = (text: string | null) => {
+    const argEl = summary.querySelector<HTMLElement>('.tool-arg');
+    const full = (text ?? '').replace(/\s+/g, ' ').trim();
+    if (!argEl || !full || full === (argEl.getAttribute('title') || argEl.textContent)) return;
+    argEl.textContent = full.length > 80 ? full.slice(0, 80) + '…' : full;
+    argEl.setAttribute('title', full);
+  };
 
   const card: ToolCard = {
     el,
     name,
     args: a,
     running: true,
+    noteApproval(detail: string) {
+      setArg(agentArgFromApproval(name, detail));
+    },
     finish(res: ToolResult) {
       if (!card.running) return;
       card.running = false;
@@ -853,7 +878,8 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
       status.className = `tool-status ${res.ok ? 'ok' : 'err'}`;
       if (!res.ok) status.innerHTML = icon('circle-alert');
       el.querySelector('.tool-meta')!.innerHTML = metaHtml(name, a, res, editRows);
-      const denied = res.ok && /^Not permitted/.test(res.result);
+      if (res.ok) setArg(agentArgFromResult(name, a, res.result));
+      const denied = res.ok && (/^Not permitted/.test(res.result) || isDeniedResult(res.result));
       if (!res.ok || denied) {
         el.classList.toggle('denied', denied);
         body.appendChild(outBlock(clip(stripCwd(res.result)), res.ok ? 'note' : 'error'));
@@ -946,6 +972,8 @@ export function approvalTitle(name: string, detail: string, args?: Args): string
   if (name === 'write_file') return `Allow Open Harness to write ${basename(target) || 'this file'}?`;
   const mcp = mcpParts(name);
   if (mcp) return `Allow Open Harness to call ${mcp.tool} on ${mcp.server}?`;
+  const agent = agentApproval(name, detail);
+  if (agent) return agent.title;
   return `Allow Open Harness to use ${name}?`;
 }
 

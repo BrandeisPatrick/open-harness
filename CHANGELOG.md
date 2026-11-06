@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
-The window is white and grey now, like Claude Code: neutral surfaces in light and dark, grey buttons, and colour only where it means something. The warm look of 0.4.0 is a bundled theme you can turn back on.
+The window is white and grey now, like Claude Code: neutral surfaces in light and dark, grey buttons, and colour only where it means something. The warm look of 0.4.0 is a bundled theme you can turn back on. Settings → Mods has a tab for each kind of mod, and the app has a new icon.
 
 ### White and grey
 
+- **A new icon.** An S on a grey LED dot-matrix board, on a light tile. The mark in the sidebar and on the empty page draws the same S in the scheme's colours, and a theme can colour it through `--mark` and `--mark-ink`.
 - **Neutral surfaces.** The transcript, the top bar, the rail, cards and the chat bar are white, the sidebar a light grey, the user's bubble and code a lighter one; in dark, a neutral near-black with the sidebar and controls a step lighter. No warm tint anywhere.
 - **Grey buttons.** A button is white with a hairline; the one that confirms (Allow, Apply, Apply all, Save, Turn on, Compact now …) is a grey fill with the text colour. A dangerous action has red text and a red hairline rather than a red fill. The same goes for the mod kit's `h-btn`, the bundled mods' pages and the phone page.
 - **Colour where it means something.** Blue for links, the focus ring, a switch that is on, the context ring and progress; green and red for diffs, success and failure; amber for the Auto mode, a context window filling up and a session waiting for you; the unread dot stays blue. The spinner, selected rows and tabs, the icon on a card and the mark beside the model name are neutral.

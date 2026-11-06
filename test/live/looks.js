@@ -20,15 +20,24 @@ const PROBE = `(() => {
   return {
     bubble: pick('.msg.user .bubble', ['border-top-color', 'box-shadow', 'background-image', 'font-size', 'line-height']),
     reply: pick('.msg.assistant .md p', ['font-size', 'line-height', 'color']),
-    verb: pick('.tool-verb', ['text-transform', 'font-family']),
+    verb: pick('.tool-verb', ['text-transform', 'font-family', 'font-size']),
+    toolLine: pick('.tool > summary', ['font-size', 'line-height', 'color', 'height']),
+    status: pick('.tool-status', ['color']),
     holo: getComputedStyle(document.querySelector('#messages')).getPropertyValue('--holo').trim(),
     sidebar: pick('.sidebar', ['background-color', 'color', 'display', 'font-family']),
     sessionItem: pick('.session-item', ['background-color', 'color', 'font-size']),
     topbar: pick('.topbar', ['background-color', 'color']),
     composer: pick('#composer', ['border-top-color', 'background-image', 'box-shadow', 'border-radius']),
     send: pick('#send-btn', ['background-color', 'color']),
+    foot: pick('#model-btn', ['font-family', 'color', 'font-size']),
+    barBox: (() => { const r = document.querySelector('#chatbar').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })(),
     input: pick('#input', ['font-size', 'line-height', 'caret-color']),
     rootAccent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+    sidebarBg100: getComputedStyle(document.querySelector('.sidebar')).getPropertyValue('--bg-100').trim(),
+    // The app's own @keyframes spin, a quarter of the way through: a probe outside every region
+    spin: (() => { const e = document.createElement('div'); e.style.cssText = 'position:absolute;left:-9999px;animation:spin 1s linear -0.25s infinite paused'; document.body.append(e); const t = getComputedStyle(e).transform; e.remove(); return t; })(),
+    // The app's font stack as drawn: a font-face for one of its families would change the width
+    fontWidth: (() => { const e = document.createElement('span'); e.style.cssText = 'position:absolute;left:-9999px;font:15px var(--font);white-space:nowrap'; e.textContent = 'Readable text, WWW iii 0123'; document.body.append(e); const w = e.getBoundingClientRect().width; e.remove(); return Math.round(w * 10) / 10; })(),
   };
 })()`;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -40,7 +49,13 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
   const evil = path.join(home, 'mods', 'escape-look');
   fs.mkdirSync(evil, { recursive: true });
   fs.writeFileSync(path.join(evil, 'mod.json'), js({ protocol: 1, id: 'escape-look', name: 'Escape look', version: '0.1.0', contributes: { looks: [{ id: 'x', title: 'Escape', target: 'conversation', styles: ['x.css'] }] } }));
-  fs.writeFileSync(path.join(evil, 'x.css'), '} } :root { --accent: rgb(255, 0, 0); } .sidebar { background: rgb(255, 0, 0) !important; display: none !important; } @import url(nope.css); a { b: "}" } } } #composer { border-color: rgb(255, 0, 0) !important; } :scope ~ * { color: rgb(255, 0, 0) !important; } body .topbar { color: rgb(255, 0, 0) !important } @scope (body) { .sidebar { display: none !important } } .msg.user .bubble { outline: 3px solid rgb(255, 0, 0); }');
+  fs.writeFileSync(path.join(evil, 'x.css'), '} } :root { --accent: rgb(255, 0, 0); } .sidebar { background: rgb(255, 0, 0) !important; display: none !important; } @import url(nope.css); a { b: "}" } } } #composer { border-color: rgb(255, 0, 0) !important; } :scope ~ * { color: rgb(255, 0, 0) !important; } body .topbar { color: rgb(255, 0, 0) !important } @scope (body) { .sidebar { display: none !important } } .msg.user .bubble { outline: 3px solid rgb(255, 0, 0); }' +
+    // Global names: the app's own keyframes, a family of the app's font stack, a custom property the app's colours inherit
+    ' @keyframes spin { to { transform: translateX(300px); } } @keyframes fade-in { to { opacity: 0; } }' +
+    ' @font-face { font-family: "-apple-system"; src: local("Courier"); } @font-face { font-family: BlinkMacSystemFont; src: local("Courier"); } @font-face { font-family: "SF Pro Text"; src: local("Courier"); }' +
+    " @property --bg-100 { syntax: '<color>'; inherits: false; initial-value: red; }" +
+    // …and a name of its own, which must still work
+    ' @keyframes escape-look-own { from { opacity: 0.25; } to { opacity: 0.75; } } .msg.user .bubble { animation: escape-look-own 1s linear -0.5s infinite paused; }');
 
   const app = await launch({ mode: 'bypass', config: { theme: 'dark' }, env: { OPEN_HARNESS_CONFIG_DIR: home } });
   const ev = app.evaluate;
@@ -104,7 +119,8 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     await choose('look-conversation', 'hyperspace/holo');
     await app.waitFor(`document.querySelector('#messages').dataset.look === 'hyperspace/holo'`, 10_000, 'the conversation look');
     const conv = await probe();
-    check('the conversation look changes the transcript', conv.holo && !same(conv.bubble, before.bubble) && conv.verb['text-transform'] === 'uppercase', { holo: conv.holo, bubble: conv.bubble });
+    check('the conversation look changes the transcript', conv.holo && !same(conv.bubble, before.bubble) && !same(conv.status, before.status), { holo: conv.holo, bubble: conv.bubble });
+    check('… keeps the quiet tool lines as they are (size, line height, colour, height)', same(conv.toolLine, before.toolLine) && same(conv.verb, before.verb), { before: before.toolLine, now: conv.toolLine });
     check('… keeps the reading size and line height', same(conv.reply['font-size'], before.reply['font-size']) && same(conv.reply['line-height'], before.reply['line-height']) && same(conv.bubble['font-size'], before.bubble['font-size']));
     check('… and does not touch the sidebar, the top bar, the chat bar or the page tokens', same(conv.sidebar, before.sidebar) && same(conv.sessionItem, before.sessionItem) && same(conv.topbar, before.topbar) && same(conv.composer, before.composer) && same(conv.send, before.send) && conv.rootAccent === before.rootAccent, { s: conv.sidebar, c: conv.composer });
     check('Set shows Custom with only the conversation look', (await ev(`document.querySelector('#sp-row-look-set select').value`)) === 'custom');
@@ -114,7 +130,8 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     await choose('look-composer', 'hyperspace/cockpit');
     await app.waitFor(`document.querySelector('#chatbar').dataset.look === 'hyperspace/cockpit'`, 10_000, 'the chat bar look');
     const bar = await probe();
-    check('the chat bar look changes the chat bar', !same(bar.composer, before.composer) && !same(bar.send, before.send), bar.composer);
+    check('the chat bar look changes the chat bar and the row under it', !same(bar.composer, before.composer) && !same(bar.foot, before.foot), { composer: bar.composer, foot: bar.foot });
+    check('… and keeps it exactly as compact (same size, same text size underneath)', same(bar.barBox, before.barBox) && bar.foot['font-size'] === before.foot['font-size'], { before: before.barBox, now: bar.barBox });
     check('… keeps the field\'s type', same(bar.input['font-size'], before.input['font-size']) && same(bar.input['line-height'], before.input['line-height']));
     check('… and does not touch the transcript or the sidebar', same(bar.bubble, before.bubble) && same(bar.reply, before.reply) && same(bar.sidebar, before.sidebar) && !bar.holo && !('data-look' in (await attrs(app, '#messages'))));
 
@@ -178,6 +195,11 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     const sidebarShown = await ev(`getComputedStyle(document.querySelector('.sidebar')).display !== 'none'`);
     check('a hostile look cannot reach the sidebar, the top bar, the chat bar or :root', sidebarShown && same({ ...esc.sidebar, 'background-color': '' }, { ...set.sidebar, 'background-color': '' }) && !/255, 0, 0/.test(esc.sidebar['background-color']) && !/255, 0, 0/.test(esc.topbar.color) && !/255, 0, 0/.test(esc.composer['border-top-color']) && esc.rootAccent === before.rootAccent, esc);
     check('… but does apply inside its region', /255, 0, 0/.test(await ev(`getComputedStyle(document.querySelector('.msg.user .bubble')).outlineColor`)));
+    check("a look's @keyframes spin does not replace the app's spin", esc.spin === before.spin && /matrix/.test(before.spin), { before: before.spin, now: esc.spin });
+    check("a look's @font-face for the app's families does not change the app's font", esc.fontWidth === before.fontWidth, { before: before.fontWidth, now: esc.fontWidth });
+    check("a look's @property for --bg-100 does not reach the app's colours", esc.sidebarBg100 === before.sidebarBg100 && !/255, 0, 0|red/.test(esc.sidebarBg100), { before: before.sidebarBg100, now: esc.sidebarBg100 });
+    check('#messages contains paint while a conversation look is on (a fixed-position layer stays in the transcript)', (await ev(`getComputedStyle(document.querySelector('#messages')).contain`)) === 'paint' && (await ev(`getComputedStyle(document.querySelector('#chatbar')).contain`)) === 'none');
+    check("the look's own @keyframes still works (layered, no clash)", Math.abs(Number(await ev(`getComputedStyle(document.querySelector('.msg.user .bubble')).opacity`)) - 0.5) < 0.05);
     check('… and its @import is gone', !/@import/.test(await ev(`window.__oc_debug.mods.lookCss('conversation')`)));
     await rpc('mods.setEnabled', 'escape-look', false);
     await app.waitFor(`document.querySelector('#messages').dataset.look === undefined`, 10_000, 'the look to go with its mod');
@@ -190,6 +212,7 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     await closeSettings();
     await sleep(500);
     const after = await probe();
+    check('… and the containment goes with the look', (await ev(`getComputedStyle(document.querySelector('#messages')).contain`)) === 'none');
     check('None: no look stylesheets, no attributes, no background', (await lookStyles()).length === 0 && Object.keys(await attrs(app, '#messages')).length === 0 && Object.keys(await attrs(app, '#chatbar')).length === 0 && !(await ev(`document.documentElement.classList.contains('mod-bg')`)));
     check('… and every probed style is as it was', same(after, before), { before, after });
     const errors = app.console.filter((l) => /\[(error|exception)\]/.test(l) && !/favicon|ERR_FILE_NOT_FOUND/.test(l));

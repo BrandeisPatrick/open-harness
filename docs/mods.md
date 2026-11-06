@@ -133,7 +133,9 @@ Look fields: `id` (unique among the mod's looks), `title` (shown in Settings), `
 | `conversation` | the transcript: messages, tool rows, cards, code blocks, the task list | `#messages` |
 | `composer` | the chat bar: the box you type in, its buttons and the line under it | `#chatbar` |
 
-**Scoping.** The app wraps the look's CSS in `@scope (<root>) { … }`. Inside it, a selector matches only the root and what is inside it, so `.sidebar { … }` or `:root { … }` in a look match nothing. `:scope` is the root itself, and custom properties set on `:scope` cascade through the region only, which is the simple way to retheme one region: `:scope { --accent: #3fd0ff; --bubble: … }`. The at-rules that cannot sit inside `@scope` (`@keyframes`, `@font-face`, `@property`, `@counter-style`, at the top level or inside `@media` or `@supports`) are moved in front of it and keep working; their names are global, so give them a prefix of your own (`@keyframes holo-pulse`). `@import` and the other at-rules listed under Styles are removed, and relative `url()`s point at the mod's files, as for styles. A `}` that closes nothing is dropped and an unclosed block is closed, so no stylesheet can end the scope early. Scoping limits what a look selects, not where it can paint: a fixed-position pseudo-element can still cover the window, so a look gets the same "it restyles the app" approval as styles.
+**Scoping.** The app wraps the look's CSS in `@scope (<root>) { … }`. Inside it, a selector matches only the root and what is inside it, so `.sidebar { … }` or `:root { … }` in a look match nothing. `:scope` is the root itself, and custom properties set on `:scope` cascade through the region only, which is the simple way to retheme one region: `:scope { --accent: #3fd0ff; --bubble: … }`. The at-rules that cannot sit inside `@scope` (`@keyframes`, `@counter-style`, `@font-face`, `@property`, at the top level or inside `@media` or `@supports`) are moved in front of it, into a cascade layer (`@layer mod-looks`). Their names are shared with the whole page, and on a collision the app's own definition wins: a look's `@keyframes spin` or `pulse` never replaces the app's animation of that name, but it does not work for the look either, so give your names a prefix (`@keyframes holo-pulse`). Two of them register something for the whole page and are kept only under the mod's id as a prefix: `@property --<mod id>-…` (an `@property` for one of the app's tokens, such as `--bg-100`, would change how every surface of the app inherits its colour) and an `@font-face` whose `font-family` starts with the mod id (one for a family the app's stack names would replace that font everywhere); any other `@property` or `@font-face` in a look is removed. Themes (`styles`) keep both. `@import` and the other at-rules listed under Styles are removed, and relative `url()`s point at the mod's files, as for styles. A `}` that closes nothing is dropped and an unclosed block is closed, so no stylesheet can end the scope early.
+
+**Containment.** While a conversation look is active, `#messages` has `contain: paint`: whatever the look draws, a fixed-position pseudo-element included, stays inside the transcript's box. The chat bar is not contained (its focus ring and glow sit just outside `#chatbar`), so a chat bar look can still paint over the window; either kind of look gets the same "it restyles the app" approval as styles.
 
 **State.** While a look is active, the app keeps these attributes on its region's root, so a look can react without any script:
 
@@ -168,10 +170,11 @@ They are removed when the look goes away. A setting is how a look offers a choic
 | --- | --- |
 | `#composer` (`.composer`) | the box itself |
 | `#input` | the text field |
-| `#send-btn` (`.send`) | the send button (`:disabled` while there is nothing to send) |
-| `#attach-btn`, `#attachments` | the attach button and the attached images |
-| `#model-btn`, `#mode-btn`, `#context-meter` | the model, the permission mode (`.auto`, `.plan`, `.bypass` for those modes) and the context meter |
-| `.composer-row`, `#composer-foot` | the row with the field and its buttons, and the line under the box |
+| `.composer-row` | the row inside the box: the attach button, the field and the send button |
+| `#send-btn` (`.send`) | the send button: `:disabled` while there is nothing to send, `.stop` while it stops the run |
+| `#attach-btn` (`.composer-plus`), `#attachments`, `.attach-thumb` | the attach button, the attached images (inside the box, above the text) and each thumbnail |
+| `#composer-foot` | the quiet row under the box, outside it |
+| `.foot-btn`: `#model-btn`, `#mode-btn`, `#context-meter` | its buttons: the model, the permission mode (`.plan`, `.bypass` for those modes) and the context ring |
 
 Anything else in the markup can change between releases. Keep the conversation readable: the app's text size and line height are part of the reading experience, so a look dresses the text rather than shrinking it, and it has to work in the light and the dark scheme.
 

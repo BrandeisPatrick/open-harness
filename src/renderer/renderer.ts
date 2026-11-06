@@ -69,11 +69,13 @@ import {
   type SetupLine,
 } from './setup.js';
 import type { SettingsInfo } from '../shared/settings-info';
+import type { Schedule } from '../shared/schedules';
 import { bus } from './bus.js';
 import { onPush, rpc } from './rpc.js';
 import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } from './transcript-items.js';
 import { createModsHost, type ModPaneTabs } from './mods-host.js';
 import { createSettingsPage } from './settings-page.js';
+import { agentApproval, setNameLookup } from './tool-labels.js';
 
 declare global {
   interface Window {
@@ -733,7 +735,10 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const reason = typeof ev.reason === 'string' ? ev.reason.trim() : '';
   el.className = 'approval' + (reason ? ' flagged' : '');
   const mcp = mcpParts(ev.name);
-  const iconName: IconName = mcp ? 'plug' : ev.name === 'bash' || ev.name === 'terminal_run' ? 'terminal' : ev.name === 'edit_file' ? 'pencil' : ev.name === 'write_file' ? 'file-plus' : 'shield-check';
+  // A tool's own question (sub-sessions, messages, schedules): its wording comes from the detail the main process sent
+  const agent = mcp ? null : agentApproval(ev.name, ev.detail);
+  if (agent) card?.noteApproval(ev.detail);
+  const iconName: IconName = mcp ? 'plug' : agent ? agent.icon : ev.name === 'bash' || ev.name === 'terminal_run' ? 'terminal' : ev.name === 'edit_file' ? 'pencil' : ev.name === 'write_file' ? 'file-plus' : 'shield-check';
   if (mcp) el.classList.add('mcp');
   const reasonHtml = reason
     ? `<div class="reason">${icon('triangle-alert', 14)}<span>${escapeHtml(`${ev.mode === 'auto' ? 'Auto mode paused' : 'Paused'}: ${reason}`)}</span></div>`
@@ -744,7 +749,16 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const body = document.createElement('div');
   body.className = 'approval-body';
   let subject = ev.name;
-  if (mcp) {
+  /** The decided line names the action in words rather than a tool name or a path */
+  let prose = false;
+  if (agent) {
+    subject = agent.subject;
+    prose = true;
+    const pre = document.createElement('pre');
+    pre.className = 'args prose';
+    pre.textContent = ev.detail;
+    body.appendChild(pre);
+  } else if (mcp) {
     // The arguments, pretty-printed by the main process, in the same mono block as a command.
     subject = `${mcp.tool} · ${mcp.server}`;
     const json = typeof ev.detail === 'string' ? ev.detail.trim() : '';
@@ -822,7 +836,7 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const collapse = (text: string, ok: boolean) => {
     el.classList.add('done');
     el.innerHTML = `<div class="decided"><span class="${ok ? 'ok' : 'no'}">${icon(ok ? 'check' : 'x')}</span><span>${escapeHtml(text)}</span>${
-      subject ? `<span>·</span><code>${escapeHtml(subject)}</code>` : ''
+      subject ? `<span>·</span>${prose ? `<span class="subject">${escapeHtml(subject)}</span>` : `<code>${escapeHtml(subject)}</code>`}` : ''
     }</div>`;
   };
   const decide = async (ok: boolean, answer: Answer = 'once') => {
@@ -3794,6 +3808,18 @@ setupImageView({ messages: messagesEl, openLightbox, showError: showInlineError 
 // [feature:history]
 
 // [feature:schedules]
+// Schedule names by id, so a tool row that names a schedule by its id shows its name (tool-labels.ts)
+const scheduleNames = new Map<string, string>();
+const keepScheduleNames = (list: Schedule[]) => {
+  scheduleNames.clear();
+  for (const s of list ?? []) scheduleNames.set(s.id, s.name);
+};
+onPush('schedules:changed', keepScheduleNames);
+void rpc('schedules.list').then(keepScheduleNames, () => undefined);
+setNameLookup({
+  session: (ref) => sessions.find((s) => s.id === ref)?.title,
+  schedule: (id) => scheduleNames.get(id),
+});
 
 // [feature:subagents]
 

@@ -1246,6 +1246,10 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 .approval .row-main { display: flex; gap: 8px; margin-left: auto; }
 /* Collapsed answer: the outcome keeps one line; only the command after it is cut */
 .approval .decided > span { flex: none; white-space: nowrap; }
+/* A tool's own question names the action in words ("start sub-session “…”"): cut like the command, in the text face */
+.approval .decided > span.subject { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-200); }
+/* …and its detail reads as text, not code */
+.approval-body pre.args.prose { font: 13px/19px var(--font); }
 
 /* Settings → Permissions */
 .rules-cwd { font-weight: 500; color: var(--text-200); overflow-wrap: anywhere; }

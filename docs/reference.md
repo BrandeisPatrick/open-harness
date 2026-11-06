@@ -41,6 +41,22 @@ Slash commands: `/name` runs a skill, `/skills`, `/compact [focus]`, `/mcp`. A m
 
 `~/Library/Application Support/OpenAgent/config.json`: provider, model, Ollama context size (`numCtx`, 16k default), permission mode, MCP servers, rules, notifications, auto-compact. Sessions and artifacts live next to it. A project's `.mcp.json` is read; its servers stay off until enabled in Settings. Skills: `<project>/.openagent/skills`, `~/.openagent/skills`, bundled `skills/`.
 
+### settings.json
+
+`~/.openagent/settings.json`, then `<project>/.openagent/settings.json`, layer over `config.json` the way Claude Code's `settings.json` does. Precedence: defaults < `config.json` < user < project.
+
+```json
+{
+  "env": { "PORTKEY_API_KEY": "…" },
+  "provider": "portkey",
+  "portkey": { "baseURL": "https://gateway.example.com/v1", "model": "@vertex/gemini-2.5-pro", "contextWindow": 200000 }
+}
+```
+
+`env` is applied to the process environment before anything reads it, so a key can live there instead of in `config.json` — `PORTKEY_API_KEY` is already a fallback for the Portkey key. Settable: `provider`, `ollama`, `portkey`, `workingDirectory`, `permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `notifications`. `${VAR}` and `${VAR:-default}` are expanded in every string, as in `.mcp.json`.
+
+A field a settings file sets is owned by that file: the Settings panel shows the effective value, but saving restores `config.json` to what it held, so an override — or a secret — is never written there. The panel does not yet mark those fields read-only, so an edit to one appears to revert on save.
+
 ## Security
 
 The agent runs with your permissions: keep approvals on for untrusted tasks. Pages it reads are untrusted input. MCP servers are child processes with your permissions. `@` mentions send the file to the model. The built-in browser is a normal Chromium profile.

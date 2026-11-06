@@ -335,6 +335,16 @@ function cleanCut(msgs, cut) {
   check('7: a manual compaction keeps the last turn too', agent.session.messages[1].content === 'And then?' && agent.session.messages.length === 3);
   r = await agent.compactNow();
   check('7: then there is nothing left to compact', !r.ok && /Nothing to compact/.test(r.error));
+  // One finished turn has nothing before its request, yet /compact must be able to fold it: the whole conversation
+  // goes into the brief, which carries the request word for word.
+  fresh();
+  await firstTurn();
+  reset();
+  r = await agent.compactNow();
+  check('7: /compact folds a single finished turn whole and carries its request', r.ok && agent.session.messages.length === 1 && /Read notes\.txt and remember the code word\./.test(agent.session.messages[0].content) && agent.session.compactions.length === 1 && agent.session.compactions[0].kept === 0, { ok: r.ok, error: r.error, messages: agent.session.messages.length });
+  state.replies.push({ content: 'falcon' });
+  await agent.run('What was the code word?');
+  check('7: …and the conversation goes on from the brief', streams().length === 1 && streams()[0].messages.length === 3 && runEnd().reason === 'done', streams().map((q) => q.messages.map((m) => m.role)));
 
   // ---- 8: fallbacks when no summary can be produced ----
   // (a) prune harder

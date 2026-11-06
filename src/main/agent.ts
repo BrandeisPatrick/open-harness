@@ -850,6 +850,10 @@ export class Agent {
     const pruned = cfg.pruneToolResults !== false ? this.prune(PRUNE_NORMAL, true) : 0;
     const tail = limit * TAIL_FRACTION;
     let cut = this.cutFor(tail, limit);
+    // /compact between runs has no request in progress. When nothing precedes the last request (one long turn that
+    // has finished), the whole conversation is folded, and the brief carries that request word for word.
+    // (With an earlier brief in front there is only that brief to fold, which gains nothing.)
+    if (!cut && reason === 'manual' && !this.running && !isCompactPreamble(s.messages[0]) && s.messages.some((m) => m.role === 'assistant')) cut = s.messages.length;
     if (!cut && over()) {
       // The last turn alone is too big. Shortening its older tool output keeps the most (the heads stay) without a
       // model call; only if that is not enough is the start of the turn folded, with the request kept verbatim.

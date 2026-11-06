@@ -2,10 +2,11 @@
 //
 // The built app runs hidden on a throwaway profile (test/live/rig.js) against the scripted model
 // (test/support/mock-model.js, Ollama path, reported as qwen3:8b). Only the model's replies and a few earlier
-// sessions in the sidebar are scripted: the tools really run on a small project, `atlas-api`, which this script
-// writes to /Users/Shared/code/atlas-api for the run (the app shortens /Users/<name>/… to ~/…, so it shows as
-// ~/code/atlas-api) and removes afterwards. The remote-control page is loaded from the app's own remote server in a
-// hidden phone-sized window (this script, re-run under Electron).
+// sessions in the sidebar are scripted: the tools really run on a small project, `atlas-api`. Everything the run
+// makes sits in one temp home folder that the app gets as HOME, so the project at <home>/code/atlas-api shows as
+// ~/code/atlas-api; it is removed afterwards, with the profile. The model's Grafana panel comes from a small MCP
+// server written there too. The remote-control page is loaded from the app's own remote server in a hidden
+// phone-sized window (this script, re-run under Electron).
 //
 //   npm run build   (once; dist/ must be current)
 //   node scripts/readme-shots.js [out-dir]      default: docs/screenshots
@@ -22,7 +23,9 @@ const ROOT = path.join(__dirname, '..');
 // ---------------------------------------------------------------------------------------------------------------
 if (process.versions.electron && process.type === 'browser') {
   const { app, BrowserWindow, nativeTheme } = require('electron');
-  const [url, out] = process.argv.slice(-2);
+  const [url, out, userData] = process.argv.slice(-3);
+  // Its own data folder (in the run's temp home), not Electron's default one in ~/Library
+  app.setPath('userData', userData);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   app.dock?.hide();
   app.whenReady().then(async () => {
@@ -81,10 +84,11 @@ const { launch, sleep } = require(path.join(ROOT, 'test', 'live', 'rig.js'));
 const { startMock } = require(path.join(ROOT, 'test', 'support', 'mock-model.js'));
 
 const OUT = path.resolve(process.argv[2] || path.join(ROOT, 'docs', 'screenshots'));
-const SHARED = '/Users/Shared';
-const CODE = path.join(SHARED, 'code');
-const PROJECT = path.join(CODE, 'atlas-api');
-const OWNER_MARK = path.join(CODE, '.open-harness-readme-shots');
+// Everything the run makes lives in one temp home: the app runs with HOME pointing at it, so the project at
+// <home>/code/atlas-api shows as ~/code/atlas-api and the app's config folder is <home>/.open-harness.
+const HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-home-')));
+const PROJECT = path.join(HOME, 'code', 'atlas-api');
+const CONFIG_DIR = path.join(HOME, '.open-harness');
 const js = (v) => JSON.stringify(v);
 
 // ---------- PNG crop ----------
@@ -476,17 +480,14 @@ module.exports = { rateLimit };
 `;
 
 function makeProject() {
-  if (fs.existsSync(CODE) && !fs.existsSync(OWNER_MARK)) throw new Error(`${CODE} exists and was not made by this script; move it away first.`);
-  fs.rmSync(CODE, { recursive: true, force: true });
   fs.mkdirSync(PROJECT, { recursive: true });
-  fs.writeFileSync(OWNER_MARK, 'Made by open-harness scripts/readme-shots.js; removed when it finishes.\n');
   for (const [rel, text] of Object.entries(FILES)) {
     fs.mkdirSync(path.dirname(path.join(PROJECT, rel)), { recursive: true });
     fs.writeFileSync(path.join(PROJECT, rel), text);
   }
   fs.mkdirSync(path.join(PROJECT, 'reports'), { recursive: true });
   fs.writeFileSync(path.join(PROJECT, 'reports', 'traffic-2026-11-05.ndjson'), traffic());
-  const git = (...args) => execFileSync('git', args, { cwd: PROJECT, stdio: 'ignore', env: { ...process.env, HOME: SHARED, GIT_CONFIG_NOSYSTEM: '1' } });
+  const git = (...args) => execFileSync('git', args, { cwd: PROJECT, stdio: 'ignore', env: { ...process.env, HOME, GIT_CONFIG_NOSYSTEM: '1' } });
   git('init', '-q', '-b', 'main');
   git('config', 'user.name', 'Sam Rivera');
   git('config', 'user.email', 'sam@atlas.example');
@@ -547,7 +548,7 @@ function scriptHero(mock) {
         { id: 't4', title: 'Load-test the limiter', status: status[3] },
       ],
     });
-  main({ promptTokens: 8240, toolCalls: [tasks('in_progress', 'pending', 'pending', 'pending'), call('read_file', { path: 'src/server.js' })] });
+  main({ promptTokens: 8240, toolCalls: [call('read_file', { path: 'src/server.js' })] });
   main({ promptTokens: 9310, toolCalls: [call('write_file', { path: 'src/middleware/rateLimit.js', content: RATE_LIMIT_JS })] });
   main({
     promptTokens: 9960,
@@ -560,16 +561,14 @@ function scriptHero(mock) {
     ],
   });
   main({ promptTokens: 10720, toolCalls: [call('bash', { command: 'npm test' })] });
-  main({ promptTokens: 11380, toolCalls: [tasks('completed', 'completed', 'completed', 'pending')] });
+  // The load test goes to a sub-session, which runs beside this one
+  main({ promptTokens: 11380, toolCalls: [call('session_spawn', { title: 'Load-test the limiter', prompt: LOADTEST_BRIEF }), tasks('completed', 'completed', 'completed', 'in_progress')] });
   main({
     promptTokens: 11820,
     content:
-      'Public routes now allow **100 requests a minute per client IP**; the 101st gets `429` with `Retry-After`. `/health` stays unlimited. The limiter lives in `src/middleware/rateLimit.js`, and all 5 tests pass.',
+      'Public routes now allow **100 requests a minute per client IP**; the 101st gets `429` with `Retry-After`, and `/health` stays unlimited. All 5 tests pass. A sub-session is load-testing it and will report back here.',
   });
-}
-
-/** The sub-session the user starts for the load test: its first answer is held back, so it runs in every shot. */
-function scriptLoadTest(mock) {
+  // The sub-session's first answer is held back, so it is still running in every shot
   mock.state.replies.push({ when: isLoadTest, delayMs: 30 * 60_000, content: 'Starting the load test.' });
 }
 
@@ -613,7 +612,8 @@ function panelPng(trafficText) {
 }
 
 function writeGrafanaServer(dir, png) {
-  const file = path.join(dir, 'grafana-mcp.js');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'server.js');
   fs.writeFileSync(
     file,
     `// A minimal MCP server over stdio (newline-delimited JSON-RPC) with one tool.
@@ -672,7 +672,7 @@ function installWordCount(configDir) {
 
 // ---------- the run ----------
 
-const LEAKS = /\bmock\b|oa-live|atlas-profile|\/var\/folders|\/private\/var|^Done\.$|Shared\/code|\/Users\/Shared/m;
+const LEAKS = /\bmock\b|oa-live|atlas-profile|atlas-home|\/var\/folders|\/private\/var|^Done\.$/m;
 
 /** Runs an expression in the app's main process, through its inspector (as test/live/mods.js does). */
 async function mainEval(port, expression) {
@@ -710,16 +710,12 @@ function freePort(preferred) {
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
-  const configDir = path.join(SHARED, '.open-harness');
-  if (fs.existsSync(configDir)) throw new Error(`${configDir} exists; move it away first.`);
-  const sharedBefore = new Set(fs.readdirSync(SHARED));
   makeProject();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-profile-'));
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-env-'));
   // The agent's shell is a login zsh; with HOME moved it would lose the PATH your own .zprofile sets up (Homebrew's
-  // git and node), so a .zprofile of its own puts this PATH back.
-  fs.writeFileSync(path.join(tmp, '.zprofile'), `export PATH=${js(process.env.PATH)}\n`);
-  const grafana = writeGrafanaServer(tmp, panelPng(fs.readFileSync(path.join(PROJECT, 'reports', 'traffic-2026-11-05.ndjson'), 'utf8')));
+  // git and node), so the temp home's .zprofile puts this PATH back.
+  fs.writeFileSync(path.join(HOME, '.zprofile'), `export PATH=${js(process.env.PATH)}\n`);
+  const grafana = writeGrafanaServer(path.join(HOME, '.grafana-mcp'), panelPng(fs.readFileSync(path.join(PROJECT, 'reports', 'traffic-2026-11-05.ndjson'), 'utf8')));
   const ids = seedSessions(profile);
   const mock = await startMock();
   mock.state.ollamaPromptTokens = 8000;
@@ -735,7 +731,7 @@ async function main() {
       mock: true,
       mode: 'auto',
       size: { width: 1280, height: 800 },
-      env: { HOME: SHARED, ZDOTDIR: tmp, OPEN_HARNESS_CONFIG_DIR: configDir, npm_config_cache: path.join(tmp, 'npm'), npm_config_update_notifier: 'false', npm_config_fund: 'false' },
+      env: { HOME, OPEN_HARNESS_CONFIG_DIR: CONFIG_DIR, npm_config_update_notifier: 'false', npm_config_fund: 'false' },
       config: {
         provider: 'ollama',
         ollama: { baseURL: `http://127.0.0.1:${mock.port}`, model: 'qwen3:8b', numCtx: 32768, think: 'auto' },
@@ -762,7 +758,7 @@ async function main() {
       await ev(`document.activeElement && document.activeElement.blur()`);
       await sleep(ms);
     };
-    const railReady = () => app.waitFor(`window.__oc_debug.mods.views().filter((v) => v.seat === 'rail' && !v.collapsed).every((v) => v.hello && v.height > 20)`, 20_000, 'the rail mods');
+    const railReady = () => app.waitFor(`window.__oc_debug.mods.views().filter((v) => v.seat === 'rail' && !v.collapsed).every((v) => v.hello && v.height > 0)`, 45_000, 'the rail mods');
     const mainIdle = () => app.waitFor(`document.querySelector('#status-line').hidden && !document.querySelector('.session-item.active.running')`, 60_000, 'the run to end');
     const leakCheck = async (label) => {
       const text = await ev(`document.body.innerText`);
@@ -786,6 +782,39 @@ async function main() {
       await ev(`(() => { const hidden = document.querySelector('.shell').classList.contains('pane-hidden'); if (${open} && hidden) document.querySelector('#browser-toggle').click(); if (!${open} && !hidden) document.querySelector('#pane-close').click(); })()`);
       await sleep(400);
     };
+    // Scrolled to the end, the top edge of the transcript can cut through a line of text or a box. Scroll back just
+    // enough that it falls between them, as long as the end of the transcript stays in view; otherwise stay put.
+    const alignTop = async () => {
+      const moved = await ev(`(() => {
+        const m = document.querySelector('#messages');
+        const box = m.getBoundingClientRect();
+        const lastBottom = () => Math.max(...[...m.children].filter((e) => !e.hidden && e.id !== 'empty-state').map((e) => e.getBoundingClientRect().bottom));
+        const start = m.scrollTop;
+        for (let i = 0; i < 6; i++) {
+          const top = box.top;
+          const rects = [];
+          const walker = document.createTreeWalker(m, NodeFilter.SHOW_TEXT);
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (!n.textContent.trim()) continue;
+            const r = document.createRange();
+            r.selectNodeContents(n);
+            rects.push(...r.getClientRects());
+          }
+          for (const e of m.querySelectorAll('.msg.user .bubble, .msg.user, .tool, code, pre, .approval, figure, #task-list')) rects.push(e.getBoundingClientRect());
+          const cut = rects.filter((r) => r.height && r.top < top - 0.5 && r.bottom > top + 0.5);
+          if (!cut.length) break;
+          const up = Math.ceil(Math.max(...cut.map((r) => top - r.top))) + 6;
+          if (lastBottom() + up > box.bottom - 8) {
+            m.scrollTop = start;
+            return 'kept at the end: no room';
+          }
+          m.scrollTop -= up;
+        }
+        return start - m.scrollTop;
+      })()`);
+      console.log(`hero: top edge aligned (${moved})`);
+      await sleep(1800);
+    };
     const toBottom = async () => {
       await ev(`(() => { const m = document.querySelector('#messages'); m.scrollTop = m.scrollHeight; })()`);
       // Overlay scrollbars fade out a moment after the last scroll
@@ -802,15 +831,15 @@ async function main() {
     // ---------------- hero ----------------
     scriptHero(mock);
     await app.send('Add rate limiting to the public routes: 100 requests a minute per client, 429 with Retry-After when over. Keep /health unlimited.');
+    // Starting a sub-session asks first, also in Auto mode: allow it, as the user would
+    await app.approve('allow');
     await mainIdle();
-    // The load test goes to a sub-session, as the Sub-sessions panel or /spawn would start it.
-    scriptLoadTest(mock);
-    await ev(`window.oc.rpc('sessions.spawn', ${js(ids.main)}, ${js({ title: 'Load-test the limiter', prompt: LOADTEST_BRIEF })})`);
     await app.waitFor(`Boolean(document.querySelector('.session-item[data-parent=${js(ids.main)}].running'))`, 15_000, 'the running sub-session');
     await sleep(1200);
     await railReady();
     await settle();
     await toBottom();
+    await alignTop();
     await shot('hero');
 
     // ---------------- sidebar ----------------
@@ -860,6 +889,8 @@ async function main() {
     await app.waitFor(`window.__oc_debug.mods.views().find((v) => v.key === 'scheduled/main')?.hello`, 10_000, 'the Scheduled page');
     await sleep(1500);
     await railReady();
+    // Outputs lists the two changed files (an empty Outputs page can report a near-zero height at start-up)
+    await app.waitFor(`(window.__oc_debug.mods.views().find((v) => v.key === 'outputs/main')?.height || 0) > 40`, 20_000, 'the Outputs panel');
     await settle();
     {
       const rail = await box('#mod-rail');
@@ -904,7 +935,7 @@ async function main() {
     let phoneReady;
     const ready = new Promise((r) => (phoneReady = r));
     const phoneDone = new Promise((resolve, reject) => {
-      phone = spawn(electron, [__filename, url, path.join(OUT, 'remote.png')], { env, stdio: ['ignore', 'pipe', 'inherit'] });
+      phone = spawn(electron, [`--user-data-dir=${path.join(HOME, '.phone-window')}`, __filename, url, path.join(OUT, 'remote.png'), path.join(HOME, '.phone-window')], { env: { ...env, HOME }, stdio: ['ignore', 'pipe', 'inherit'] });
       phone.stdout.on('data', (d) => {
         if (String(d).includes('PHONE_READY')) phoneReady();
         process.stdout.write(String(d).replace(/PHONE_READY\n?/, ''));
@@ -924,7 +955,7 @@ async function main() {
     await ev(`window.oc.rpc('remote.stop')`);
 
     // ---------------- settings: Mods, with a mod of yours expanded ----------------
-    installWordCount(configDir);
+    installWordCount(CONFIG_DIR);
     await app.waitFor(`window.oc.rpc('mods.list').then((l) => l.some((m) => m.key === 'word-count'))`, 10_000, 'the word-count mod');
     await ev(`window.oc.rpc('mods.setEnabled', 'word-count', true)`);
     await sleep(800);
@@ -958,6 +989,7 @@ async function main() {
       await app.screenshot(path.join(process.env.SHOTS_DEBUG, 'failed.png')).catch(() => {});
       console.log('model requests:\n' + mock.state.requests.map((r) => `${r.url} ${firstUser(r.payload).slice(0, 40)}`).join('\n'));
       console.log('replies left:', mock.state.replies.length);
+      console.log('views:', JSON.stringify(await app.evaluate(`window.__oc_debug.mods.views().map((v) => [v.key, v.seat, v.hello, v.height, v.collapsed, v.failed])`).catch((e) => String(e))));
       console.log(app.console.slice(-15).join('\n'));
       console.log(app.logs.slice(-15).join('\n'));
     }
@@ -967,17 +999,25 @@ async function main() {
     if (app) await app.close();
     mock.close();
     fs.rmSync(profile, { recursive: true, force: true });
-    fs.rmSync(tmp, { recursive: true, force: true });
-    fs.rmSync(CODE, { recursive: true, force: true });
-    fs.rmSync(configDir, { recursive: true, force: true });
-    for (const name of fs.readdirSync(SHARED)) if (!sharedBefore.has(name)) console.log(`note: the run left ${path.join(SHARED, name)}`);
+    fs.rmSync(HOME, { recursive: true, force: true });
   }
 }
 
+const started = Date.now();
 main().then(
-  () => process.exit(0),
+  () => {
+    console.log(`done in ${Math.round((Date.now() - started) / 1000)} s`);
+    process.exit(0);
+  },
   (err) => {
     console.error(err && err.stack);
+    fs.rmSync(HOME, { recursive: true, force: true });
+    // A start-up hiccup of the hidden app (a mod page slow to load, say) should not need a second command: try once more
+    if (!process.env.README_SHOTS_RETRY) {
+      console.error('trying once more from the start…');
+      const again = require('node:child_process').spawnSync(process.execPath, [__filename, ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, README_SHOTS_RETRY: '1' } });
+      process.exit(again.status ?? 1);
+    }
     process.exit(1);
   },
 );

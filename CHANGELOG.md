@@ -47,7 +47,8 @@ Everything beside the chat is now a mod: a folder of web files that the app show
 ### For contributors
 
 - `docs/architecture.md`: the app container, the session runtime, and the seams features plug into.
-- `npm test`: 24 headless suites. `npm run test:live`: the real app, hidden, driven against the API (`ANTHROPIC_API_KEY`) or a mock model.
+- `npm test`: the headless suites (a mock model, no network). `npm run test:live`: the real app, hidden, on a throwaway profile, driven against the API (`ANTHROPIC_API_KEY`) or a mock model; with `OPEN_HARNESS_LIVE_APP` set to a packaged binary the same scripts drive that.
+- `node scripts/readme-shots.js` remakes the README screenshots from scripted scenes in the real app.
 
 ### Known limits
 

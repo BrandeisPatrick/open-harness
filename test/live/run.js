@@ -57,10 +57,13 @@ for (const s of chosen) {
   fs.mkdirSync(shots, { recursive: true });
   const bin = s.electron ? require(path.join(root, 'node_modules', 'electron')) : process.execPath;
   const args = s.shots === 'env' || s.shots === 'none' ? [file] : [file, shots];
-  const env = { ...process.env, ...(s.shots === 'env' ? { SHOTS: shots } : {}) };
+  // Profiles, projects and whatever else a script makes go into a temp folder of its own, removed when it ends.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oh-live-'));
+  const env = { ...process.env, TMPDIR: tmp, ...(s.shots === 'env' ? { SHOTS: shots } : {}) };
   delete env.ELECTRON_RUN_AS_NODE;
   const started = Date.now();
   const r = spawnSync(bin, args, { cwd: root, env, encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024 });
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 });
   const out = (r.stdout || '') + (r.stderr || '');
   const ok = r.status === 0;
   if (!ok) failed++;

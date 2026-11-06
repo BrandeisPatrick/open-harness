@@ -1,10 +1,19 @@
 // Renders docs/social-preview.png (1280×640), the card GitHub shows when the repository link is shared.
 // Upload it under Settings → General → Social preview. Run: npx electron scripts/social-preview.js
 const { app, BrowserWindow } = require('electron');
+const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
+// A data folder of its own: an unbundled Electron would otherwise write its caches into
+// ~/Library/Application Support/Electron. Chromium's helpers still write to it while the app quits, so it is removed
+// a moment after this process has gone.
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'oh-social-'));
+app.setPath('userData', userData);
+app.dock?.hide();
+app.on('quit', () => spawn('/bin/sh', ['-c', 'sleep 2; rm -rf "$0"', userData], { detached: true, stdio: 'ignore' }).unref());
 const b64 = (p) => fs.readFileSync(path.join(root, p)).toString('base64');
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: #262624; color: #faf9f5;

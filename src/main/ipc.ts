@@ -80,8 +80,21 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
   ipcMain.handle('config:get', () => cfg());
   ipcMain.handle('config:set', (_e, next: AppConfig) =>
     app.updateConfig((current) => {
-      // MCP servers, trust, rules and recents are changed through their own handlers only: a stale copy sent with the rest of the settings must not undo them.
-      const merged = { ...current, ...next, ollama: { ...current.ollama, ...next.ollama }, portkey: { ...current.portkey, ...next.portkey }, mcpServers: current.mcpServers, mcpTrusted: current.mcpTrusted, allowRules: current.allowRules, recentDirs: current.recentDirs };
+      // MCP servers, trust, rules, recents, mods and remote control are changed through their own handlers only: a
+      // stale copy sent with the rest of the settings must not undo them (or bring back an approval that was withdrawn).
+      const merged = {
+        ...current,
+        ...next,
+        ollama: { ...current.ollama, ...next.ollama },
+        portkey: { ...current.portkey, ...next.portkey },
+        mcpServers: current.mcpServers,
+        mcpTrusted: current.mcpTrusted,
+        allowRules: current.allowRules,
+        recentDirs: current.recentDirs,
+        settingsTrusted: current.settingsTrusted,
+        mods: current.mods,
+        remote: current.remote,
+      };
       // A caller that only flipped the legacy flag still gets the matching mode.
       if (next.permissionMode === undefined && next.autoApprove !== undefined && next.autoApprove !== current.autoApprove) merged.permissionMode = next.autoApprove ? 'bypass' : 'ask';
       return merged;

@@ -13,30 +13,28 @@
  *      data-set-glow="blue|…"      this mod's settings (Settings → Mods → Hyperspace)
  *      data-set-motion="full|calm"
  *
- * Readability comes first. The app's text size and line height, the column and the spacing are left exactly as
- * they are: the look changes edges, tints, the type of headings and labels, and adds light where something is
- * happening. It only uses the class names docs/mods.md lists as stable (Looks → Stable hooks).
+ * Readability comes first: the conversation is mostly reading. The app's text size and line height, the column,
+ * the spacing and the quiet tool lines are left exactly as they are. The look changes edges and tints, sets headings
+ * in a condensed face at the app's own size, and adds light only where something is happening. It only uses the class names docs/mods.md lists as stable (Looks → Stable hooks).
  */
 
 /* The glow colour (--holo) and its tints come from glow.css, listed before this file in mod.json. */
 
 /* A very faint scanline behind the text, dark scheme only; it scrolls with the conversation (no repaint on scroll). */
 :scope[data-scheme="dark"] {
-  background-image: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--holo) 3.5%, transparent) 0 1px, transparent 1px 4px);
+  background-image: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--holo) 2.5%, transparent) 0 1px, transparent 1px 4px);
   background-attachment: local;
 }
 
 /* ---------- Your messages: a transmission panel with cut corners and an edge in the glow colour ---------- */
 
 .msg.user .bubble {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--holo) 12%, var(--bubble)), color-mix(in srgb, var(--holo) 5%, var(--bubble)) 70%);
-  border: 1px solid var(--holo-edge);
-  border-radius: 12px 12px 4px 12px;
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--holo) 70%, transparent), 0 0 22px -10px var(--holo);
+  background: color-mix(in srgb, var(--holo) 8%, var(--bubble));
+  box-shadow: inset 0 0 0 1px var(--holo-edge), inset 2px 0 0 color-mix(in srgb, var(--holo) 65%, transparent);
 }
-/* Cut corners where the engine knows corner-shape; elsewhere the rounded ones above stay. */
+/* Cut corners where the engine knows corner-shape; elsewhere the app's rounded ones stay. */
 @supports (corner-shape: bevel) {
-  .msg.user .bubble { corner-shape: bevel; border-radius: 10px 10px 4px 10px; }
+  .msg.user .bubble { corner-shape: bevel; }
 }
 .msg.user .bubble.images-only { background: transparent; border: none; box-shadow: none; }
 
@@ -71,8 +69,9 @@
   letter-spacing: 0.03em;
   color: color-mix(in srgb, var(--holo) 30%, var(--text-100));
 }
-.md :is(h1, h2) { font-size: 19px; line-height: 24px; }
-.md :is(h3, h4, h5, h6) { font-size: 16px; line-height: 20px; }
+/* A condensed face looks smaller at the same size: one pixel more keeps it at the app's visual size, same line height */
+.md :is(h1, h2) { font-size: calc(var(--fs-head) + 1px); }
+.md :is(h3, h4, h5, h6) { font-size: calc(var(--fs-body) + 1px); }
 .md :is(h1, h2)::after {
   content: ''; display: block; height: 1px; margin-top: 6px;
   background: linear-gradient(to right, var(--holo-edge), transparent 70%);
@@ -85,40 +84,35 @@
 /* ---------- Code blocks: instrument panels with corner brackets ---------- */
 
 .code-block {
-  --bracket: color-mix(in srgb, var(--holo) 75%, transparent);
-  border-color: var(--holo-faint);
-  border-radius: 3px;
+  --bracket: color-mix(in srgb, var(--holo) 60%, transparent);
+  border-radius: 4px;
   background-color: color-mix(in srgb, var(--holo) 4%, var(--code-bg));
   background-image:
     linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
     linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
     linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
     linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket));
-  background-size: 12px 1.5px, 1.5px 12px, 12px 1.5px, 1.5px 12px, 12px 1.5px, 1.5px 12px, 12px 1.5px, 1.5px 12px;
+  background-size: 10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px;
   background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
   background-repeat: no-repeat;
 }
-.code-head { border-bottom-color: var(--holo-faint); background: linear-gradient(to right, var(--holo-wash), transparent 80%); }
-.code-lang { font-family: var(--holo-face); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: color-mix(in srgb, var(--holo) 75%, var(--text-200)); }
+.code-lang { font-family: var(--holo-face); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in srgb, var(--holo) 70%, var(--text-400)); }
 .cmd, .out pre, pre.args { border-color: var(--holo-faint); }
 
-/* ---------- Tool rows: instrument readouts ---------- */
+/* ---------- Tool lines: the app's quiet lines, with the icon in the glow colour ---------- */
 
-.tool > summary, .tool-group > summary { position: relative; }
-.tool-verb {
-  font-family: var(--holo-face); font-weight: 600; font-size: 13px;
-  text-transform: uppercase; letter-spacing: 0.08em;
-  color: color-mix(in srgb, var(--holo) 45%, var(--text-100));
-}
-.tool-meta { font-family: var(--mono); font-size: 12px; color: color-mix(in srgb, var(--holo) 35%, var(--text-400)); }
-.tool-status, .group-icon { color: color-mix(in srgb, var(--holo) 70%, var(--text-200)); }
-.tool-status.err { color: var(--danger); }
+/* The same rules hold for a single .tool, for a .tool-group's own line, and for the rows inside a group. */
+:is(.tool, .tool-group) > summary { position: relative; }
+.tool-status, .group-icon { color: color-mix(in srgb, var(--holo) 60%, var(--text-400)); }
+.tool-status.err, .group-icon.err { color: var(--danger); }
 .tool-status.spin::after, .group-icon.spin::after { border-top-color: var(--holo); }
-/* The row in flight: a soft band of light that pulses while the run lasts */
+.tool-chevron { color: color-mix(in srgb, var(--holo) 40%, var(--text-400)); }
+/* The rule beside a group's rows; the rows stay where the app puts them (16px + 12px = its 28px) */
+.group-body { border-left: 1px solid var(--holo-faint); margin-left: 16px; padding-left: 11px; }
+/* The line in flight: a thin mark in the gutter that pulses while the run lasts (the text itself is untouched) */
 :scope[data-running="true"] :is(.tool, .tool-group):has(> summary .spin) > summary::after {
-  content: ''; position: absolute; inset: 0; border-radius: var(--r-control); pointer-events: none;
-  background: linear-gradient(to right, color-mix(in srgb, var(--holo) 16%, transparent), transparent 70%);
-  box-shadow: inset 2px 0 0 var(--holo);
+  content: ''; position: absolute; left: -14px; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; pointer-events: none;
+  background: var(--holo); box-shadow: 0 0 6px var(--holo);
 }
 
 /* ---------- Thinking, cards, notices ---------- */
@@ -128,22 +122,18 @@
 
 /* The task list as a mission checklist. ":scope >" matches the app's own ".transcript > .task-list" in specificity;
    a scoped rule wins a tie with an unscoped one, so no !important is needed. */
-:scope > .task-list {
-  border-color: var(--holo-edge);
-  border-radius: 10px;
-  background: linear-gradient(to bottom, var(--holo-wash), transparent 60%);
-}
+:scope > .task-list { border-color: var(--holo-edge); }
 @supports (corner-shape: bevel) {
   :scope > .task-list { corner-shape: bevel; }
 }
 .task-list::before {
   content: 'Objectives';
   display: block; margin: 2px 0 4px;
-  font: 600 12px/16px var(--holo-face); text-transform: uppercase; letter-spacing: 0.14em;
-  color: color-mix(in srgb, var(--holo) 80%, var(--text-200));
+  font: 600 var(--fs-micro) / var(--lh-micro) var(--holo-face); text-transform: uppercase; letter-spacing: 0.14em;
+  color: color-mix(in srgb, var(--holo) 70%, var(--text-400));
 }
 .task-row[data-status="completed"] .task-glyph { color: var(--holo); }
-.task-row[data-status="in_progress"] .task-glyph { color: var(--holo); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--holo) 70%, transparent)); }
+.task-row[data-status="in_progress"] .task-glyph { color: var(--holo); }
 
 /* ---------- Motion: only with motion "full" (this mod's setting) and no reduced motion in the system ---------- */
 

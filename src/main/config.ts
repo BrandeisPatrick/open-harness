@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AppConfig, PermissionMode } from '../shared/types';
+import type { DreamingConfig } from '../shared/dreaming';
+import { DEFAULT_DREAMING } from './dreaming/names';
 import { applySettings, withoutSettings } from './settings';
 
 /** Bumped when stored values change meaning: v2 renamed the old "auto" (run everything) to "bypass" and "readonly" to "plan". */
@@ -57,6 +59,7 @@ export function defaultConfig(): AppConfig {
     },
     remote: { enabled: false, bind: 'lan', port: 0 },
     settingsTrusted: {},
+    dreaming: { ...DEFAULT_DREAMING },
   };
 }
 
@@ -141,6 +144,7 @@ function storedConfig(): AppConfig {
       mods: modsSection(d.mods, raw.mods),
       remote: { ...d.remote, ...(isRecord(raw.remote) ? raw.remote : {}) },
       settingsTrusted: isRecord(raw.settingsTrusted) ? (raw.settingsTrusted as Record<string, string>) : {},
+      dreaming: { ...d.dreaming, ...(isRecord(raw.dreaming) ? raw.dreaming : {}) },
     });
   } catch {
     return d;
@@ -156,10 +160,29 @@ export function loadConfig(): AppConfig {
   return normalizeConfig(applySettings(storedConfig()));
 }
 
+/** "HH:MM" (24-hour) for a time of day: "3:00" and "03:00" are fine, anything else is not. */
+export const TIME_OF_DAY_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+/** The dreaming section over the defaults, each field checked: a hand-edited or older file may have any of it. */
+export function normalizeDreaming(raw: unknown): DreamingConfig {
+  const d = DEFAULT_DREAMING;
+  const r = isRecord(raw) ? raw : {};
+  const t = typeof r.time === 'string' ? TIME_OF_DAY_RE.exec(r.time.trim()) : null;
+  const bool = (v: unknown, dflt: boolean) => (typeof v === 'boolean' ? v : dflt);
+  return {
+    daily: bool(r.daily, d.daily),
+    time: t ? `${t[1].padStart(2, '0')}:${t[2]}` : d.time,
+    mode: r.mode === 'auto' || r.mode === 'plan' || r.mode === 'approve' ? r.mode : d.mode,
+    skills: bool(r.skills, d.skills),
+    mods: bool(r.mods, d.mods),
+    memory: bool(r.memory, d.memory),
+  };
+}
+
 /** Keeps the legacy autoApprove flag consistent with permissionMode, and autoTitles a boolean (default on). */
 export function normalizeConfig(cfg: AppConfig): AppConfig {
   const mode: PermissionMode = (MODES as string[]).includes(cfg.permissionMode) ? cfg.permissionMode : 'ask';
-  return { ...cfg, permissionMode: mode, autoApprove: mode === 'bypass', autoTitles: cfg.autoTitles !== false, toolActivity: cfg.toolActivity === 'all' ? 'all' : 'summary' };
+  return { ...cfg, permissionMode: mode, autoApprove: mode === 'bypass', autoTitles: cfg.autoTitles !== false, toolActivity: cfg.toolActivity === 'all' ? 'all' : 'summary', dreaming: normalizeDreaming(cfg.dreaming) };
 }
 
 export function saveConfig(cfg: AppConfig): void {

@@ -490,6 +490,7 @@ export function createHistory(app: App, opts: HistoryOptions = {}): History {
     index,
     record: (sessionId, type, data) => write(String(sessionId), String(type), data),
     search,
+    read: (sessionId) => log.read(String(sessionId)),
     recovered: () => [...recoveredIds],
     recover,
     exportSession,

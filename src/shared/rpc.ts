@@ -12,6 +12,7 @@ import type { PowerEvents, PowerRpc, SchedulesEvents, SchedulesRpc } from './sch
 import type { SubagentsRpc } from './subagents';
 import type { RemoteEvents, RemoteRpc } from './remote';
 import type { SettingsEvents, SettingsRpc } from './settings-info';
+import type { DreamingEvents, DreamingRpc } from './dreaming';
 
 export interface CoreRpc {
   'commands.list': () => CommandInfo[];
@@ -28,5 +29,5 @@ export interface CoreEvents {
   'sessions:show': string;
 }
 
-export type RpcMethods = CoreRpc & ModsRpc & ContextRpc & HistoryRpc & ImagesRpc & SchedulesRpc & PowerRpc & SubagentsRpc & RemoteRpc & SettingsRpc;
-export type RpcEvents = CoreEvents & ModsEvents & SchedulesEvents & PowerEvents & RemoteEvents & SettingsEvents;
+export type RpcMethods = CoreRpc & ModsRpc & ContextRpc & HistoryRpc & ImagesRpc & SchedulesRpc & PowerRpc & SubagentsRpc & RemoteRpc & SettingsRpc & DreamingRpc;
+export type RpcEvents = CoreEvents & ModsEvents & SchedulesEvents & PowerEvents & RemoteEvents & SettingsEvents & DreamingEvents;

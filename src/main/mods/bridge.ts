@@ -106,6 +106,8 @@ export function toModTranscript(items: TranscriptItem[]): ModTranscriptItem[] {
         return { role: 'assistant', text: cut(i.text) };
       case 'tool':
         return { role: 'tool', text: cut(i.result), name: i.name, args: cut(i.args, 4000), ok: i.ok };
+      case 'proposal':
+        return { role: 'tool', text: cut(i.result), name: i.name, args: cut(i.args, 4000), ok: true };
       case 'plan':
         return { role: 'plan', text: cut(i.plan.markdown), name: i.plan.title };
       case 'artifact':

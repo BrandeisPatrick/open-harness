@@ -36,6 +36,9 @@ export function remoteItem(item: TranscriptItem): RemoteItem {
     }
     case 'tool':
       return { ...item, result: cut(item.result) };
+    // The page has no proposal cards: a dream's proposal reads as the tool call it was
+    case 'proposal':
+      return { role: 'tool', name: item.name, args: item.args, result: cut(item.result), ok: true };
     case 'artifact':
       return { role: 'artifact', artifact: artifact(item.artifact) };
     case 'image':

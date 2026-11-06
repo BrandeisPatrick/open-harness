@@ -2,6 +2,7 @@
 
 import type { ModsConfig } from './mods';
 import type { ImageInfo } from './images';
+import type { DreamingConfig } from './dreaming';
 
 import type { RpcEvents, RpcMethods } from './rpc';
 
@@ -189,6 +190,8 @@ export interface AppConfig {
   remote: { enabled: boolean; bind: 'localhost' | 'lan'; port: number };
   /** Project settings.json files the user agreed to apply, by working directory: the SHA-256 of the content that was approved */
   settingsTrusted: Record<string, string>;
+  /** Dreaming: once a day at a time (off by default), the mode, and what to look for (see src/shared/dreaming.ts) */
+  dreaming: DreamingConfig;
 }
 
 /** What an approval card's "always" answer covers: the rest of this session, or this working directory from now on */
@@ -273,6 +276,8 @@ export interface PlanInfo {
   markdown: string;
   status: 'proposed' | 'approved' | 'rejected';
   createdAt: number;
+  /** dream: a dream gathered its proposals into this plan; approving it applies them (no build run) */
+  kind?: 'dream';
 }
 
 export type AgentEvent =
@@ -323,10 +328,10 @@ export type AgentEvent =
   | { type: 'run_end'; reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan'; text?: string };
 
 /** Where a user-role message came from. */
-export type MessageOrigin = 'user' | 'queue' | 'schedule' | 'session' | 'remote' | 'mod' | 'command';
+export type MessageOrigin = 'user' | 'queue' | 'schedule' | 'session' | 'remote' | 'mod' | 'command' | 'dream';
 
 /** How a session came to be: started by the user, forked from another, spawned by an agent as a sub-session, or started by a schedule. */
-export type SessionOrigin = 'user' | 'fork' | 'spawn' | 'schedule';
+export type SessionOrigin = 'user' | 'fork' | 'spawn' | 'schedule' | 'dream';
 
 /** Run-time state of a session (only `unread` is stored). */
 export interface SessionStatus {
@@ -638,6 +643,8 @@ export interface SessionMeta {
   status?: SessionStatus;
   /** Set once the session was merged into another (its id) */
   mergedInto?: string;
+  /** A dream's session: the dream, and how many of its proposals wait for the user */
+  dream?: { id: string; waiting: number };
 }
 
 export interface SkillInfo {
@@ -663,7 +670,9 @@ export type TranscriptItem =
   /** A divider: everything above it was folded into the summary */
   | { role: 'compaction'; compaction: CompactionInfo }
   /** A show_image call is shown as the image itself instead of a tool row */
-  | { role: 'image'; image: ImageInfo };
+  | { role: 'image'; image: ImageInfo }
+  /** A dream's propose_* call is shown as its proposal's card (the window has the proposal from dreaming.list) */
+  | { role: 'proposal'; proposalId: string; name: string; args: string; result: string };
 
 export interface SessionsApi {
   list(): Promise<SessionMeta[]>;

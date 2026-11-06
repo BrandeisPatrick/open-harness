@@ -83,9 +83,12 @@ const SCALARS: Record<string, Check> = {
 };
 
 /** Sections a settings file may set field by field. */
-const SECTIONS: Record<'ollama' | 'portkey', Record<string, Check>> = {
+const timeOfDay: Check = (v) => (typeof v === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(v.trim()) ? null : `expected a time of day as "HH:MM" (24-hour), e.g. "03:00"${typeof v === 'string' ? '' : `, got ${kind(v)}`}`);
+
+const SECTIONS: Record<'ollama' | 'portkey' | 'dreaming', Record<string, Check>> = {
   ollama: { baseURL: str, model: str, numCtx: positiveInt, think: oneOf('auto', 'on', 'off') },
   portkey: { baseURL: str, apiKey: str, model: str, virtualKey: str, provider: str, providerApiKey: str, configId: str, contextWindow: positiveInt },
+  dreaming: { daily: bool, time: timeOfDay, mode: oneOf('auto', 'approve', 'plan'), skills: bool, mods: bool, memory: bool },
 };
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -209,7 +212,7 @@ function analyse(file: string, scope: Scope, opts: { trustedHash?: string; apply
       }
       continue;
     }
-    if (key === 'ollama' || key === 'portkey') {
+    if (key === 'ollama' || key === 'portkey' || key === 'dreaming') {
       if (!isRecord(value)) {
         bad(key, `expected an object of ${key} fields, got ${kind(value)}`);
         continue;

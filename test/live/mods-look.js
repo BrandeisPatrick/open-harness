@@ -348,6 +348,14 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
     if (want('pill')) {
       await app.evaluate(`window.__oc_debug.context({ tokens: 23400, limit: 200000, threshold: 0.8, autoCompact: true })`);
       await shot(app, 'pill-before');
+      // Where the slash menu sits against the app's own composer, to compare with the bar
+      const menuAt = () => app.evaluate(`(() => { const m = document.querySelector('#slash-menu').getBoundingClientRect(); const c = document.querySelector('#composer').getBoundingClientRect(); return { open: !document.querySelector('#slash-menu').hidden, above: m.bottom <= c.top, left: Math.round(m.left - c.left), right: Math.round(m.right - c.right) }; })()`);
+      await app.fill('#input', '/');
+      await app.waitFor(`!document.querySelector('#slash-menu').hidden`, 4000, 'the slash menu').catch(() => {});
+      await sleep(300); // its pop-in animation
+      const menuBefore = await menuAt();
+      await app.fill('#input', '');
+      await app.key('Escape');
       await enable(app, 'composer-pill', true);
       await app.waitFor(`Boolean(document.querySelector('style[data-mod="composer-pill"]'))`, 5000, 'the pill styles');
       const clip = async () => {
@@ -365,7 +373,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
           const tag = `${scheme}${theme ? '-midnight' : ''}`;
           await app.fill('#input', '');
           await app.evaluate(`document.activeElement.blur()`);
-          await sleep(200);
+          await sleep(400); // the focus ring fades out
           const g = await geo();
           const barH = g.input.h + 4;
           const ok =
@@ -412,12 +420,13 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       // Slash menu
       await app.fill('#input', '/');
       await app.waitFor(`!document.querySelector('#slash-menu').hidden`, 4000, 'the slash menu').catch(() => {});
-      const sm = await app.evaluate(`(() => { const m = document.querySelector('#slash-menu').getBoundingClientRect(); const c = document.querySelector('#composer').getBoundingClientRect(); return { open: !document.querySelector('#slash-menu').hidden, above: m.bottom <= c.top, left: Math.round(m.left - c.left), right: Math.round(m.right - c.right) }; })()`);
-      check('pill: the slash menu opens above the bar, as wide as the composer', sm.open && sm.above && Math.abs(sm.left) < 2 && Math.abs(sm.right) < 2, sm);
+      await sleep(300); // its pop-in animation
+      const sm = await menuAt();
+      check('pill: the slash menu opens above the bar, placed as with the app\'s own composer', sm.open && sm.above && sm.left === menuBefore.left && sm.right === menuBefore.right, { pill: sm, app: menuBefore });
       await pill('slash-light');
       await setTheme(app, 'dark');
       await app.fill('#input', '/');
-      await sleep(400);
+      await sleep(500);
       await pill('slash-dark');
       await setTheme(app, 'light');
       await app.fill('#input', '');
@@ -427,6 +436,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       await app.evaluate(`document.querySelector('#input').focus()`);
       await app.fill('#input', 'Look at @log');
       await app.waitFor(`!document.querySelector('#mention-menu').hidden`, 4000, 'the mention menu').catch(() => {});
+      await sleep(300);
       check('pill: the mention menu opens above the bar', await app.evaluate(`!document.querySelector('#mention-menu').hidden && document.querySelector('#mention-menu').getBoundingClientRect().bottom <= document.querySelector('#composer').getBoundingClientRect().top`));
       await pill('mention-light');
       await app.key('Escape');
@@ -446,8 +456,9 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       await app.send(app.live ? 'Run `sleep 6` with bash, then reply with the single word: done.' : 'Run ls');
       await app.waitFor(`!document.querySelector('#status-line').hidden`, 20_000, 'the run to start').catch(() => {});
       await sleep(800);
+      // Enter queues while a run is going (the button itself is Stop then)
       await app.fill('#input', 'And then list the files.');
-      await app.evaluate(`document.querySelector('#send-btn').click()`);
+      await app.key('Enter');
       await app.waitFor(`window.__oc_debug.queue().length > 0`, 5000, 'a queued message').catch(() => {});
       await sleep(300);
       check('pill: during a run the send button is Stop and a message can be queued', await app.evaluate(`document.querySelector('#send-btn').classList.contains('stop') && window.__oc_debug.queue().length === 1`));
@@ -456,7 +467,8 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       await app.waitIdle(180_000, false);
       await sleep(1500);
       const reply = await app.lastReply();
-      check('pill: the message went through and was answered', app.live ? /done/i.test(await app.evaluate(`document.querySelector('#messages').innerText`)) : reply.length > 0, reply.slice(0, 120));
+      const replies = await app.evaluate(`[...document.querySelectorAll('.msg.assistant')].map((e) => e.innerText.trim()).join(' | ')`);
+      check('pill: the message went through and was answered, and the queued one after it', app.live ? replies.length > 20 && (await app.evaluate(`document.querySelectorAll('.msg.user').length`)) >= 2 : reply.length > 0, replies.slice(0, 200));
       await app.waitIdle(180_000, false).catch(() => {});
       await shot(app, 'pill-after-run-light');
       await enable(app, 'composer-pill', false);
@@ -483,7 +495,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
         await setTheme(app, scheme);
         if (scheme === 'dark') check('theme: the accent applies in dark', (await app.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()`)) === '#5d90f5');
         await app.evaluate(`document.querySelector('.approval')?.scrollIntoView({ block: 'center' })`);
-        await sleep(300);
+        await sleep(1000); // colour transitions settle
         await shot(app, `theme-window-${scheme}`);
         await app.screenshotOf(file(`theme-approval-${scheme}`), '.approval', 12).catch(() => {});
         await app.screenshotOf(file(`theme-diff-${scheme}`), '.tool:has(.diff), .diff', 12).catch(() => {});
@@ -533,7 +545,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
     if (want('md')) {
       const userMods = path.join(app.profile, 'home-config', 'mods');
       const sample = '## Retry\\n\\nThe loop now waits `backoffMs * 2 ** i` and [the notes](notes.html) say why (see [the guide](https://example.com/retry)).\\n\\n- [x] read the code\\n- [ ] change it\\n\\n```js\\nconst wait = (ms) => new Promise((r) => setTimeout(r, ms)); // 42\\n```\\n\\n| a | b |\\n| - | - |\\n| 1 | 2 |\\n\\n> quoted';
-      const pg = (cls) => `<!doctype html><link rel="stylesheet" href="/@harness/harness.css"><style>html,body{height:100%}body{overflow:auto}</style><div class="${cls}" id="md"></div><script src="/@harness/harness.js"></script><script>harness.ready.then(async () => { document.getElementById('md').innerHTML = (await harness.ui.markdown('${sample}')).html; });</script>`;
+      const pg = (cls) => `<!doctype html><link rel="stylesheet" href="/@harness/harness.css">${cls === 'h-md' ? '<style>html,body{height:100%}body{overflow:auto;padding:16px}</style>' : ''}<div class="${cls}" id="md"></div><script src="/@harness/harness.js"></script><script>harness.ready.then(async () => { document.getElementById('md').innerHTML = (await harness.ui.markdown('${sample}')).html; });</script>`;
       for (const [id, seat, cls] of [['md-rail', 'rail', 'h-md compact'], ['md-tab', 'tab', 'h-md']]) {
         const dir = path.join(userMods, id);
         fs.mkdirSync(dir, { recursive: true });

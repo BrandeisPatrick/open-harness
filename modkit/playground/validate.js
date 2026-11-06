@@ -12,6 +12,7 @@
   var PERMISSIONS = ['session:read', 'session:send', 'session:control', 'sessions:read', 'model', 'skills:read', 'config:read', 'config:write', 'schedules', 'remote', 'network'];
   var SEATS = ['rail', 'tab', 'composer', 'background'];
   var RESERVED_SEATS = ['transcript', 'status', 'sidebar'];
+  var LOOK_TARGETS = ['conversation', 'composer'];
   var SETTING_TYPES = ['boolean', 'string', 'number', 'select'];
   // src/renderer/icons.ts, plus the names docs/mods.md lists that icons.ts does not have yet (gauge, message, clock)
   var ICONS = ['panel-left', 'plus', 'search', 'settings', 'trash', 'git-branch', 'globe', 'arrow-up', 'arrow-down', 'square', 'chevron-right', 'chevron-down', 'copy', 'check', 'refresh', 'arrow-left', 'arrow-right', 'external-link', 'x', 'folder', 'terminal', 'file', 'file-text', 'file-plus', 'pencil', 'list', 'search-code', 'sparkles', 'eye', 'mouse-pointer', 'keyboard', 'scroll', 'camera', 'code', 'circle-alert', 'info', 'shield-check', 'zap', 'more', 'lightbulb', 'files', 'file-check', 'clipboard', 'shield-off', 'triangle-alert', 'file-diff', 'undo', 'paperclip', 'image', 'plug', 'fold', 'rotate-ccw', 'list-checks', 'circle', 'arrow-filled', 'circle-check', 'server', 'download', 'gauge', 'message', 'clock'];
@@ -74,7 +75,7 @@
     }
 
     var c = m.contributes;
-    if (c === undefined) { warn('contributes nothing: no views, styles, commands or settings'); return problems; }
+    if (c === undefined) { warn('contributes nothing: no views, styles, looks, commands or settings'); return problems; }
     if (!c || typeof c !== 'object' || Array.isArray(c)) { err('contributes must be an object'); return problems; }
 
     var viewIds = {};
@@ -104,6 +105,28 @@
         if (typeof s !== 'string') err('styles: every entry must be a file name');
         else { checkFile(s, 'styles'); if (!/\.css$/i.test(s)) warn('styles "' + s + '" is not a .css file'); }
       });
+    }
+
+    if (c.looks !== undefined) {
+      if (!Array.isArray(c.looks)) err('contributes.looks must be an array');
+      else {
+        var lookIds = {};
+        c.looks.forEach(function (l, i) {
+          var at = 'looks[' + i + ']: ';
+          if (!l || typeof l !== 'object') { err(at + 'must be an object'); return; }
+          if (typeof l.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(l.id)) err(at + 'id must be lower-case letters, digits and -');
+          else if (lookIds[l.id]) err(at + 'id "' + l.id + '" is used twice');
+          else lookIds[l.id] = true;
+          if (!isStr(l.title)) err(at + 'title is required');
+          if (typeof l.target !== 'string') err(at + 'target must be one of ' + LOOK_TARGETS.join(', '));
+          else if (LOOK_TARGETS.indexOf(l.target) < 0) warn(at + 'target "' + l.target + '" is not a region this version knows; the look is ignored');
+          if (!Array.isArray(l.styles) || !l.styles.length) err(at + 'styles must be a non-empty array of CSS files');
+          else l.styles.forEach(function (f) {
+            if (typeof f !== 'string') err(at + 'styles: every entry must be a file name');
+            else { checkFile(f, 'looks[' + i + '].styles'); if (!/\.css$/i.test(f)) err(at + 'styles "' + f + '" is not a .css file'); }
+          });
+        });
+      }
     }
 
     if (c.commands !== undefined) {
@@ -144,10 +167,10 @@
     }
 
     var views = Array.isArray(c.views) ? c.views.length : 0;
-    var styles = Array.isArray(c.styles) ? c.styles.length : 0;
+    var styles = (Array.isArray(c.styles) ? c.styles.length : 0) + (Array.isArray(c.looks) ? c.looks.length : 0);
     var cmds = Array.isArray(c.commands) ? c.commands.length : 0;
     var sets = Array.isArray(c.settings) ? c.settings.length : 0;
-    if (!views && !styles && !cmds && !sets) warn('contributes nothing: no views, styles, commands or settings');
+    if (!views && !styles && !cmds && !sets) warn('contributes nothing: no views, styles, looks, commands or settings');
     return problems;
   }
 
@@ -163,5 +186,5 @@
     return out;
   }
 
-  return { validateManifest: validateManifest, defaultSettings: defaultSettings, PERMISSIONS: PERMISSIONS, SEATS: SEATS, ICONS: ICONS };
+  return { validateManifest: validateManifest, defaultSettings: defaultSettings, PERMISSIONS: PERMISSIONS, SEATS: SEATS, LOOK_TARGETS: LOOK_TARGETS, ICONS: ICONS };
 });

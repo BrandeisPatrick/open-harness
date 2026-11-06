@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  /* The whole window is this page: no padding, nothing to scroll, nothing to click (the seat takes no pointer events). */
+  html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  body { background: var(--bg-100); }
+  canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="/@harness/harness.js"></script>
+<script>
+  // Hyperspace: a starfield behind the app that goes to lightspeed while the agent works.
+  //
+  // What it does:
+  //   idle        the stars drift slowly towards you; nearer ones move against the far ones as the pointer moves
+  //               (parallax, from the `pointer` event)
+  //   run.started the stars stretch into streaks from the vanishing point and hold as a tunnel while the run lasts
+  //   tool.started a small pulse: a short surge and a ring of light at the vanishing point
+  //   run.ended   the streaks brake to points with a short flash, and the field settles
+  //
+  // The model: each star is a point (x, y, z) in front of the viewer, drawn at x / z, y / z from the vanishing
+  // point. Flying is z shrinking; a streak is the line between where a star is and where it was a moment ago, so
+  // streaks come out of the physics rather than being drawn as a separate effect. Depth gives the layers: far stars
+  // are small, dim and barely move, near ones are bright and move most with the pointer.
+  //
+  // What keeps it cheap: a timer between frames (not a requestAnimationFrame loop at the display's rate), 10 frames
+  // a second while drifting and 30 only while the stars are streaking, a canvas of at most 1.5 device pixels, a few
+  // hundred stars drawn as rectangles and lines in a handful of batched strokes, nothing at all while the window or
+  // the view is hidden, and one still frame when the system asks for reduced motion.
+  //
+  // What keeps it readable: the app lays its own surfaces over this page (Settings, Appearance, Dim), and every
+  // colour here is kept soft: dark space under the dark scheme, a pale sky with ink-coloured stars under the light
+  // one, and the glow colour (this mod's `glow` setting) only in the streaks, the pulse and a faint nebula.
+
+  const root = document.documentElement;
+  const canvas = document.getElementById('c');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /** The glow colours, for the dark scheme and for the light one (darker, so they show on a pale background). */
+  const GLOW = {
+    blue: { dark: [92, 200, 255], light: [16, 104, 176] },
+    green: { dark: [88, 230, 150], light: [22, 122, 70] },
+    red: { dark: [255, 98, 98], light: [178, 38, 30] },
+    purple: { dark: [184, 146, 255], light: [104, 64, 196] },
+    amber: { dark: [255, 184, 82], light: [150, 90, 0] },
+  };
+
+  let settings = { glow: 'blue', motion: 'full' };
+  let visible = true;
+  let running = false;
+
+  // ---------- colours ----------
+
+  // A 1 × 1 canvas turns any CSS colour (hex, rgb(), color-mix(), …) into RGB.
+  const probe = document.createElement('canvas');
+  probe.width = probe.height = 1;
+  const pctx = probe.getContext('2d', { willReadFrequently: true });
+  function rgb(cssColour, fallback) {
+    if (!cssColour) return fallback;
+    pctx.clearRect(0, 0, 1, 1);
+    pctx.fillStyle = '#010203';
+    pctx.fillStyle = cssColour;
+    pctx.fillRect(0, 0, 1, 1);
+    const d = pctx.getImageData(0, 0, 1, 1).data;
+    return d[3] ? [d[0], d[1], d[2]] : fallback;
+  }
+  const token = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+  const css = (c, a = 1) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const mix = (a, b, t) => [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t));
+
+  let pal = null;
+  function readPalette() {
+    const dark = root.getAttribute('data-theme') === 'dark' || (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const page = rgb(token('--bg-100'), dark ? [38, 38, 36] : [250, 249, 245]);
+    const glow = (GLOW[settings.glow] || GLOW.blue)[dark ? 'dark' : 'light'];
+    // Dark: the page's colour pulled towards deep blue-black space. Light: the page's colour with a cool cast.
+    const space = dark ? mix(page, [6, 9, 20], 0.72) : mix(page, [226, 234, 246], 0.45);
+    const ink = dark ? [232, 240, 255] : [28, 40, 66];
+    pal = { dark, space, ink, glow, flash: dark ? mix([255, 255, 255], glow, 0.25) : [255, 255, 255] };
+  }
+
+  /** The still layers, painted once with CSS: the space colour and a faint nebula in the glow colour. */
+  function paintBody() {
+    if (!pal) return;
+    const g = pal.glow;
+    const a = pal.dark ? 0.1 : 0.07;
+    document.body.style.background = [
+      `radial-gradient(60% 45% at 78% 18%, ${css(g, a)}, ${css(g, 0)} 70%)`,
+      `radial-gradient(50% 50% at 12% 88%, ${css(mix(g, pal.ink, 0.4), a * 0.7)}, ${css(g, 0)} 70%)`,
+      css(pal.space),
+    ].join(', ');
+  }
+
+  // ---------- the field ----------
+
+  let ctx = null;
+  let W = 0, H = 0;
+  function fit() {
+    const s = Math.min(window.devicePixelRatio || 1, 1.5);
+    W = Math.max(1, window.innerWidth);
+    H = Math.max(1, window.innerHeight);
+    const cw = Math.max(1, Math.round(W * s)), ch = Math.max(1, Math.round(H * s));
+    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+    ctx.setTransform(s, 0, 0, s, 0, 0); // draw in CSS pixels
+  }
+
+  // A seeded random, so the field looks the same each time the view loads (and the still frame is a composed one).
+  function rand(seed) {
+    let x = seed >>> 0 || 1;
+    return () => ((x = (x * 1664525 + 1013904223) >>> 0) / 4294967296);
+  }
+  const rnd = rand(42);
+
+  const Z_FAR = 1, Z_NEAR = 0.04;
+  let stars = [];
+  function placeStar(s, anywhere) {
+    // Spread over a square a little larger than the view at the far plane, avoiding the very centre (where streaks
+    // would bunch into a blot).
+    let x, y;
+    do { x = rnd() * 2.4 - 1.2; y = rnd() * 2.4 - 1.2; } while (x * x + y * y < 0.004);
+    s.x = x; s.y = y;
+    s.z = anywhere ? Z_NEAR + rnd() * (Z_FAR - Z_NEAR) : Z_FAR - rnd() * 0.08;
+    s.pz = s.z;
+    s.tone = rnd(); // brightness and size, so a few stars stand out
+    s.tint = rnd() < 0.14; // some stars take the glow colour
+  }
+  function makeStars() {
+    const n = Math.round(Math.min(320, Math.max(120, (W * H) / 5200)));
+    stars = Array.from({ length: n }, () => { const s = {}; placeStar(s, true); return s; });
+  }
+
+  // Motion state: speed (z per second), the pulse of a tool call, the flash of a stop, the camera (parallax).
+  const IDLE = 0.018;
+  let speed = IDLE, pulse = 0, flash = 0, ring = 0;
+  let cam = { x: 0, y: 0 }, camTarget = { x: 0, y: 0 };
+  const calm = () => settings.motion === 'calm';
+  const warpTarget = () => (running ? (calm() ? 0.07 : 0.95) : IDLE);
+  /** Streaking: fast enough that a frame draws lines, so it needs 30 frames a second to look smooth. */
+  const streaking = () => speed > 0.09 || flash > 0.02 || ring > 0.02;
+
+  function step(dt) {
+    const target = warpTarget();
+    // Ease the speed: a jump takes about half a second, the brake a little less.
+    const k = target > speed ? 3.2 : 4.5;
+    speed += (target - speed) * (1 - Math.exp(-dt * k));
+    const surge = pulse * (running && !calm() ? 0.35 : 0.03);
+    pulse *= Math.exp(-dt * 5);
+    flash *= Math.exp(-dt * 5.5);
+    ring *= Math.exp(-dt * 3.2);
+    // The camera follows the pointer with a short lag.
+    cam.x += (camTarget.x - cam.x) * (1 - Math.exp(-dt * 4));
+    cam.y += (camTarget.y - cam.y) * (1 - Math.exp(-dt * 4));
+    const v = speed + surge;
+    // A streak is as long as the distance travelled in this many seconds (capped, so a slow frame is not a smear).
+    const trail = Math.min(0.12, 0.05 + v * 0.06);
+    for (const s of stars) {
+      s.z -= v * dt;
+      s.pz = Math.min(Z_FAR, s.z + v * trail);
+      if (s.z < Z_NEAR) placeStar(s, false);
+    }
+  }
+
+  function draw() {
+    if (!ctx || !pal) return;
+    ctx.clearRect(0, 0, W, H);
+    const f = Math.max(W, H) * 0.5;
+    const cx = W / 2, cy = H * 0.46;
+    const dots = [[], [], []]; // far, mid, near: three batches of rectangles
+    const lines = [[], []]; // plain and glow streaks
+    for (const s of stars) {
+      // Parallax: the camera moves sideways, so near stars (small z) shift most.
+      const x = cx + ((s.x - cam.x) / s.z) * f, y = cy + ((s.y - cam.y) / s.z) * f;
+      if (x < -40 || x > W + 40 || y < -40 || y > H + 40) continue;
+      const px = cx + ((s.x - cam.x) / s.pz) * f, py = cy + ((s.y - cam.y) / s.pz) * f;
+      const len = Math.hypot(x - px, y - py);
+      const near = 1 - s.z; // 0 far … 1 near
+      if (len > 1.5) lines[s.tint ? 1 : 0].push(px, py, x, y, near);
+      else dots[near > 0.66 ? 2 : near > 0.33 ? 1 : 0].push(x, y, s.tone);
+    }
+    const glowBoost = Math.min(1, pulse * 0.6 + flash);
+    // Dots: far ones faint and small, near ones brighter. Light scheme: ink at lower alpha.
+    const base = pal.dark ? [0.32, 0.55, 0.85] : [0.16, 0.26, 0.4];
+    const size = [0.9, 1.3, 1.8];
+    dots.forEach((list, layer) => {
+      if (!list.length) return;
+      ctx.fillStyle = css(pal.ink, base[layer] + glowBoost * 0.15);
+      ctx.beginPath();
+      for (let i = 0; i < list.length; i += 3) {
+        const r = size[layer] * (0.75 + list[i + 2] * 0.5);
+        ctx.rect(list[i] - r / 2, list[i + 1] - r / 2, r, r);
+      }
+      ctx.fill();
+    });
+    // Streaks: a line per star, batched by colour; the near half drawn again a little wider.
+    ctx.lineCap = 'round';
+    lines.forEach((list, tinted) => {
+      if (!list.length) return;
+      const colour = tinted ? pal.glow : mix(pal.ink, pal.glow, pal.dark ? 0.45 : 0.4);
+      for (const pass of [0, 1]) {
+        ctx.lineWidth = pass ? 1.6 : 0.9;
+        ctx.strokeStyle = css(colour, (pal.dark ? 0.55 : 0.4) * (pass ? 0.9 : 0.6) + glowBoost * 0.2);
+        ctx.beginPath();
+        for (let i = 0; i < list.length; i += 5) {
+          if ((list[i + 4] > 0.5) !== !!pass) continue;
+          ctx.moveTo(list[i], list[i + 1]);
+          ctx.lineTo(list[i + 2], list[i + 3]);
+        }
+        ctx.stroke();
+      }
+    });
+    // The pulse of a tool call: a soft ring of light opening from the vanishing point.
+    if (ring > 0.02) {
+      const r = (1 - ring) * Math.max(W, H) * 0.35 + 8;
+      const g = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r);
+      g.addColorStop(0, css(pal.glow, 0));
+      g.addColorStop(0.85, css(pal.glow, ring * (pal.dark ? 0.16 : 0.12)));
+      g.addColorStop(1, css(pal.glow, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+    // The flash of the brake: the whole field lights up for a moment.
+    if (flash > 0.02) {
+      ctx.fillStyle = css(pal.flash, flash * (pal.dark ? 0.2 : 0.35));
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // ---------- running the loop ----------
+
+  let timer = 0, raf = 0, last = 0, started = false;
+  const shown = () => visible && document.visibilityState !== 'hidden';
+  const animate = () => started && shown() && !reduced.matches;
+
+  function tick() {
+    timer = 0;
+    raf = requestAnimationFrame((now) => {
+      raf = 0;
+      if (!animate()) return;
+      const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
+      last = now;
+      step(dt);
+      draw();
+      timer = setTimeout(tick, 1000 / (streaking() ? 30 : 10));
+    });
+  }
+
+  /** Starts or stops the loop to match what should happen now; a stopped loop keeps its last frame on screen. */
+  function sync() {
+    if (animate()) {
+      if (!timer && !raf) { last = 0; tick(); }
+    } else {
+      clearTimeout(timer); cancelAnimationFrame(raf); timer = raf = 0;
+      if (started && shown()) {
+        // Reduced motion: a still field, no streaks, no flash.
+        speed = IDLE; pulse = flash = ring = 0;
+        step(0);
+        draw();
+      }
+    }
+  }
+
+  /** A faster frame rate the moment something starts, rather than at the next 10-a-second tick. */
+  function wake() {
+    if (!animate()) return;
+    if (timer) { clearTimeout(timer); timer = 0; }
+    if (!raf) tick();
+  }
+
+  function setRunning(on) {
+    if (on === running) return;
+    running = on;
+    if (!on && !calm()) flash = 1;
+    wake();
+  }
+
+  // ---------- the app ----------
+
+  let resizeQueued = false;
+  window.addEventListener('resize', () => {
+    if (resizeQueued || !started) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => {
+      resizeQueued = false;
+      fit();
+      if (!animate()) draw();
+    });
+  });
+  document.addEventListener('visibilitychange', sync);
+  reduced.addEventListener('change', sync);
+
+  // harness.js applies the new tokens in its own theme.changed handler, which runs before this one.
+  harness.on('theme.changed', () => { readPalette(); paintBody(); if (!animate()) draw(); });
+  harness.on('visibility.changed', (v) => { visible = !(v && v.visible === false); sync(); });
+  harness.on('settings.changed', (s) => { settings = Object.assign({}, settings, s || {}); readPalette(); paintBody(); if (!animate()) draw(); });
+  // Fractions of the window: the camera moves a little against the pointer, so the field tilts towards it.
+  harness.on('pointer', (p) => {
+    if (!p || reduced.matches) return;
+    camTarget = { x: (p.x - 0.5) * 0.09, y: (p.y - 0.5) * 0.06 };
+  });
+  // The session on screen: these need session:read, which is all this mod asks for.
+  harness.on('run.started', () => setRunning(true));
+  harness.on('run.ended', () => setRunning(false));
+  harness.on('tool.started', () => { pulse = 1; ring = calm() ? 0 : 1; wake(); });
+  harness.on('session.changed', (s) => setRunning(!!(s && s.running)));
+
+  harness.ready.then(async (info) => {
+    visible = info.visible !== false;
+    try { settings = Object.assign({}, settings, info.settings || {}, await harness.settings.get()); } catch (e) { /* the defaults */ }
+    ctx = canvas.getContext('2d');
+    readPalette();
+    paintBody();
+    fit();
+    makeStars();
+    try { running = !!(await harness.session.get()).running; } catch (e) { running = false; }
+    if (running) speed = warpTarget();
+    started = true;
+    sync();
+    if (!animate()) draw();
+  });
+
+</script>
+</body>
+</html>

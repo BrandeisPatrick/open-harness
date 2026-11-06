@@ -644,6 +644,7 @@ async function readyPage(hello = HELLO) {
     scheduled: { seat: 'tab', permissions: ['schedules', 'session:control'] },
     backgrounds: { seat: 'background', views: ['aurora', 'constellation', 'grid', 'dusk'], permissions: [] },
     'theme-midnight': { styles: ['theme.css'], permissions: [] },
+    hyperspace: { seat: 'background', views: ['starfield'], looks: { holo: 'conversation', cockpit: 'composer' }, permissions: ['session:read'] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
   check('mods/ holds the bundled mods', same(mods.map((m) => m.folder).sort(), Object.keys(EXPECTED).sort()), mods.map((m) => m.folder));
@@ -658,6 +659,8 @@ async function readyPage(hello = HELLO) {
     else if (exp.seat === 'tab') check(`${m.folder}: one tab view, with no rail-only fields`, views.length === 1 && views[0].seat === 'tab' && views[0].order === undefined && views[0].maxHeight === undefined, views);
     else check(`${m.folder}: one rail view at order ${exp.order}`, views.length === 1 && views[0].seat === 'rail' && views[0].order === exp.order, views);
     check(`${m.folder}: permissions`, same((man.permissions || []).slice().sort(), (exp.permissions || []).slice().sort()), man.permissions);
+    const looks = (man.contributes && man.contributes.looks) || [];
+    check(`${m.folder}: looks`, same(looks.map((l) => `${l.id}:${l.target}`), Object.entries(exp.looks || {}).map(([id, t]) => `${id}:${t}`)) && looks.every((l) => l.styles.every((f) => fs.existsSync(path.join(m.dir, f)))), looks);
 
     // Every harness call and event in the page is allowed by the manifest
     const granted = new Set(man.permissions || []);

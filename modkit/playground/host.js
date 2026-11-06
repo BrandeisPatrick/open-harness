@@ -28,7 +28,7 @@
 
   /** Event → the permission a view needs to receive it. */
   var EVENT_PERMS = {
-    'theme.changed': null, 'settings.changed': null, 'visibility.changed': null, command: null, 'session.switched': null,
+    'theme.changed': null, 'settings.changed': null, 'visibility.changed': null, command: null, 'session.switched': null, pointer: null,
     'session.changed': 'session:read', 'related.changed': 'session:read', 'run.started': 'session:read', 'run.ended': 'session:read', 'message.user': 'session:read',
     'message.assistant': 'session:read', 'message.delta': 'session:read', 'tool.started': 'session:read', 'tool.ended': 'session:read',
     'tasks.changed': 'session:read', 'plan.changed': 'session:read', 'outputs.changed': 'session:read', 'context.changed': 'session:read',

@@ -1,0 +1,90 @@
+/*
+ * Cockpit: a look for the chat bar (contributes.looks, target "composer").
+ *
+ * The app wraps this file (after glow.css) in @scope (#chatbar) { … }: the rules reach the chat bar and nothing
+ * else, and :scope is #chatbar. The attributes on it are the same as on the conversation's root: data-scheme,
+ * data-running, data-mode (the permission mode) and data-set-glow / data-set-motion.
+ *
+ * The box you type in becomes a console: cut corners, an edge and corner marks in the glow colour, a status light
+ * that pulses while the agent works, the model, mode and context as instrument readouts, and a send button that
+ * lights up when there is something to send. The field itself keeps the app's type and size.
+ *
+ * Written against the stable hooks of docs/mods.md (#composer, #input, #send-btn, #attach-btn, #model-btn,
+ * #mode-btn, #context-meter, #composer-foot); it does not depend on how they are laid out.
+ */
+
+/* ---------- The console ---------- */
+
+#composer {
+  --mark: color-mix(in srgb, var(--holo) 70%, transparent);
+  border-color: var(--holo-edge);
+  background-color: color-mix(in srgb, var(--holo) 4%, var(--bg-000));
+  /* Corner marks: two short strokes at each corner */
+  background-image:
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(to bottom, var(--holo-wash), transparent 70%);
+  background-size: 14px 1.5px, 1.5px 10px, 14px 1.5px, 1.5px 10px, 14px 1.5px, 1.5px 10px, 14px 1.5px, 1.5px 10px, 100% 100%;
+  background-position: 10px 0, 0 8px, calc(100% - 10px) 0, 100% 8px, 10px 100%, 0 calc(100% - 8px), calc(100% - 10px) 100%, 100% calc(100% - 8px), 0 0;
+  background-repeat: no-repeat;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--holo) 8%, transparent), 0 8px 28px -18px var(--holo);
+}
+@supports (corner-shape: bevel) {
+  #composer { corner-shape: bevel; border-radius: 12px; }
+}
+#composer:focus-within {
+  border-color: color-mix(in srgb, var(--holo) 75%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--holo) 22%, transparent), 0 8px 30px -14px var(--holo);
+}
+#input::placeholder { color: color-mix(in srgb, var(--holo) 35%, var(--text-400)); }
+#input { caret-color: var(--holo); }
+
+/* The status light, top right: steady when idle, pulsing while a run is in progress */
+#composer::after {
+  content: '';
+  position: absolute; top: 7px; right: 9px; width: 5px; height: 5px; border-radius: 50%;
+  background: color-mix(in srgb, var(--holo) 45%, transparent);
+  pointer-events: none;
+}
+:scope[data-running="true"] #composer::after { background: var(--holo); box-shadow: 0 0 6px var(--holo); }
+:scope[data-running="true"] #composer { border-color: color-mix(in srgb, var(--holo) 65%, transparent); }
+
+/* The permission mode shows in the console's edge too: modes that act without asking get a warmer one */
+:scope[data-mode="bypass"] #composer { border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+:scope[data-mode="auto"] #composer::after { background: var(--holo); }
+
+/* ---------- Readouts: the model, the mode and the context ---------- */
+
+/* The condensed face with a little tracking (not upper case: a model's name has to fit as it is) */
+#model-btn, #mode-btn, #context-meter {
+  font-family: var(--holo-face); font-weight: 600; font-size: 14px;
+  letter-spacing: 0.03em;
+  border-color: var(--holo-faint);
+}
+#model-btn, #context-meter { color: color-mix(in srgb, var(--holo) 50%, var(--text-200)); }
+#model-btn:hover, #mode-btn:hover, #context-meter:hover { background: var(--holo-wash); }
+#context-meter { font-variant-numeric: tabular-nums; }
+#composer-foot { border-top-color: var(--holo-faint); }
+
+/* ---------- Buttons ---------- */
+
+#attach-btn { color: color-mix(in srgb, var(--holo) 55%, var(--text-400)); }
+#attach-btn:hover { color: var(--holo); background: var(--holo-wash); }
+
+#send-btn { background: var(--holo); color: var(--holo-on); box-shadow: 0 0 12px -2px var(--holo); }
+@supports (corner-shape: bevel) {
+  #send-btn { corner-shape: bevel; border-radius: 9px; }
+}
+#send-btn:hover { background: color-mix(in srgb, var(--holo) 85%, var(--text-100)); }
+#send-btn:disabled { background: transparent; color: var(--holo); box-shadow: inset 0 0 0 1px var(--holo-edge); opacity: 0.6; }
+/* While a run is in progress the button stops it: it keeps the app's own stop colours */
+#send-btn.stop { background: var(--text-100); color: var(--bg-100); box-shadow: none; }
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  :scope[data-running="true"]:not([data-set-motion="calm"]) #composer::after { animation: cockpit-blink 1.2s ease-in-out infinite; }
+}
+@keyframes cockpit-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }

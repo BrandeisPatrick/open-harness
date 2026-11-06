@@ -1,0 +1,24 @@
+{
+  "protocol": 1,
+  "id": "hyperspace",
+  "name": "Hyperspace",
+  "version": "1.0.0",
+  "description": "A space-opera set: a starfield that jumps to lightspeed while the agent works, a holographic conversation and a cockpit chat bar. Pick it in Settings, Appearance, Looks.",
+  "author": "Open Harness",
+  "license": "MIT",
+  "icon": "sparkles",
+  "permissions": ["session:read"],
+  "contributes": {
+    "views": [
+      { "id": "starfield", "title": "Hyperspace", "entry": "hyperspace.html", "seat": "background" }
+    ],
+    "looks": [
+      { "id": "holo", "title": "Holo terminal", "target": "conversation", "styles": ["glow.css", "holo.css"], "description": "Transmission panels for your messages, instrument readouts for tool calls, code as instrument panels." },
+      { "id": "cockpit", "title": "Cockpit", "target": "composer", "styles": ["glow.css", "cockpit.css"], "description": "The chat bar as a console, with a status light while the agent works." }
+    ],
+    "settings": [
+      { "key": "glow", "type": "select", "title": "Glow", "description": "The colour of the streaks, the edges and the lights, in the conversation, the chat bar and the background.", "options": ["blue", "green", "red", "purple", "amber"], "default": "blue" },
+      { "key": "motion", "type": "select", "title": "Motion", "description": "Full jumps to lightspeed while the agent works; calm only speeds the stars up a little. With reduced motion turned on in the system everything holds still.", "options": ["full", "calm"], "default": "full" }
+    ]
+  }
+}

@@ -3,27 +3,27 @@
 
 :root {
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
-  --font-display: ui-serif, "New York", Georgia, serif;
+  --font-display: var(--font);
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --bg-000: #ffffff;
-  --bg-100: #faf9f5;
-  --bg-200: #f5f4ee;
-  --bg-300: #f0eee6;
-  --bg-400: #e8e6dc;
-  --text-100: #141413;
-  --text-200: #3d3d3a;
-  --text-400: #73726c;
-  --border: rgba(31, 30, 29, 0.15);
-  --border-subtle: rgba(31, 30, 29, 0.08);
-  --accent: #d97757;
-  --accent-line: rgba(217, 119, 87, 0.55);
-  /* the accent's darker step in light, so a focus ring keeps 3:1 against the page */
-  --focus-ring: #c6613f;
+  --bg-100: #ffffff;
+  --bg-200: #f6f6f6;
+  --bg-300: #efefef;
+  --bg-400: #e5e5e5;
+  --text-100: #191919;
+  --text-200: #3b3b3b;
+  --text-400: #666666;
+  --border: rgba(0, 0, 0, 0.14);
+  --border-subtle: rgba(0, 0, 0, 0.07);
+  --accent: #277de2;
+  --accent-line: rgba(39, 125, 226, 0.5);
+  /* a darker step of the blue, so a focus ring keeps 3:1 against the page */
+  --focus-ring: #1f6fd0;
   --code-bg: var(--bg-200);
   --button-bg: var(--text-100);
   --button-text: var(--bg-100);
-  --button-hover: #2e2e2b;
+  --button-hover: #333333;
   --shot-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px -12px rgba(0, 0, 0, 0.12);
 
   --read: 640px;
@@ -35,37 +35,41 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg-000: #30302e;
-    --bg-100: #262624;
-    --bg-200: #1f1e1d;
-    --bg-300: #141413;
+    --bg-000: #242424;
+    --bg-100: #181818;
+    --bg-200: #1d1d1d;
+    --bg-300: #292929;
     --bg-400: #000000;
-    --text-100: #faf9f5;
-    --text-200: #c2c0b6;
-    --text-400: #9c9a92;
-    --border: rgba(222, 220, 208, 0.15);
-    --border-subtle: rgba(222, 220, 208, 0.08);
+    --text-100: #f0f0f0;
+    --text-200: #c9c9c9;
+    --text-400: #a1a1a1;
+    --border: rgba(255, 255, 255, 0.14);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --accent: #5a8cf0;
+    --accent-line: rgba(90, 140, 240, 0.55);
     --code-bg: var(--bg-200);
-    --button-hover: #e8e6dc;
-    --focus-ring: #d97757;
+    --button-hover: #dcdcdc;
+    --focus-ring: #6b9bf5;
     --shot-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px -16px rgba(0, 0, 0, 0.6);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg-000: #30302e;
-  --bg-100: #262624;
-  --bg-200: #1f1e1d;
-  --bg-300: #141413;
+  --bg-000: #242424;
+  --bg-100: #181818;
+  --bg-200: #1d1d1d;
+  --bg-300: #292929;
   --bg-400: #000000;
-  --text-100: #faf9f5;
-  --text-200: #c2c0b6;
-  --text-400: #9c9a92;
-  --border: rgba(222, 220, 208, 0.15);
-  --border-subtle: rgba(222, 220, 208, 0.08);
+  --text-100: #f0f0f0;
+  --text-200: #c9c9c9;
+  --text-400: #a1a1a1;
+  --border: rgba(255, 255, 255, 0.14);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --accent: #5a8cf0;
+  --accent-line: rgba(90, 140, 240, 0.55);
   --code-bg: var(--bg-200);
-  --button-hover: #e8e6dc;
-  --focus-ring: #d97757;
+  --button-hover: #dcdcdc;
+  --focus-ring: #6b9bf5;
   --shot-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px -16px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
@@ -132,7 +136,7 @@ kbd { font-size: 0.8em; border: 1px solid var(--border); border-radius: 4px; pad
   border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px;
 }
 .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-h1 { font: 500 64px/1.05 var(--font-display); letter-spacing: -0.01em; margin-top: 28px; }
+h1 { font: 600 60px/1.05 var(--font-display); letter-spacing: -0.025em; margin-top: 28px; }
 .lede { margin-top: 20px; font-size: 21px; line-height: 1.45; color: var(--text-100); }
 .intro { margin-top: 16px; color: var(--text-400); }
 .actions { margin-top: 36px; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
@@ -173,7 +177,8 @@ html:not(.js) img[data-src] { display: none; }
 /* ---------- Features ---------- */
 .features { max-width: var(--wide); margin: 0 auto; padding: 152px var(--gutter) 0; }
 .features > h2, .start > h2, .mod > h2, .more > h2 {
-  font: 500 36px/1.15 var(--font-display);
+  font: 600 34px/1.15 var(--font-display);
+  letter-spacing: -0.02em;
   max-width: var(--read); margin: 0 auto; text-align: center;
 }
 .feature { margin-top: 96px; }

@@ -170,10 +170,10 @@ function isDarkTheme(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-/** A #rrggbb colour at the given opacity (anything else falls back to the brand accent). */
+/** A #rrggbb colour at the given opacity (anything else falls back to the light theme's blue). */
 function withAlpha(color: string, alpha: number): string {
   const m = /^#([0-9a-f]{6})$/i.exec(color.trim());
-  const n = parseInt(m ? m[1] : 'd97757', 16);
+  const n = parseInt(m ? m[1] : '1f66c4', 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
@@ -182,14 +182,16 @@ function readTheme(): ITheme {
   const css = getComputedStyle(document.documentElement);
   const dark = isDarkTheme();
   const token = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
-  const background = token('--bg-100', dark ? '#262624' : '#faf9f5');
-  const accent = token('--accent', '#d97757');
-  const thumb = token('--scroll-thumb', dark ? 'rgba(156, 154, 146, 0.35)' : 'rgba(115, 114, 108, 0.35)');
-  const thumbHover = token('--scroll-thumb-hover', dark ? 'rgba(156, 154, 146, 0.55)' : 'rgba(115, 114, 108, 0.55)');
+  const background = token('--bg-100', dark ? '#181818' : '#ffffff');
+  const foreground = token('--text-100', dark ? '#f0f0f0' : '#191919');
+  // The selection is blue, like the app's; the cursor is the text colour
+  const accent = token('--accent', dark ? '#6b9bf0' : '#1f66c4');
+  const thumb = token('--scroll-thumb', dark ? 'rgba(161, 161, 161, 0.35)' : 'rgba(102, 102, 102, 0.35)');
+  const thumbHover = token('--scroll-thumb-hover', dark ? 'rgba(161, 161, 161, 0.55)' : 'rgba(102, 102, 102, 0.55)');
   return {
     background,
-    foreground: token('--text-100', dark ? '#faf9f5' : '#141413'),
-    cursor: accent,
+    foreground,
+    cursor: foreground,
     cursorAccent: background,
     selectionBackground: withAlpha(accent, dark ? 0.32 : 0.25),
     selectionInactiveBackground: withAlpha(accent, dark ? 0.18 : 0.14),

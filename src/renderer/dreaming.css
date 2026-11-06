@@ -2,7 +2,7 @@
    Type from the scale in styles.css only; few boxes: a card has one hairline, the list has hairlines between rows. */
 
 /* ---------- Sidebar ---------- */
-.nav-dot { flex: none; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: var(--accent); }
+.nav-dot { flex: none; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: var(--attention); }
 .nav-dot[hidden] { display: none; }
 .trail-meta.dream { gap: 4px; }
 .trail-meta.dream .status-dot { width: 7px; height: 7px; }
@@ -17,7 +17,7 @@
   border: 1px solid var(--border-subtle); border-radius: var(--r-card-lg);
 }
 .proposal-head { display: flex; align-items: center; gap: 12px; padding: 12px 12px 0; }
-.proposal-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: var(--r-control); background: var(--accent-soft); color: var(--accent); }
+.proposal-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: var(--r-control); background: var(--badge-bg); color: var(--badge-ink); }
 .proposal-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .proposal-kicker { font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-400); }
 .proposal-title { font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 600; color: var(--text-100); overflow-wrap: anywhere; }
@@ -41,7 +41,7 @@
 .proposal-target { margin: 8px 12px 0; font: var(--fs-micro)/var(--lh-micro) var(--mono); color: var(--text-400); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proposal-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px; }
 .proposal-state { margin-right: auto; min-width: 0; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); overflow-wrap: anywhere; }
-.proposal-state.waiting, .proposal-state.planned { color: var(--accent); }
+.proposal-state.waiting, .proposal-state.planned { color: var(--text-200); }
 .proposal-state.applied { color: var(--success); }
 .proposal-state.failed { color: var(--danger); }
 .proposal-card[data-state='dismissed'] .proposal-why, .proposal-card[data-state='withdrawn'] .proposal-why, .proposal-card[data-state='reverted'] .proposal-why { color: var(--text-400); }
@@ -50,7 +50,7 @@
 .dream-toolbar { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
 .dream-run { width: 28px; height: 28px; margin-left: -6px; border-radius: 8px; color: var(--text-100); }
 .dream-run:hover { background: var(--hover); }
-.dream-run.running { color: var(--accent); }
+.dream-run.running { color: var(--text-100); }
 .dream-run-text { min-width: 0; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
 .dream-time { width: 132px; }
 .dream-privacy { margin-top: 16px; }
@@ -64,7 +64,7 @@
 .dream-project { font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-100); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dream-meta { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
 .dream-status { flex: none; max-width: 40%; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dream-status.wait { color: var(--accent); }
+.dream-status.wait { color: var(--text-100); }
 .dream-status.ok { color: var(--success); }
 .dream-status.bad { color: var(--danger); }
 .dream-status.run { color: var(--text-200); }

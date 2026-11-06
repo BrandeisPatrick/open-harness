@@ -1,28 +1,31 @@
 /* Styles for the sidebar: navigation rows, session groups and the session tree, search, the footer.
    Tokens come from styles.css; the few below are the sidebar's own (row fills, the tree's hairline, the unread dot). */
 
-.sidebar {
-  --side-hover: rgba(31, 30, 29, 0.05);
-  --side-active: rgba(31, 30, 29, 0.085);
-  --tree-line: #d3d2cc; /* opaque: translucent lines darken where an elbow meets a rail */
+/* They are set on :root so a theme can restyle them like any other token. */
+:root {
+  --side-hover: rgba(0, 0, 0, 0.045);
+  --side-active: rgba(0, 0, 0, 0.09);
+  --tree-line: #d4d4d4; /* opaque: translucent lines darken where an elbow meets a rail */
   --unread-dot: #2f7ae5;
+}
+.sidebar {
   /* Row geometry: height, the left padding of a top-level row, one level of indent */
   --row-h: 32px;
   --pad: 10px;
   --step: 20px;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .sidebar {
-    --side-hover: rgba(222, 220, 208, 0.05);
-    --side-active: rgba(222, 220, 208, 0.1);
-    --tree-line: #403f3c;
+  :root:not([data-theme="light"]) {
+    --side-hover: rgba(255, 255, 255, 0.07);
+    --side-active: rgba(255, 255, 255, 0.15);
+    --tree-line: #3d3d3d;
     --unread-dot: #4c94f5;
   }
 }
-:root[data-theme="dark"] .sidebar {
-  --side-hover: rgba(222, 220, 208, 0.05);
-  --side-active: rgba(222, 220, 208, 0.1);
-  --tree-line: #403f3c;
+:root[data-theme="dark"] {
+  --side-hover: rgba(255, 255, 255, 0.07);
+  --side-active: rgba(255, 255, 255, 0.15);
+  --tree-line: #3d3d3d;
   --unread-dot: #4c94f5;
 }
 
@@ -112,13 +115,13 @@
 .trail-meta { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 24px; height: 24px; color: var(--text-400); }
 .trail-meta .icon { flex: none; }
 .family-count { font-size: var(--fs-small); line-height: var(--lh-small); font-variant-numeric: tabular-nums; }
-.trail-meta.family.hot { color: var(--accent); }
+.trail-meta.family.hot { color: var(--attention); }
 .session-item .row-more { display: none; color: var(--text-400); }
 .session-item:hover .row-more, .session-item:focus-within .row-more, .session-item.menu-open .row-more, .session-item .row-more[aria-expanded="true"] { display: inline-flex; }
 .session-item:hover .trail-meta, .session-item:focus-within .trail-meta, .session-item.menu-open .trail-meta { display: none; }
 .session-item .row-more:hover { background: var(--side-active); color: var(--text-100); }
 .session-item .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.session-item .status-dot.attention { background: var(--accent); }
+.session-item .status-dot.attention { background: var(--attention); }
 .session-item .status-dot.unread { background: var(--unread-dot); }
 /* Sidebar spinners turn on their own variable (sidebar.ts), so a session running in the background spins too */
 .session-item .spinner { transform: rotate(var(--side-spin, 0deg)); }

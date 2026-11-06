@@ -27,43 +27,52 @@
   --lh-code: 20px;
 
   --bg-000: #ffffff;
-  --bg-100: #faf9f5;
-  --bg-200: #f5f4ee;
-  --bg-300: #f0eee6;
-  --bg-400: #e8e6dc;
-  --text-100: #141413;
-  --text-200: #3d3d3a;
-  --text-400: #73726c;
-  --border: rgba(31, 30, 29, 0.15);
-  --border-subtle: rgba(31, 30, 29, 0.08);
+  --bg-100: #ffffff;
+  --bg-200: #efefef;
+  --bg-300: #e9e9e9;
+  --bg-400: #dedede;
+  --text-100: #191919;
+  --text-200: #3d3d3d;
+  --text-400: #666666;
+  --border: rgba(0, 0, 0, 0.15);
+  --border-subtle: rgba(0, 0, 0, 0.08);
 
-  --accent: #d97757;
-  --accent-hover: #c6613f;
-  --accent-soft: rgba(217, 119, 87, 0.12);
-  --accent-line: rgba(217, 119, 87, 0.45);
-  --focus-ring: rgba(217, 119, 87, 0.5);
-  --field-ring: rgba(217, 119, 87, 0.35);
+  --accent: #1f66c4;
+  --accent-hover: #1a57a8;
+  --accent-soft: rgba(31, 102, 196, 0.1);
+  --accent-line: rgba(31, 102, 196, 0.42);
+  --focus-ring: rgba(31, 102, 196, 0.45);
+  --field-ring: rgba(31, 102, 196, 0.25);
+  --switch-on: #277de2;
   --danger: #b53333;
   --danger-soft: rgba(181, 51, 51, 0.08);
-  --danger-line: rgba(181, 51, 51, 0.25);
+  --danger-line: rgba(181, 51, 51, 0.3);
   --success: #2f7613;
   --success-soft: rgba(47, 118, 19, 0.1);
   --success-line: rgba(47, 118, 19, 0.35);
-  --warn: #98801f;
+  --warn: #a35200;
+  --attention: #d97706;
+
+  /* Buttons: white with a hairline; .primary has a grey fill with the text colour */
+  --button-fill: #e9e9e9;
+  --button-fill-hover: #e0e0e0;
+  --button-text: var(--text-100);
+  --spinner: var(--text-200);
+  --segment-on: var(--bg-000);
 
   --hover: var(--bg-300);
   --pressed: var(--bg-400);
-  --surface-hover: var(--bg-200);
+  --surface-hover: #f5f5f5;
   --field-bg: var(--bg-000);
-  --switch-off: var(--bg-400);
-  --scroll-thumb: rgba(115, 114, 108, 0.35);
-  --scroll-thumb-hover: rgba(115, 114, 108, 0.55);
+  --switch-off: #d9d9d9;
+  --scroll-thumb: rgba(102, 102, 102, 0.35);
+  --scroll-thumb-hover: rgba(102, 102, 102, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   /* Markdown (.h-md): code, the user's bubble, syntax colours */
-  --code-bg: var(--bg-200);
-  --code-hover: var(--bg-400);
-  --bubble: var(--bg-300);
-  --tok-kw: #c0533a;
+  --code-bg: #f5f5f5;
+  --code-hover: var(--bg-300);
+  --bubble: #f3f3f3;
+  --tok-kw: #9a3fb5;
   --tok-str: var(--success);
   --tok-com: var(--text-400);
   --tok-num: #8a6d00;
@@ -81,69 +90,87 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg-000: #30302e;
-    --bg-100: #262624;
-    --bg-200: #1f1e1d;
-    --bg-300: #141413;
-    --bg-400: #000000;
-    --text-100: #faf9f5;
-    --text-200: #c2c0b6;
-    --text-400: #9c9a92;
-    --border: rgba(222, 220, 208, 0.15);
-    --border-subtle: rgba(222, 220, 208, 0.08);
-    --accent-hover: #e08a6c;
-    --accent-soft: rgba(217, 119, 87, 0.16);
-    --danger: #dd5353;
-    --danger-soft: rgba(221, 83, 83, 0.12);
-    --danger-line: rgba(221, 83, 83, 0.3);
-    --success: #45931f;
-    --success-soft: rgba(69, 147, 31, 0.14);
-    --success-line: rgba(69, 147, 31, 0.4);
-    --warn: #ffd014;
-    --surface-hover: #383836;
-    --field-bg: var(--bg-100);
-    --switch-off: rgba(222, 220, 208, 0.2);
-    --scroll-thumb: rgba(156, 154, 146, 0.35);
-    --scroll-thumb-hover: rgba(156, 154, 146, 0.55);
+    --bg-000: #1d1d1d;
+    --bg-100: #181818;
+    --bg-200: #242424;
+    --bg-300: #292929;
+    --bg-400: #3a3a3a;
+    --text-100: #f0f0f0;
+    --text-200: #c8c8c8;
+    --text-400: #a1a1a1;
+    --border: rgba(255, 255, 255, 0.14);
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --accent: #6b9bf0;
+    --accent-hover: #86aef4;
+    --accent-soft: rgba(107, 155, 240, 0.16);
+    --accent-line: rgba(107, 155, 240, 0.45);
+    --focus-ring: rgba(107, 155, 240, 0.55);
+    --field-ring: rgba(107, 155, 240, 0.3);
+    --switch-on: #416cd9;
+    --danger: #ec6a68;
+    --danger-soft: rgba(236, 106, 104, 0.12);
+    --danger-line: rgba(236, 106, 104, 0.35);
+    --success: #58ad31;
+    --success-soft: rgba(88, 173, 49, 0.14);
+    --success-line: rgba(88, 173, 49, 0.4);
+    --warn: #f0a33c;
+    --attention: #f0a33c;
+    --button-fill: #333333;
+    --button-fill-hover: #3b3b3b;
+    --segment-on: #3e3e3e;
+    --surface-hover: #262626;
+    --field-bg: var(--bg-300);
+    --switch-off: #343434;
+    --scroll-thumb: rgba(161, 161, 161, 0.35);
+    --scroll-thumb-hover: rgba(161, 161, 161, 0.55);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --code-bg: var(--bg-300);
-    --code-hover: rgba(222, 220, 208, 0.1);
-    --bubble: var(--bg-000);
-    --tok-kw: #e39678;
+    --code-bg: #212121;
+    --code-hover: #2e2e2e;
+    --bubble: #242424;
+    --tok-kw: #c792ea;
     --tok-num: #ffd014;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg-000: #30302e;
-  --bg-100: #262624;
-  --bg-200: #1f1e1d;
-  --bg-300: #141413;
-  --bg-400: #000000;
-  --text-100: #faf9f5;
-  --text-200: #c2c0b6;
-  --text-400: #9c9a92;
-  --border: rgba(222, 220, 208, 0.15);
-  --border-subtle: rgba(222, 220, 208, 0.08);
-  --accent-hover: #e08a6c;
-  --accent-soft: rgba(217, 119, 87, 0.16);
-  --danger: #dd5353;
-  --danger-soft: rgba(221, 83, 83, 0.12);
-  --danger-line: rgba(221, 83, 83, 0.3);
-  --success: #45931f;
-  --success-soft: rgba(69, 147, 31, 0.14);
-  --success-line: rgba(69, 147, 31, 0.4);
-  --warn: #ffd014;
-  --surface-hover: #383836;
-  --field-bg: var(--bg-100);
-  --switch-off: rgba(222, 220, 208, 0.2);
-  --scroll-thumb: rgba(156, 154, 146, 0.35);
-  --scroll-thumb-hover: rgba(156, 154, 146, 0.55);
+  --bg-000: #1d1d1d;
+  --bg-100: #181818;
+  --bg-200: #242424;
+  --bg-300: #292929;
+  --bg-400: #3a3a3a;
+  --text-100: #f0f0f0;
+  --text-200: #c8c8c8;
+  --text-400: #a1a1a1;
+  --border: rgba(255, 255, 255, 0.14);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --accent: #6b9bf0;
+  --accent-hover: #86aef4;
+  --accent-soft: rgba(107, 155, 240, 0.16);
+  --accent-line: rgba(107, 155, 240, 0.45);
+  --focus-ring: rgba(107, 155, 240, 0.55);
+  --field-ring: rgba(107, 155, 240, 0.3);
+  --switch-on: #416cd9;
+  --danger: #ec6a68;
+  --danger-soft: rgba(236, 106, 104, 0.12);
+  --danger-line: rgba(236, 106, 104, 0.35);
+  --success: #58ad31;
+  --success-soft: rgba(88, 173, 49, 0.14);
+  --success-line: rgba(88, 173, 49, 0.4);
+  --warn: #f0a33c;
+  --attention: #f0a33c;
+  --button-fill: #333333;
+  --button-fill-hover: #3b3b3b;
+  --segment-on: #3e3e3e;
+  --surface-hover: #262626;
+  --field-bg: var(--bg-300);
+  --switch-off: #343434;
+  --scroll-thumb: rgba(161, 161, 161, 0.35);
+  --scroll-thumb-hover: rgba(161, 161, 161, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --code-bg: var(--bg-300);
-  --code-hover: rgba(222, 220, 208, 0.1);
-  --bubble: var(--bg-000);
-  --tok-kw: #e39678;
+  --code-bg: #212121;
+  --code-hover: #2e2e2e;
+  --bubble: #242424;
+  --tok-kw: #c792ea;
   --tok-num: #ffd014;
   color-scheme: dark;
 }
@@ -159,7 +186,7 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-wrap: anywhere;
 }
-::selection { background: rgba(217, 119, 87, 0.25); }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
 button, input, textarea, select { font: inherit; color: inherit; letter-spacing: inherit; }
 button { background: none; border: none; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
 button:disabled { cursor: default; }
@@ -219,9 +246,13 @@ code, kbd, pre, samp { font-family: var(--mono); font-size: var(--fs-code); }
 .h-btn:hover { background: var(--surface-hover); }
 .h-btn:active { background: var(--pressed); }
 .h-btn:disabled, .h-btn[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
-.h-btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
-.h-btn.primary:hover { background: var(--accent-hover); }
-.h-btn.primary:active { background: var(--accent-hover); filter: brightness(0.95); }
+/* The button that confirms: a grey fill and the text colour, never a colour */
+.h-btn.primary { background: var(--button-fill); border-color: transparent; color: var(--button-text); }
+.h-btn.primary:hover { background: var(--button-fill-hover); }
+.h-btn.primary:active { background: var(--button-fill-hover); filter: brightness(0.96); }
+/* A dangerous action: red text and a red hairline at rest */
+.h-btn.danger { color: var(--danger); border-color: var(--danger-line); }
+.h-btn.danger:hover { background: var(--danger-soft); }
 .h-btn.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--text-200); }
 .h-btn.ghost:hover { background: var(--hover); color: var(--text-100); }
 .h-btn.ghost:active { background: var(--pressed); }
@@ -242,10 +273,10 @@ code, kbd, pre, samp { font-family: var(--mono); font-size: var(--fs-code); }
 }
 textarea.h-input { height: auto; min-height: 64px; padding: 6px 10px; line-height: 20px; resize: vertical; }
 select.h-input { appearance: none; -webkit-appearance: none; padding-right: 28px; cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2373726c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.75 6.25L8 10.5l4.25-4.25'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.75 6.25L8 10.5l4.25-4.25'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 8px center; background-size: 14px; }
 .h-input::placeholder { color: var(--text-400); }
-.h-input:hover { border-color: rgba(115, 114, 108, 0.45); }
+.h-input:hover { border-color: color-mix(in srgb, var(--text-400) 45%, transparent); }
 .h-input:focus { border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--field-ring); }
 .h-input:focus-visible { outline: none; }
 .h-input:disabled { opacity: 0.5; }
@@ -261,8 +292,8 @@ input.h-switch::before {
   background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.15s ease;
 }
 input.h-switch:hover:not(:checked) { background: color-mix(in srgb, var(--switch-off) 70%, var(--text-400)); }
-input.h-switch:checked { background: var(--accent); }
-input.h-switch:checked:hover { background: var(--accent-hover); }
+input.h-switch:checked { background: var(--switch-on); }
+input.h-switch:checked:hover { background: color-mix(in srgb, var(--switch-on) 88%, #000); }
 input.h-switch:checked::before { transform: translateX(12px); }
 input.h-switch:disabled { opacity: 0.4; cursor: default; }
 input.h-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 999px; }
@@ -275,7 +306,7 @@ input.h-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-off
   transition: background-color 0.12s, color 0.12s;
 }
 .h-segmented > button:hover { color: var(--text-100); }
-.h-segmented > button[aria-pressed="true"] { background: var(--bg-000); color: var(--text-100); font-weight: 500; box-shadow: var(--shadow-sm), 0 0 0 1px var(--border-subtle); }
+.h-segmented > button[aria-pressed="true"] { background: var(--segment-on); color: var(--text-100); font-weight: 500; box-shadow: var(--shadow-sm), 0 0 0 1px var(--border-subtle); }
 .h-segmented > button:focus-visible { outline-offset: 1px; }
 .h-segmented > button:disabled { opacity: 0.5; }
 
@@ -292,7 +323,7 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
 
 /* ---------- Segmented meter: <div class="h-bar"><span class="h-bar-seg" style="width:12%;--seg:…"></span>…</div> ---------- */
 .h-bar { position: relative; display: flex; height: 6px; border-radius: 3px; background: var(--bg-300); }
-:root[data-theme="dark"] .h-bar { background: rgba(222, 220, 208, 0.1); }
+:root[data-theme="dark"] .h-bar { background: rgba(255, 255, 255, 0.1); }
 .h-bar-seg { flex: none; height: 100%; min-width: 0; background: var(--seg, var(--text-400)); transition: width 0.3s ease; }
 .h-bar-seg + .h-bar-seg { box-shadow: -1px 0 0 0 var(--bg-100); }
 .h-bar-seg:first-child { border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
@@ -306,7 +337,7 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
 /* ---------- Spinner (the app's .spinner, turning in eight steps) ---------- */
 .h-spin {
   display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 50%;
-  border: 1.5px solid var(--border); border-top-color: var(--accent);
+  border: 1.5px solid var(--border); border-top-color: var(--spinner);
   animation: h-spin 1s steps(8) infinite;
 }
 .h-spin.sm { width: 12px; height: 12px; }
@@ -339,7 +370,7 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   width: 14px; height: 14px; margin-top: 3px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-000);
 }
-.h-md li.task.done .task-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.h-md li.task.done .task-box { background: var(--text-100); border-color: var(--text-100); color: var(--bg-000); }
 .h-md .task-text { min-width: 0; }
 .h-md code { font-family: var(--mono); font-size: 0.9em; padding: 1px 4.5px; border-radius: 4px; background: var(--code-bg); }
 .h-md a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 2px; cursor: pointer; }

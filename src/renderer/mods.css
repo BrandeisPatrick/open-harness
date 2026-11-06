@@ -21,7 +21,7 @@
 .mod-rail-edge { position: absolute; top: 0; bottom: 0; left: -3px; width: 6px; z-index: 5; cursor: col-resize; }
 .mod-rail-edge::before { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: var(--border-subtle); }
 .mod-rail-edge::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background-color 0.12s; }
-.mod-rail-edge:hover::after, .mod-rail-edge.dragging::after { background: var(--accent); }
+.mod-rail-edge:hover::after, .mod-rail-edge.dragging::after { background: var(--text-400); }
 /* Sections keep their DOM order (moving a frame reloads it) and are sorted with `order`; the first section's
    hairline lies on the top bar's own, so every section can draw the one above it. */
 .mod-rail-sections {
@@ -99,7 +99,7 @@
   background: var(--bg-000); border: 1px solid var(--border); border-radius: var(--r-card-lg);
 }
 .mod-offer-head { display: flex; align-items: center; gap: 12px; }
-.mod-offer-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: var(--r-control); background: var(--accent-soft); color: var(--accent); }
+.mod-offer-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: var(--r-control); background: var(--badge-bg); color: var(--badge-ink); }
 .mod-offer-heading { display: flex; flex-direction: column; min-width: 0; }
 .mod-offer-kicker { font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-400); }
 .mod-offer-title { font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 600; color: var(--text-100); overflow-wrap: anywhere; }
@@ -114,7 +114,7 @@
 .mod-offer-asks li { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-200); }
 .mod-offer-asks li .icon { margin-top: 2px; color: var(--text-400); }
 .mod-offer-asks li.strong { color: var(--text-100); }
-.mod-offer-asks li.strong .icon { color: var(--git-mod); }
+.mod-offer-asks li.strong .icon { color: var(--warn); }
 .mod-offer-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
 .mod-offer-files { margin-left: -8px; padding: 0 8px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-200); }
 .mod-offer-files:hover { background: var(--hover); color: var(--text-100); }

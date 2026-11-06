@@ -124,7 +124,7 @@ function flashScript(ref: string): string {
     const r = el.getBoundingClientRect();
     const box = document.createElement('div');
     box.setAttribute('data-oc-flash', '1');
-    box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #d97757;border-radius:6px;background:rgba(217,119,87,0.18);box-shadow:0 0 0 4px rgba(217,119,87,0.25);transition:opacity 0.45s ease 0.25s;left:' + (r.left - 3) + 'px;top:' + (r.top - 3) + 'px;width:' + (r.width + 6) + 'px;height:' + (r.height + 6) + 'px;';
+    box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #277de2;border-radius:6px;background:rgba(39,125,226,0.16);box-shadow:0 0 0 4px rgba(39,125,226,0.22);transition:opacity 0.45s ease 0.25s;left:' + (r.left - 3) + 'px;top:' + (r.top - 3) + 'px;width:' + (r.width + 6) + 'px;height:' + (r.height + 6) + 'px;';
     document.documentElement.appendChild(box);
     requestAnimationFrame(() => { box.style.opacity = '0'; });
     setTimeout(() => box.remove(), 800);

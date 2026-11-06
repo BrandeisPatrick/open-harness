@@ -6,12 +6,16 @@ import type {
   ChangeDiff,
   ChangeEntry,
   ChangesApi,
+  CommandInfo,
+  CommandResult,
   CompactionInfo,
   ContextInfo,
   FileHit,
   ImageAttachment,
+  LiveState,
   McpApi,
   McpServerInfo,
+  MessageOrigin,
   ModelCapabilities,
   OpenAgentApi,
   PermissionMode,
@@ -22,6 +26,7 @@ import type {
   RulesApi,
   SendResult,
   SessionMeta,
+  SessionStatus,
   SkillInfo,
   TaskItem,
   TerminalApi,
@@ -62,6 +67,9 @@ import {
   type SetupId,
   type SetupLine,
 } from './setup.js';
+import { bus } from './bus.js';
+import { onPush, rpc } from './rpc.js';
+import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } from './transcript-items.js';
 
 declare global {
   interface Window {
@@ -200,12 +208,14 @@ let config: AppConfig;
 let running = false;
 let runStartedAt = 0;
 let timer: number | undefined;
+/** The session on screen. Other sessions may be running too: their events only update `statuses`. */
 let currentSessionId = '';
-let runningSessionId = '';
 let sessions: SessionMeta[] = [];
+/** Per session: running, waiting for the user, unread (from the session list, kept current by every session's events) */
+const statuses = new Map<string, SessionStatus>();
 const toolCards = new Map<string, ToolCard>();
 let lastToolCard: ToolCard | null = null;
-let pendingApproval: { name: string; cancel: (reason: string) => void; allow: () => void } | null = null;
+let pendingApproval: { name: string; cancel: (reason: string) => void; allow: () => void; dispose: () => void } | null = null;
 let stick = true;
 let runOutputTokens = 0;
 /** From a confirmed Rewind until the transcript is back: sending and other rewinds wait */
@@ -371,6 +381,8 @@ interface UserMessageOptions {
   turn?: number;
   /** A command handled here (/compact, /mcp, …) or a message the main process did not take: no transcript item matches it */
   local?: boolean;
+  /** Where the message came from when it was not typed here ("from schedule", …), shown above the bubble */
+  originLabel?: string;
 }
 
 const REWIND_BUTTON = `<button type="button" class="icon-btn sm msg-rewind" aria-label="Rewind to this message" data-tip="Rewind">${icon('rotate-ccw', 14)}</button>`;
@@ -435,6 +447,13 @@ function addUserMessage(text: string, images: BubbleImage[] = [], mentions?: str
   actions.className = 'msg-actions';
   // An images-only message has no text to copy (the row stays empty, and hidden, unless it gets Rewind)
   if (text) actions.innerHTML = `<button type="button" class="icon-btn sm msg-copy" aria-label="Copy message" data-tip="Copy">${icon('copy', 14)}</button>`;
+  if (opts.originLabel) {
+    const label = document.createElement('div');
+    label.className = 'msg-origin';
+    el.classList.add('has-origin');
+    label.textContent = opts.originLabel;
+    el.appendChild(label);
+  }
   el.append(bubble, actions);
   userTextByMessage.set(el, text);
   if (opts.local) el.dataset.local = 'true';
@@ -767,6 +786,9 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     b.innerHTML = `<span>${escapeHtml(label)}</span><kbd>${key}</kbd>`;
     return b;
   };
+  // An empty label (a tool's own question) means the card has no such answer: only Allow and Deny.
+  const noAlways = typeof ev.alwaysLabel === 'string' && !ev.alwaysLabel.trim();
+  const noProject = typeof ev.projectLabel === 'string' && !ev.projectLabel.trim();
   const alwaysLabel = typeof ev.alwaysLabel === 'string' && ev.alwaysLabel.trim() ? ev.alwaysLabel.trim() : 'Allow for this session';
   const projectLabel = typeof ev.projectLabel === 'string' && ev.projectLabel.trim() ? ev.projectLabel.trim() : 'Always allow for this project';
   const deny = button('Deny', 'n', 'btn');
@@ -786,7 +808,9 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   }
   const remember = document.createElement('div');
   remember.className = 'row-always';
-  remember.append(always, project);
+  if (!noAlways) remember.append(always);
+  if (!noProject) remember.append(project);
+  if (noAlways && noProject) remember.hidden = true;
   const decision = document.createElement('div');
   decision.className = 'row-main';
   decision.append(deny, allow);
@@ -835,8 +859,8 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     let action: (() => void) | null = null;
     if (k === 'y' || k === 'Y' || k === 'Enter') action = () => void decide(true);
     else if (k === 'n' || k === 'N' || k === 'Escape') action = () => void decide(false);
-    else if (k === 'a' || k === 'A') action = () => void decide(true, 'session');
-    else if (k === 'p' || k === 'P') action = () => void decide(true, 'project');
+    else if ((k === 'a' || k === 'A') && !noAlways) action = () => void decide(true, 'session');
+    else if ((k === 'p' || k === 'P') && !noProject) action = () => void decide(true, 'project');
     if (!action) return;
     e.preventDefault();
     e.stopPropagation();
@@ -853,6 +877,13 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
       collapse(why, false);
     },
     allow: () => void decide(true),
+    // The card left the screen with its session (a switch): it stays unanswered for when the session comes back.
+    dispose: () => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener('keydown', onKey, true);
+      pendingApproval = null;
+    },
   };
   allow.onclick = () => void decide(true);
   always.onclick = () => void decide(true, 'session');
@@ -1005,6 +1036,7 @@ document.addEventListener(
 );
 
 function clearMessages(): void {
+  pendingApproval?.dispose();
   showJump(false);
   messagesEl.querySelectorAll(':scope > :not(#empty-state)').forEach((n) => n.remove());
   emptyState.hidden = false;
@@ -1039,7 +1071,7 @@ function renderTranscript(items: TranscriptItem[]): void {
   items.forEach((item, i) => {
     if (item.role === 'user') {
       const images = Array.isArray(item.images) ? item.images.filter((src): src is string => typeof src === 'string' && Boolean(src)) : [];
-      addUserMessage(item.text ?? '', images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn });
+      addUserMessage(item.text ?? '', images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn, originLabel: item.origin ? originLabel(item.origin, item.from) : undefined });
     } else if (item.role === 'assistant') {
       appendAssistantText(item.text);
       endAssistant();
@@ -1053,9 +1085,33 @@ function renderTranscript(items: TranscriptItem[]): void {
       if (item.name === 'submit_plan' && item.ok) return;
       const card = addToolCard(item.name, item.args);
       finishToolCard({ name: item.name, result: item.result, ok: item.ok }, card);
+    } else {
+      // A role a feature registered (transcript-items.ts)
+      const extra = item as unknown as ExtraTranscriptItem;
+      const el = transcriptItemRenderer(extra.role)?.(extra);
+      if (el) appendExtraNode(el);
     }
   });
   scrollToBottom(true);
+}
+
+/** A feature's transcript row: after the streaming reply and the thinking block are closed. */
+function appendExtraNode(el: HTMLElement): void {
+  endAssistant();
+  finishThinking();
+  addNode(el);
+}
+setTranscriptSink(appendExtraNode);
+
+/** "from schedule", "from session Fix the tests", … for a user message that was not typed here. */
+function originLabel(origin: MessageOrigin, from?: string): string | undefined {
+  if (origin === 'user' || origin === 'queue') return undefined;
+  if (origin === 'session') {
+    const title = from ? sessions.find((m) => m.id === from)?.title : undefined;
+    return `from session ${title ?? from ?? 'another session'}`;
+  }
+  if (origin === 'mod') return from ? `from mod ${from}` : 'from a mod';
+  return `from ${origin}`;
 }
 
 // ---------- Rewind: user bubbles carry their checkpoint (turn); Rewind goes back to it ----------
@@ -1090,10 +1146,11 @@ function applyTurns(items: TranscriptItem[]): void {
 async function syncTurns(): Promise<void> {
   const my = ++turnSync;
   const id = currentSessionId;
-  if (!id || running || typeof oc.sessions?.switch !== 'function') return;
+  if (!id || running) return;
   let items: TranscriptItem[];
   try {
-    items = await oc.sessions.switch(id);
+    // Read without bringing it on screen: the user may switch away while this is in flight.
+    items = await rpc('sessions.transcript', id);
   } catch {
     return; // a new run started meanwhile; its end syncs again
   }
@@ -1287,16 +1344,18 @@ function syncSpin(): void {
   }
 }
 
-function setRunning(v: boolean): void {
+/** The session on screen started or stopped running; `startedAt` is when a run this window joined late began. */
+function setRunning(v: boolean, startedAt = Date.now()): void {
   running = v;
   updateSendButton();
   syncPlaceholder();
   syncBusyUi();
   syncSpin();
+  if (currentSessionId) statuses.set(currentSessionId, { ...statusOf(currentSessionId), running: v });
   if (v) {
-    runStartedAt = Date.now();
+    runStartedAt = startedAt;
     setStatus('run', baseVerb());
-    statusTime.textContent = '0s';
+    statusTime.textContent = elapsed(Date.now() - runStartedAt);
     statusTokens.hidden = true;
     runOutputTokens = 0;
     window.clearInterval(timer);
@@ -1468,7 +1527,6 @@ async function queueMessage(text: string, images: ImageAttachment[]): Promise<vo
     // The run ended in the meantime, so the message started a new one.
     endAssistant();
     addUserMessage(text, images.map(bubbleImage));
-    runningSessionId = currentSessionId;
     tray.clear(sent);
   } else {
     restoreComposerText(text);
@@ -1575,6 +1633,16 @@ async function sendComposer(): Promise<void> {
     );
     return;
   }
+  const cmd = images.length ? null : /^\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(text);
+  if (cmd && !commandSend) {
+    const registered = await registeredCommand(cmd[1]);
+    if (registered) {
+      endAssistant();
+      addUserMessage(text, [], null, { local: true });
+      await runCommand(registered, cmd[2]?.trim() ?? '');
+      return;
+    }
+  }
   if (running) return queueMessage(text, images);
   // Replying instead of approving sends the plan back, with this message as the feedback (as in Claude Code).
   if (activePlan?.pending()) await activePlan.decide('keep');
@@ -1582,7 +1650,6 @@ async function sendComposer(): Promise<void> {
   if (statusState !== 'run') setStatus('off');
   const bubble = addUserMessage(text, images.map(bubbleImage));
   endAssistant();
-  runningSessionId = currentSessionId;
   const res = await sendToAgent(text, images);
   const sent = images.map((a) => a.id);
   if (res.ok && res.queued && res.id) {
@@ -1596,6 +1663,52 @@ async function sendComposer(): Promise<void> {
     // Not in the conversation, so there is nothing to rewind to
     bubble.dataset.local = 'true';
     addSystemMessage(res.error ?? 'Could not start the run.', 'error');
+  }
+}
+
+// ---------- Registered slash commands (app.commands in the main process) ----------
+
+/** Set while a command's `send` text goes out, so it is sent as a message and never run as a command again */
+let commandSend = false;
+
+async function registeredCommands(): Promise<CommandInfo[]> {
+  try {
+    const list = await rpc('commands.list');
+    return Array.isArray(list) ? list.filter((c) => c && typeof c.name === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+async function registeredCommand(name: string): Promise<CommandInfo | undefined> {
+  return (await registeredCommands()).find((c) => c.name === name);
+}
+
+/** Runs a registered command and applies what it asks for: a notice or error row, a message to send, composer text. */
+async function runCommand(cmd: CommandInfo, args: string): Promise<void> {
+  let res: CommandResult;
+  try {
+    res = (await rpc('commands.run', cmd.name, args)) ?? {};
+  } catch (err) {
+    res = { error: cleanError(err) };
+  }
+  if (typeof res.notice === 'string' && res.notice) addSystemMessage(res.notice, 'notice');
+  if (typeof res.error === 'string' && res.error) addSystemMessage(res.error, 'error');
+  if (typeof res.insert === 'string' && res.insert) {
+    restoreComposerText(res.insert);
+    if (!dialogOpen()) inputEl.focus();
+  }
+  if (typeof res.send === 'string' && res.send.trim()) {
+    const typed = inputEl.value;
+    inputEl.value = res.send;
+    commandSend = true;
+    try {
+      await sendComposer();
+    } finally {
+      commandSend = false;
+    }
+    // Whatever was in the composer before stays there.
+    if (typed && !inputEl.value) restoreComposerText(typed);
   }
 }
 
@@ -1613,9 +1726,17 @@ const CARD_TOOLS = new Set(['submit_plan', 'create_artifact']);
 function handleEvent(ev: AgentEvent, synthetic = false): void {
   switch (ev.type) {
     case 'run_start':
-      runningSessionId = currentSessionId;
       setRunning(true);
       break;
+    case 'user_message': {
+      // A message typed here (or queued from here) already has its bubble; one from elsewhere gets one now, labelled.
+      const label = originLabel(ev.origin, ev.from);
+      if (!label) break;
+      finishThinking();
+      endAssistant();
+      addUserMessage(String(ev.text ?? ''), [], null, { turn: ev.turn, originLabel: label });
+      break;
+    }
     case 'thinking_delta':
       setStatusText('Thinking…');
       appendThinking(ev.text);
@@ -1775,7 +1896,38 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       break;
   }
 }
-oc.onAgentEvent((ev) => handleEvent(ev));
+/** Set from a switch's transcript until its LiveState is applied: the session's events wait here meanwhile */
+let syncing: { id: string; buffer: AgentEvent[] } | null = null;
+
+function statusOf(id: string): SessionStatus {
+  return statuses.get(id) ?? sessions.find((m) => m.id === id)?.status ?? { running: false };
+}
+
+/** Keeps the sidebar's status of a session current from its events (the main process's next list push confirms it). */
+function trackStatus(id: string, ev: AgentEvent, onScreen: boolean): void {
+  const before = statusOf(id);
+  let next: SessionStatus | null = null;
+  if (ev.type === 'run_start') next = { running: true, unread: onScreen ? undefined : before.unread };
+  else if (ev.type === 'run_end') next = { running: false, attention: ev.reason === 'plan' ? 'plan' : undefined, unread: onScreen ? undefined : true };
+  else if (ev.type === 'approval_request') next = { ...before, attention: 'approval' };
+  else if (ev.type === 'approval_resolved' && before.attention === 'approval') next = { ...before, attention: undefined };
+  if (!next) return;
+  statuses.set(id, next);
+  renderSessionList();
+}
+
+oc.onAgentEvent((ev, sessionId) => {
+  const id = typeof sessionId === 'string' && sessionId ? sessionId : currentSessionId;
+  const onScreen = id === currentSessionId;
+  bus.emit('agent-event', ev, id, onScreen);
+  trackStatus(id, ev, onScreen);
+  if (syncing && syncing.id === id) {
+    syncing.buffer.push(ev);
+    return;
+  }
+  if (onScreen) handleEvent(ev);
+  else if (ev.type === 'session_changed') onSessionChanged(ev.session);
+});
 
 // ---------- Composer ----------
 
@@ -2249,7 +2401,21 @@ function applyConfigToUi(): void {
   // The folder line follows the working directory; the provider decides which lines can show at all.
   syncConnection();
   void refreshVisionNote();
+  bus.emit('config', config);
 }
+
+/**
+ * The main process changed the config (another feature, a folder that followed a session, an approval that switched
+ * the mode): the window follows the way a Settings save does.
+ */
+onPush('config:changed', (next) => {
+  if (!next || typeof next !== 'object') return;
+  const prev = config;
+  config = next;
+  applyConfigToUi();
+  if (prev && prev.workingDirectory !== next.workingDirectory) void changesPane.refresh();
+  void refreshContext();
+});
 
 // ---------- Provider connection: the banner above the composer and the welcome screen's setup strip ----------
 
@@ -2620,16 +2786,33 @@ function groupLabel(ts: number): string {
   return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
-/** Re-reads the session list and the current session; returns the current session's meta. */
+/** Re-reads the session list; returns the meta of the session on screen. */
 async function refreshSessions(): Promise<SessionMeta | null> {
   const [list, current] = await Promise.all([oc.sessions.list(), oc.sessions.current()]);
-  if (!current) return null;
-  currentSessionId = current.id;
-  sessions = list.some((m) => m.id === current.id) ? list : [current, ...list];
-  setTitle(current.title);
+  applySessionList(list, current);
+  return sessions.find((m) => m.id === currentSessionId) ?? null;
+}
+
+/**
+ * Takes a session list from the main process (a refresh or a 'sessions:changed' push). The session on screen stays
+ * the one this window shows (a list that was read before a switch must not switch back); `current` only seeds it at
+ * start-up and stands in for it while it has no messages yet (the store lists those only once they have some).
+ */
+function applySessionList(list: SessionMeta[], current?: SessionMeta | null): void {
+  if (!Array.isArray(list)) return;
+  if (!currentSessionId && current) currentSessionId = current.id;
+  const mine = list.find((m) => m.id === currentSessionId) ?? (current?.id === currentSessionId ? current : sessions.find((m) => m.id === currentSessionId));
+  sessions = mine && !list.some((m) => m.id === mine.id) ? [mine, ...list] : list;
+  statuses.clear();
+  for (const m of sessions) if (m.status) statuses.set(m.id, { ...m.status });
+  // The window knows best whether the session on screen runs (its own events), and it is being read.
+  if (currentSessionId) statuses.set(currentSessionId, { ...statusOf(currentSessionId), running, unread: undefined });
+  if (mine) {
+    setTitle(mine.title);
+    applySessionPlan(mine);
+  }
   renderSessionList();
-  applySessionPlan(current);
-  return current;
+  bus.emit('sessions', sessions);
 }
 
 /** The session's newest plan may have been decided in the main process (e.g. by a build run): update its card. */
@@ -2707,15 +2890,17 @@ function startRowRename(id: string): void {
 
 function openSessionMenu(m: SessionMeta, anchor: HTMLElement | { x: number; y: number }, row: HTMLElement): void {
   row.classList.add('menu-open');
+  // A running session is not forked or deleted (stop it first); any other one can be, whatever else runs.
+  const busy = statusOf(m.id).running;
   openMenu(
     [
       {
         items: [
           { label: 'Rename', icon: 'pencil', hint: 'F2', onSelect: () => startRowRename(m.id) },
-          { label: 'Fork', icon: 'git-branch', disabled: running, onSelect: () => void forkSession(m.id) },
+          { label: 'Fork', icon: 'git-branch', disabled: busy, onSelect: () => void forkSession(m.id) },
         ],
       },
-      { items: [{ label: 'Delete', icon: 'trash', danger: true, disabled: running, onSelect: () => void deleteSession(m.id) }] },
+      { items: [{ label: 'Delete', icon: 'trash', danger: true, disabled: busy, onSelect: () => void deleteSession(m.id) }] },
     ],
     { anchor, placement: 'bottom-start', minWidth: 200, onClose: () => row.classList.remove('menu-open') },
   );
@@ -2737,16 +2922,22 @@ function renderSessionList(): void {
       sessionList.appendChild(g);
       lastGroup = group;
     }
-    const isRunning = running && m.id === runningSessionId;
+    const st = statusOf(m.id);
+    const isRunning = st.running;
     const row = document.createElement('div');
     row.className = 'session-item' + (m.id === currentSessionId ? ' active' : '') + (isRunning ? ' running' : '');
     row.dataset.id = m.id;
     row.tabIndex = 0;
     row.setAttribute('role', 'button');
     if (m.id === currentSessionId) row.setAttribute('aria-current', 'true');
+    // One indicator: running, else waiting for the user, else unread, else the fork mark.
     const meta = isRunning
-      ? '<span class="trail-meta"><span class="spinner sm" aria-label="Running"></span></span>'
-      : m.forkedFrom
+      ? `<span class="trail-meta"><span class="spinner sm" aria-label="Running"></span>${st.attention ? '<span class="status-dot attention" aria-label="Waiting for you"></span>' : ''}</span>`
+      : st.attention
+        ? `<span class="trail-meta" data-tip="${st.attention === 'plan' ? 'Plan waiting for review' : 'Waiting for your approval'}"><span class="status-dot attention" aria-label="Waiting for you"></span></span>`
+        : st.unread && m.id !== currentSessionId
+          ? '<span class="trail-meta" data-tip="Finished while you were away"><span class="status-dot unread" aria-label="Unread"></span></span>'
+          : m.forkedFrom
         ? `<span class="trail-meta fork-mark" data-tip="Forked session">${icon('git-branch', 14)}</span>`
         : '';
     row.innerHTML =
@@ -2810,74 +3001,122 @@ sessionSearch.addEventListener('keydown', (e) => {
   }
 });
 
-async function switchSession(id: string): Promise<void> {
-  if (id === currentSessionId) return;
-  if (running) {
-    addSystemMessage('Stop the current run before switching sessions.', 'error');
+/** Bumped by every showSession, so the slower of two quick switches gives way */
+let showSeq = 0;
+
+/**
+ * Brings a session on screen, running or not: its transcript, then what is in flight (LiveState: the streaming reply,
+ * running tools, waiting approval cards, the queue, the status line), then the events that arrived in between.
+ * The main process takes the transcript and the live state at the same moment and sends every later event after its
+ * reply, so the result is what a window that had watched from the start would show.
+ */
+async function showSession(id: string): Promise<boolean> {
+  const my = ++showSeq;
+  const epoch = tasksEpoch;
+  let items: TranscriptItem[];
+  try {
+    items = await oc.sessions.switch(id);
+  } catch (err) {
+    if (my === showSeq) addSystemMessage(cleanError(err), 'error');
+    return false;
+  }
+  if (my !== showSeq) return false;
+  syncing = { id, buffer: [] };
+  currentSessionId = id;
+  statuses.set(id, { ...statusOf(id), unread: undefined });
+  // What belonged to the session shown before: its compaction status and queue rows go with it.
+  if (compacting) {
+    compacting = null;
+    statusLine.classList.remove('compacting');
+  }
+  queueList.clear();
+  renderTranscript(items);
+  let live: LiveState | null = null;
+  try {
+    live = await rpc('sessions.live', id);
+  } catch {
+    /* an older main process: the session shows as idle */
+  }
+  if (my !== showSeq) return false;
+  const buffered = syncing?.id === id ? syncing.buffer : [];
+  syncing = null;
+  applyLive(live);
+  for (const ev of buffered) handleEvent(ev);
+  showSessionTasks(await refreshSessions(), epoch);
+  if (my !== showSeq) return false;
+  changesPane.reset();
+  void refreshContext();
+  scrollToBottom(true);
+  bus.emit('session-shown', id);
+  return true;
+}
+
+/** Shows what is in flight in the session just rendered, through the same paths its events take. */
+function applyLive(live: LiveState | null): void {
+  const on = Boolean(live?.running);
+  if (on !== running || on) setRunning(on, live?.startedAt ?? Date.now());
+  if (!live || !on) {
+    syncPlanStatus();
     return;
   }
-  try {
-    const epoch = tasksEpoch;
-    const items = await oc.sessions.switch(id);
-    renderTranscript(items);
-    showSessionTasks(await refreshSessions(), epoch);
-    changesPane.reset();
-    scrollToBottom(true);
-    void refreshContext();
-  } catch (err) {
-    addSystemMessage(cleanError(err), 'error');
-  }
+  // Queued messages from elsewhere (a schedule, another session) get their bubble when delivered (user_message).
+  for (const m of live.queue ?? []) if (!m.origin || m.origin === 'user' || m.origin === 'queue') queueList.add(m);
+  for (const t of live.tools ?? []) handleEvent({ type: 'tool_start', id: t.id, name: t.name, args: t.args });
+  for (const a of live.approvals ?? []) handleEvent(a);
+  if (live.thinking) handleEvent({ type: 'thinking_delta', text: live.thinking });
+  if (live.text) handleEvent({ type: 'text_delta', text: live.text });
+}
+
+async function switchSession(id: string): Promise<void> {
+  if (id === currentSessionId) return;
+  await showSession(id);
 }
 
 async function newSession(): Promise<void> {
-  if (running) return;
-  const epoch = tasksEpoch;
-  await oc.sessions.create();
-  clearMessages();
-  showSessionTasks(await refreshSessions(), epoch);
-  changesPane.reset();
-  void refreshContext();
+  let meta: SessionMeta;
+  try {
+    meta = await oc.sessions.create();
+  } catch (err) {
+    addSystemMessage(cleanError(err), 'error');
+    return;
+  }
+  await showSession(meta.id);
   inputEl.focus();
 }
 newSessionBtn.onclick = () => void newSession();
 
 async function deleteSession(id: string): Promise<void> {
-  if (running) return;
+  if (statusOf(id).running) return;
   const meta = id === currentSessionId ? await oc.sessions.current() : sessions.find((s) => s.id === id);
   if (meta?.messageCount && !window.confirm(`Delete "${meta.title}"? This cannot be undone.`)) return;
   try {
     const wasCurrent = id === currentSessionId;
-    const epoch = tasksEpoch;
-    await oc.sessions.delete(id);
-    if (wasCurrent) clearMessages();
-    const current = await refreshSessions();
-    if (wasCurrent) showSessionTasks(current, epoch);
-    if (wasCurrent) changesPane.reset();
-    if (wasCurrent) void refreshContext();
+    const next = await oc.sessions.delete(id);
+    if (wasCurrent) await showSession(next.id);
+    else await refreshSessions();
   } catch (err) {
     addSystemMessage(cleanError(err), 'error');
   }
 }
 
 async function forkSession(id: string): Promise<void> {
-  if (running) return;
+  if (statusOf(id).running) return;
   try {
     const source = sessions.find((s) => s.id === id);
-    const wasCurrent = id === currentSessionId;
-    const epoch = tasksEpoch;
     const fork = await oc.sessions.fork(id);
-    if (!wasCurrent) renderTranscript(await oc.sessions.switch(fork.id));
-    showSessionTasks(await refreshSessions(), epoch);
-    // The fork keeps its own checkpoints (if any): the bubbles on screen follow it
-    if (wasCurrent) void syncTurns();
-    changesPane.reset();
-    void refreshContext();
+    await showSession(fork.id);
     addSystemMessage(`Forked "${source?.title ?? 'session'}". You are now in the fork; the original is unchanged.`, 'notice');
   } catch (err) {
     addSystemMessage(cleanError(err), 'error');
   }
 }
 
+// The main process keeps the list current for every session (status changes, new and removed sessions).
+onPush('sessions:changed', (list) => applySessionList(list));
+// A notification was clicked: its session comes on screen.
+onPush('sessions:show', (id) => {
+  if (typeof id === 'string' && id && id !== currentSessionId) void showSession(id);
+});
 
 // ---------- Slash menu (skills) ----------
 
@@ -2900,9 +3139,14 @@ async function updateSlashMenu(): Promise<void> {
   const m = /^\/([\w-]*)$/.exec(value);
   if (!m) return hideSlashMenu();
   const prefix = m[1].toLowerCase();
-  const skills = (await oc.skills.list()).filter((sk) => sk.name.toLowerCase().startsWith(prefix));
+  const [allSkills, registered] = await Promise.all([oc.skills.list(), registeredCommands()]);
+  const skills = allSkills.filter((sk) => sk.name.toLowerCase().startsWith(prefix));
   if (inputEl.value !== value) return;
-  const commands = BUILTINS.filter((sk) => sk.name.startsWith(prefix));
+  // The window's own commands first, then the app's registered ones (app.commands), tagged with where they come from.
+  const extra: SkillInfo[] = registered
+    .filter((c) => c.name.toLowerCase().startsWith(prefix) && !BUILTINS.some((b) => b.name === c.name))
+    .map((c) => ({ name: c.name, description: c.argsHint ? `${c.argsHint} · ${c.description}` : c.description, path: '', source: c.source === 'mod' ? 'user' : 'bundled', tag: c.source === 'mod' ? 'mod' : 'command' }) as SkillInfo & { tag: string });
+  const commands = [...BUILTINS.filter((sk) => sk.name.startsWith(prefix)), ...extra];
   slashItems = [...skills, ...commands];
   if (!slashItems.length) return hideSlashMenu();
   slashIndex = 0;
@@ -2917,7 +3161,8 @@ async function updateSlashMenu(): Promise<void> {
       const row = document.createElement('div');
       row.className = 'slash-item' + (i === slashIndex ? ' active' : '');
       row.setAttribute('role', 'option');
-      row.innerHTML = `<span class="name">/${escapeHtml(sk.name)}</span><span class="desc">${escapeHtml(sk.description)}</span><span class="src">${builtin ? 'command' : escapeHtml(sk.source)}</span>`;
+      const tag = (sk as SkillInfo & { tag?: string }).tag;
+      row.innerHTML = `<span class="name">/${escapeHtml(sk.name)}</span><span class="desc">${escapeHtml(sk.description)}</span><span class="src">${tag ? escapeHtml(tag) : builtin ? 'command' : escapeHtml(sk.source)}</span>`;
       row.onmousedown = (e) => {
         e.preventDefault();
         slashIndex = i;
@@ -3704,6 +3949,26 @@ window.__oc_debug = {
   },
 };
 
+// ---------- Feature wiring: each feature keeps its code in its own module, only the hookup lives here ----------
+
+// [feature:mods]
+
+// [feature:settings]
+
+// [feature:sidebar]
+
+// [feature:tasks]
+
+// [feature:images]
+
+// [feature:history]
+
+// [feature:schedules]
+
+// [feature:subagents]
+
+// [feature:remote]
+
 // ---------- Init ----------
 
 subscribeMcp();
@@ -3725,23 +3990,16 @@ void mcpPanel.refresh();
     /* ignore */
   }
   applyPane(false);
-  const epoch = tasksEpoch;
-  showSessionTasks(await refreshSessions(), epoch);
-  void changesPane.refresh();
-  // After a reload the main process still holds the current session; show its transcript again.
+  // After a reload the main process still holds the session on screen, possibly mid-run: show it as it stands
+  // (its transcript, what is in flight and its queue).
   try {
     const current = await oc.sessions.current();
-    if (current?.messageCount) renderTranscript(await oc.sessions.switch(current.id));
-  } catch {
-    /* a run is in progress; the transcript stays empty until the next switch */
+    if (current?.id) await showSession(current.id);
+    else await refreshSessions();
+  } catch (err) {
+    addSystemMessage(cleanError(err), 'error');
   }
-  // Messages queued before a reload are still waiting (the run may still be going).
-  try {
-    if (typeof oc.queue === 'function') for (const m of await oc.queue()) queueList.add(m);
-  } catch {
-    /* an older app without a queue */
-  }
-  void refreshContext();
+  void changesPane.refresh();
   reportBounds();
   autosize();
   applyBrowserState(await oc.browser.state());

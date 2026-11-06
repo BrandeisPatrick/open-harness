@@ -1532,3 +1532,11 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 .out-cut > .out.error + .out-more:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); }
 .tool-body .diff-body { max-height: 746px; }
 .out.expanded > pre, .code-view.expanded, pre.args.expanded, .tool-body .diff.expanded .diff-body { max-height: none; }
+
+/* Concurrent sessions: who sent a user message that was not typed here, and the sidebar's per-session status */
+.msg.user.has-origin { margin-top: 24px; }
+.msg.user .msg-origin { position: absolute; top: -17px; right: 2px; font-size: 11px; line-height: 14px; color: var(--text-400); white-space: nowrap; }
+.session-item .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.session-item .status-dot.attention { background: var(--accent); }
+.session-item .status-dot.unread { background: var(--text-400); }
+.session-item .trail-meta:has(.spinner) .status-dot { margin-left: 4px; }

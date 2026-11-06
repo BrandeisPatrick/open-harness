@@ -86,6 +86,12 @@ const ICONS = {
   'file-export': `<path d="${PAGE}"/><path d="M9 1.75V6h4.25M8 13V8.5M6 10.25L8 8.25l2 2"/>`,
   'circle-dashed': '<circle cx="8" cy="8" r="5.5" stroke-dasharray="2.4 2.2"/>',
   'circle-check-filled': '<circle cx="8" cy="8" r="6.25" fill="currentColor" stroke="none"/><path d="M5.5 8.25l1.75 1.75 3.25-3.5" style="stroke: var(--task-check, #fff)"/>',
+  // mods: the rail toggle (panel-left mirrored), icons a manifest may name (gauge, message, clock) and the default
+  // for a mod without one (four blocks, one of them round)
+  'panel-right': '<rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M9.75 2.75v10.5"/>',
+  gauge: `<path d="M2.25 11.75a5.75 5.75 0 1 1 11.5 0"/><path d="M8 11.75l2.75-3.25"/>${dot(8, 11.75, 1.1)}`,
+  message: '<path d="M4.25 2.75h7.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5H7.5l-3.25 2.5v-2.5c-.83 0-1.5-.67-1.5-1.5v-5.5c0-.83.67-1.5 1.5-1.5z"/>',
+  blocks: '<rect x="2.25" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="9" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="2.25" y="9" width="4.75" height="4.75" rx="1.25"/><circle cx="11.375" cy="11.375" r="2.375"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

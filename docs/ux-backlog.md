@@ -3,6 +3,16 @@
 What Open Harness still lacks, or does differently, compared with the Claude Code desktop app's day-to-day experience.
 Ordered by how often a user would feel the difference. Items are ticked off as they land; each entry says where.
 
+## Planned releases
+
+Decided with the user on 2026-11-06; the version rule is in [releasing.md](releasing.md).
+
+| Version | What | State |
+| --- | --- | --- |
+| 0.5.0 | The app in white and grey, like Claude Code: neutral surfaces in both schemes, every button white or grey, blue only where it carries meaning; the warm 0.4.0 palette kept as a "Paper" theme mod. The Mods page with its own tabs (Backgrounds, Chat bar, Conversation, Themes) if it is ready in time | building |
+| 0.6.0 | Named providers (OpenRouter, Portkey, OpenAI, Anthropic, Ollama, LM Studio, any OpenAI-compatible endpoint) set from `settings.json`, with a JSON schema, a guide written for coding agents, and an `open-harness` command that adds, selects and tests a provider without the window | building |
+| 0.7.0 | A liquid glass look (translucent, layered materials in the style of macOS 26) for the app and for the website. Reserved: the user said it is not important yet, so it waits until 0.5.0 and 0.6.0 are out | reserved |
+
 ## Done in earlier rounds
 
 Sessions sidebar (day groups, search, rename, fork, delete, generated titles) · transcript with tool rows, diffs,

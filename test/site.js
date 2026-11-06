@@ -101,6 +101,17 @@ const themed = themedImgs.map((t) => attr(t, 'data-src'));
 const unthemed = [...new Set(imgs.map(fileOf).filter((f) => /^screenshots\//.test(f) && !/-dark\.png$/.test(f) && !themed.includes(f)))];
 check('every screenshot is themed but Hyperspace, which is dark by design', JSON.stringify(unthemed) === JSON.stringify(['screenshots/hyperspace.png']), unthemed);
 check('the main window picture has both themes', themed.includes('screenshots/hero.png'));
+// The features are cards: a heading and its words, and one picture in a frame that names its crop; every card's
+// picture has both themes but Hyperspace's.
+const cards = [...html.matchAll(/<article class="card">([\s\S]*?)<\/article>/g)].map((m) => m[1]);
+const cardBad = cards.filter((c) => {
+  const frame = /<div class="card-frame[^"]*" style="([^"]*)">/.exec(c);
+  const pics = (c.replace(/<noscript>[\s\S]*?<\/noscript>/g, '').match(/<img\b[^>]*>/g) || []);
+  const pic = pics[0] || '';
+  const themedOk = attr(pic, 'data-src-dark') !== null || attr(pic, 'src') === 'screenshots/hyperspace.png';
+  return !/<h3>[^<]+<\/h3>\s*<p>/.test(c) || !frame || !/--w:\s*\d+px/.test(frame[1]) || pics.length !== 1 || !themedOk;
+});
+check('six feature cards, each with a heading, its words and one framed picture in both themes (Hyperspace is dark only)', cards.length === 6 && cardBad.length === 0, cardBad.map((c) => /<h3>([^<]*)/.exec(c)?.[1]));
 check('no <picture> outside a <noscript> (the preload scanner would fetch it in the system scheme)', html.replace(/<noscript>[\s\S]*?<\/noscript>/g, '').indexOf('<picture') === -1);
 
 // ---- headings ----

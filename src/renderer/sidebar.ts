@@ -9,6 +9,7 @@ import { brandMark, icon } from './icons.js';
 import { basename, escapeHtml } from './dom.js';
 import { closeMenu, menuAnchoredTo, openMenu, type MenuSection } from './popover.js';
 import { bus } from './bus.js';
+import { activeProvider } from './provider-view.js';
 import { onPush, rpc } from './rpc.js';
 import { ancestorsOf, groupOf, parentOf, shapeResults, shortDate, visibleRows, type Indicator, type Row, type SearchResult } from './sidebar-model.js';
 
@@ -719,9 +720,8 @@ export function createSidebar(d: SidebarDeps): SidebarView {
 
   const syncModel = (c: AppConfig) => {
     if (!c) return;
-    const ollama = c.provider === 'ollama';
-    const model = (ollama ? c.ollama?.model : c.portkey?.model) || 'No model';
-    const text = `${model} · ${ollama ? 'Ollama' : 'Portkey'}`;
+    const p = activeProvider(c);
+    const text = `${p.model || 'No model'} · ${p.label}`;
     modelLabel.textContent = text;
     modelChip.setAttribute('aria-label', `Model: ${text}. Open model settings`);
     modelChip.dataset.tip = text;

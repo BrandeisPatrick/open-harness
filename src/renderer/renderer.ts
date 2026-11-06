@@ -80,6 +80,7 @@ import { agentApproval, setNameLookup } from './tool-labels.js';
 import { unframe } from './origin.js';
 import { activityWords } from './tool-activity.js';
 import { tilde } from './home.js';
+import { activeProvider, allProviders, usesOllama } from './provider-view.js';
 
 declare global {
   interface Window {
@@ -1638,7 +1639,7 @@ const contextMeter = createContextMeter({
   boundary: transcriptWrap,
   busy: () => running || compacting !== null,
   compact: () => void compactNow(),
-  openSettings: () => openSettings(config?.provider === 'portkey' ? 'portkey-contextWindow' : 'ollama-numCtx'),
+  openSettings: () => openSettings(config?.provider === 'portkey' ? 'portkey-contextWindow' : config?.provider === 'ollama' ? 'ollama-numCtx' : 'provider'),
 });
 
 async function refreshContext(): Promise<void> {
@@ -1655,7 +1656,7 @@ function contextLimit(): number {
   const known = contextMeter.get()?.limit;
   if (known) return known;
   if (!config) return 0;
-  return config.provider === 'ollama' ? Number(config.ollama.numCtx) || 0 : Number(config.portkey.contextWindow) || 0;
+  return Number(activeProvider(config).contextWindow) || 0;
 }
 
 /** True from Enter until the main process has answered, so a double Enter cannot send twice. */
@@ -2290,7 +2291,7 @@ const capsInFlight = new Map<string, Promise<ModelCapabilities | null>>();
 let visionCheck = 0;
 
 function currentModel(): string {
-  return config.provider === 'ollama' ? config.ollama.model : config.portkey.model;
+  return activeProvider(config).model;
 }
 
 function fetchCapabilities(key: string): Promise<ModelCapabilities | null> {
@@ -2533,8 +2534,22 @@ modeBtn.onclick = () => {
   });
 };
 
-async function setModel(model: string): Promise<void> {
-  config = await oc.setConfig({ ...config, ollama: { ...config.ollama, model } });
+async function setModel(model: string, name = activeProvider(config).name): Promise<void> {
+  try {
+    await rpc('providers.setModel', name, model);
+    config = await oc.getConfig();
+  } catch {
+    // An older main process: only the Ollama block's model could be chosen here
+    config = await oc.setConfig({ ...config, ollama: { ...config.ollama, model } });
+  }
+  applyConfigToUi();
+  inputEl.focus();
+  void refreshContext();
+}
+
+/** Makes another provider the one in use (from the model menu). */
+async function useProvider(name: string): Promise<void> {
+  config = await oc.setConfig({ ...config, provider: name });
   applyConfigToUi();
   inputEl.focus();
   void refreshContext();
@@ -2542,26 +2557,31 @@ async function setModel(model: string): Promise<void> {
 
 modelBtn.onclick = async () => {
   if (menuAnchoredTo(modelBtn)) return closeMenu();
-  const settingsItem: MenuItem = { label: 'Settings…', icon: 'settings', hint: '⌘,', onSelect: openSettings };
+  const settingsItem: MenuItem = { label: 'Settings…', icon: 'settings', hint: '⌘,', onSelect: () => openSettings('provider') };
   const opts = { anchor: modelBtn, placement: 'top-start' as const, boundary: transcriptWrap, minWidth: 260 };
-  if (config.provider === 'portkey') {
-    openMenu([{ label: 'Portkey', items: [{ label: config.portkey.model || 'No model set', checked: Boolean(config.portkey.model), disabled: !config.portkey.model }] }, { items: [settingsItem] }], opts);
-    return;
-  }
-  const current = config.ollama.model;
+  const active = activeProvider(config);
+  const current = active.model;
+  // The other providers that could be used as they are
+  const others = allProviders(config).filter((p) => p.name !== active.name && !p.error);
+  const switchSection = (): MenuSection[] => (others.length ? [{ label: 'Provider', items: others.map((p) => ({ label: p.label, hint: p.model, onSelect: () => void useProvider(p.name) })) }] : []);
   const section = (models: string[], note?: string): MenuSection => ({
-    label: 'Ollama',
-    items: models.map((m) => ({ label: m, checked: m === current, onSelect: () => void (m === current ? inputEl.focus() : setModel(m)) })),
+    label: active.label,
+    items: models.map((m) => ({ label: m, checked: m === current, onSelect: () => void (m === current ? inputEl.focus() : setModel(m, active.name)) })),
     note,
   });
-  const menu = openMenu([section(current ? [current] : [], 'Loading models…'), { items: [settingsItem] }], opts);
+  const sections = (models: string[], note?: string) => [section(models, note), ...switchSection(), { items: [settingsItem] }];
+  const own = [...new Set([...(current ? [current] : []), ...active.models])];
+  const menu = openMenu(sections(own, active.type === 'ollama' ? 'Loading models…' : active.models.length ? undefined : 'Loading models…'), opts);
   try {
-    const models = await oc.listOllamaModels();
+    const models = active.type === 'ollama' ? await oc.listOllamaModels() : await rpc('providers.models', active.name);
     if (!menuAnchoredTo(modelBtn)) return;
-    const list = !current || models.includes(current) ? models : [current, ...models];
-    menu.update([section(list, models.length ? undefined : 'No local models. Try: ollama pull qwen3:8b'), { items: [settingsItem] }]);
+    const list = [...new Set([...(current ? [current] : []), ...models])];
+    const none = active.type === 'ollama' ? 'No local models. Try: ollama pull qwen3:8b' : 'The service listed no models.';
+    menu.update(sections(list, models.length ? undefined : none));
   } catch {
-    if (menuAnchoredTo(modelBtn)) menu.update([section(current ? [current] : [], 'Could not reach Ollama. Is it running? Start it with: ollama serve'), { items: [settingsItem] }]);
+    if (!menuAnchoredTo(modelBtn)) return;
+    const note = active.type === 'ollama' ? 'Could not reach Ollama. Is it running? Start it with: ollama serve' : active.error ?? (own.length ? undefined : 'This service does not list its models; set one in Settings.');
+    menu.update(sections(own, note));
   }
 };
 
@@ -2578,11 +2598,13 @@ function shortPath(p: string): string {
 let lastToolActivity: boolean | undefined;
 
 function applyConfigToUi(): void {
-  const model = config.provider === 'ollama' ? config.ollama.model : config.portkey.model;
+  const active = activeProvider(config);
+  const model = active.model;
   // Under the chat bar: the model in the text colour, then a muted word when there is one worth saying
   const sub = config.provider === 'ollama' && config.ollama.think === 'on' ? 'Thinking' : '';
   modelBtn.innerHTML = `<span class="foot-label">${escapeHtml(model || 'Choose a model')}</span>${sub ? `<span class="foot-sub">${sub}</span>` : ''}`;
-  modelBtn.dataset.tip = config.provider === 'ollama' ? `Ollama · ${config.ollama.baseURL}` : `Portkey · ${config.portkey.baseURL}`;
+  modelBtn.dataset.tip = `${active.label} · ${active.baseURL}`;
+  modelBtn.dataset.provider = active.name;
   const mode = currentMode();
   const info = MODES[mode];
   modeBtn.innerHTML = `<span class="foot-label">${escapeHtml(info.short)}</span>`;
@@ -2599,7 +2621,7 @@ function applyConfigToUi(): void {
   // Tool activity: Summary or Every call; the conversation on screen folds again when it changes
   if (lastToolActivity !== undefined && lastToolActivity !== summaryMode()) refoldAll();
   lastToolActivity = summaryMode();
-  const connKey = `${config.provider}|${config.ollama.baseURL}|${config.ollama.model}`;
+  const connKey = `${config.provider}|${active.baseURL}|${active.model}|${active.error ?? ''}`;
   if (connKey !== lastConnKey) {
     lastConnKey = connKey;
     void checkConnection();
@@ -2640,7 +2662,7 @@ let connProblem: string | null = null;
  */
 async function checkConnection(): Promise<void> {
   const my = ++connCheck;
-  if (config.provider !== 'ollama') {
+  if (!usesOllama(config)) {
     ollamaHealth = null;
     connProblem = null;
     syncConnection();
@@ -2654,13 +2676,13 @@ async function checkConnection(): Promise<void> {
     models = null;
   }
   if (my !== connCheck) return;
-  const m = config.ollama.model;
+  const m = activeProvider(config).model;
   if (models) {
     ollamaHealth = { reachable: true, models };
     connProblem = m && models.length && !hasModel(models, m) ? `Ollama is running, but ${m} is not downloaded. Run: ollama pull ${m}` : null;
   } else {
     ollamaHealth = { reachable: false, models: [] };
-    connProblem = `Can't reach Ollama at ${config.ollama.baseURL.replace(/\/v1\/?$/, '')}. Start it with "ollama serve", then retry.`;
+    connProblem = `Can't reach Ollama at ${activeProvider(config).baseURL.replace(/\/v1\/?$/, '')}. Start it with "ollama serve", then retry.`;
   }
   syncConnection();
 }
@@ -2684,12 +2706,12 @@ const setupStrip = createSetupStrip({
 function setupChecks(): SetupChecks {
   if (debugSetup) return debugSetup;
   const folder = !isHomeFolder(config.workingDirectory);
-  const h = config.provider === 'ollama' ? ollamaHealth : null;
-  return { ollama: !h || h.reachable, model: !h || !h.reachable || hasModel(h.models, config.ollama.model), folder };
+  const h = usesOllama(config) ? ollamaHealth : null;
+  return { ollama: !h || h.reachable, model: !h || !h.reachable || hasModel(h.models, activeProvider(config).model), folder };
 }
 
 function ollamaLine(): SetupLine {
-  const base = config.ollama.baseURL;
+  const base = activeProvider(config).baseURL;
   const address = ollamaAddress(base);
   // Ollama on another machine cannot be started from here: the fix is the address.
   if (!isLocalOllama(base)) return { id: 'ollama', icon: 'server', title: "Can't reach Ollama", detail: address, action: 'Open settings', actionTip: 'Check the Ollama address' };
@@ -2703,7 +2725,7 @@ function ollamaLine(): SetupLine {
 }
 
 function modelLine(): SetupLine {
-  const model = config.ollama.model.trim();
+  const model = activeProvider(config).model.trim();
   const models = ollamaHealth?.reachable ? ollamaHealth.models : [];
   if (!model && models.length) {
     return { id: 'model', icon: 'download', title: 'No model selected', detail: `${models.length} downloaded`, action: 'Choose model', actionTip: 'Pick one of your downloaded models' };
@@ -2722,9 +2744,13 @@ function modelLine(): SetupLine {
 function setupLines(): SetupLine[] {
   const checks = setupChecks();
   const lines: SetupLine[] = [];
-  if (config.provider === 'ollama') {
+  const active = activeProvider(config);
+  if (active.type === 'ollama') {
     if (!checks.ollama) lines.push(ollamaLine());
     if (!checks.model) lines.push(modelLine());
+  } else if (active.error && !debugSetup) {
+    // Any other provider: what stands in the way (no key, no model), with Settings at hand
+    lines.push({ id: 'provider', icon: active.key === 'missing' ? 'plug' : 'settings', title: active.key === 'missing' ? `${active.label} needs a key` : `No model set for ${active.label}`, detail: active.key === 'missing' ? active.keySource : undefined, action: 'Open settings', actionTip: active.error });
   }
   if (!checks.folder) lines.push({ id: 'folder', icon: 'folder', title: 'Working in your home folder', action: 'Choose folder', actionTip: 'Choose the project folder Open Harness works in' });
   return lines;
@@ -2734,7 +2760,7 @@ function setupLines(): SetupLine[] {
 function syncConnection(): void {
   if (!config) return;
   if (ollamaStartedAt) {
-    const answered = config.provider !== 'ollama' || ollamaHealth?.reachable === true;
+    const answered = !usesOllama(config) || ollamaHealth?.reachable === true;
     if (answered || Date.now() - ollamaStartedAt > START_WAIT_MS) {
       ollamaStartFailed = !answered;
       ollamaStartedAt = 0;
@@ -2754,7 +2780,7 @@ function syncConnection(): void {
 function scheduleSetupCheck(): void {
   window.clearTimeout(setupTimer);
   setupTimer = undefined;
-  const watching = !debugSetup && config.provider === 'ollama' && !emptyState.hidden && setupStrip.lines().some((id) => id !== 'folder');
+  const watching = !debugSetup && usesOllama(config) && !emptyState.hidden && setupStrip.lines().some((id) => id !== 'folder');
   if (!watching && !ollamaStartedAt) return;
   setupTimer = window.setTimeout(
     () => {
@@ -2774,7 +2800,7 @@ new MutationObserver(() => {
 }).observe(emptyState, { attributes: true, attributeFilter: ['hidden'] });
 // Back from a terminal where Ollama was started or a model pulled: check right away.
 window.addEventListener('focus', () => {
-  if (!config || debugSetup || config.provider !== 'ollama' || emptyState.hidden) return;
+  if (!config || debugSetup || !usesOllama(config) || emptyState.hidden) return;
   if (setupStrip.lines().some((id) => id !== 'folder')) void checkConnection();
 });
 
@@ -2784,7 +2810,8 @@ async function setupAction(id: SetupId, button: HTMLButtonElement): Promise<void
   } else if (id === 'model') {
     // "Choose model" (a pull shows its command instead): the model chip's menu
     modelBtn.click();
-  } else if (!isLocalOllama(config.ollama.baseURL)) openSettings('ollama-baseURL');
+  } else if (id === 'provider') openSettings('provider');
+  else if (!isLocalOllama(activeProvider(config).baseURL)) openSettings(config.provider === 'ollama' ? 'ollama-baseURL' : 'provider');
   else await startOllama(button);
 }
 
@@ -2792,7 +2819,7 @@ async function setupAction(id: SetupId, button: HTMLButtonElement): Promise<void
 async function startOllama(button: HTMLButtonElement): Promise<void> {
   const term = terminalSource();
   if (!term || ollamaStartedAt) return;
-  const command = ollamaServeCommand(config.ollama.baseURL);
+  const command = ollamaServeCommand(activeProvider(config).baseURL);
   showPaneTab('terminal');
   const id = await terminalPane.newTab();
   if (!id) {

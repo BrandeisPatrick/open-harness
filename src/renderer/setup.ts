@@ -8,7 +8,7 @@ import { copyWithFeedback } from './dom.js';
 import { icon, type IconName } from './icons.js';
 import { homeDir } from './home.js';
 
-export type SetupId = 'ollama' | 'model' | 'folder';
+export type SetupId = 'ollama' | 'model' | 'folder' | 'provider';
 
 /** Which checks pass (true = fine): Ollama answers, the configured model is downloaded, a project folder is chosen. */
 export interface SetupChecks {

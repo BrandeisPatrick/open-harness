@@ -1,13 +1,15 @@
 // General, Model, Permissions and Context: the sections that are rows over the config.
 
-import type { AppConfig, PermissionMode } from '../../shared/types';
+import type { AppConfig, PermissionMode, ProviderView } from '../../shared/types';
+import type { CliStatus } from '../../shared/providers';
 import type { PowerStatus } from '../../shared/schedules';
 import { escapeHtml, h } from '../dom.js';
 import { icon } from '../icons.js';
 import { MODES } from '../modes.js';
 import { onPush } from '../rpc.js';
 import { COMPACT_AT, KEEP_AWAKE, nearestCompactStep, parseInteger, parseText, parseUrl, TOOL_ACTIVITY, TOOL_SET } from './model.js';
-import { button, group, iconButton, row, sectionTitle, tildePath } from './ui.js';
+import { actions, button, group, iconButton, row, sectionTitle, textControl, tildePath, type Choice } from './ui.js';
+import { activeProvider, allProviders } from '../provider-view.js';
 import type { Ctx, Section } from './ctx.js';
 
 export function generalSection(ctx: Ctx): Section {
@@ -28,6 +30,46 @@ export function generalSection(ctx: Ctx): Section {
   const showPower = (p: PowerStatus | null) => awake.setDesc(p?.active ? `${awakeBase} Keeping it awake now.` : awakeBase);
   onPush('power:changed', (p) => showPower(p));
 
+  // The command-line tool: where it is, and a link on the PATH
+  const cliInstall = button('Install', () => void cliAction('cli.install', cliInstall), { icon: 'terminal' });
+  const cliRemove = button('Remove', () => void cliAction('cli.uninstall', cliRemove));
+  const cli = row({ id: 'cli', title: 'Command line tool', desc: '', keywords: 'cli command terminal shell open-harness path install agent claude code provider' }, actions(cliInstall, cliRemove));
+  cli.descEl.classList.add('sp-path');
+  const showCli = (st: CliStatus | null) => {
+    if (!st) {
+      cli.el.hidden = true;
+      return;
+    }
+    cli.el.hidden = false;
+    const where = st.installed ? `open-harness → ${tildePath(st.command)}` : tildePath(st.command);
+    const extra = !st.available
+      ? ' (not in this copy of the app)'
+      : st.conflict
+        ? `. ${st.conflict}`
+        : st.installed && !st.onPath
+          ? `. Linked in ${tildePath(st.link.replace(/\/open-harness$/, ''))}, which is not on your PATH: add it to your shell profile, or run the command by its full path.`
+          : st.installed
+            ? `. Linked as ${tildePath(st.link)}.`
+            : `. Install puts a link in ${tildePath(st.link.replace(/\/open-harness$/, ''))} (no administrator password).`;
+    cli.setDesc(where + extra);
+    cli.descEl.title = st.command;
+    cliInstall.hidden = st.installed;
+    cliInstall.disabled = !st.available || Boolean(st.conflict);
+    cliRemove.hidden = !st.installed;
+  };
+  async function cliAction(method: 'cli.install' | 'cli.uninstall', btn: HTMLButtonElement): Promise<void> {
+    btn.disabled = true;
+    try {
+      showCli(await ctx.call(method));
+      cli.problem(null);
+      cli.saved();
+    } catch (err) {
+      cli.problem(ctx.cleanError(err));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   el.append(
     group(
       null,
@@ -41,6 +83,7 @@ export function generalSection(ctx: Ctx): Section {
         field: 'toolActivity',
         choices: TOOL_ACTIVITY,
       }),
+      cli,
       ctx.switchField({ id: 'notifications', title: 'Notifications', desc: 'Notify when a run finishes or needs your approval while Open Harness is in the background.', keywords: 'alert notify banner sound', field: 'notifications' }),
       ctx.switchField({ id: 'autoTitles', title: 'Generated titles', desc: 'Name a session from its first exchange.', keywords: 'session name rename title', field: 'autoTitles' }),
       ctx.textField({ id: 'maxTurns', inputId: 'maxTurns', title: 'Max tool turns', desc: 'How many tool calls one request may make before it stops and asks you to continue.', keywords: 'limit steps iterations', field: 'maxTurns', type: 'number', width: 96, parse: (t) => parseInteger(t, 1, 500) }),
@@ -71,6 +114,11 @@ export function generalSection(ctx: Ctx): Section {
       } catch {
         showPower(null);
       }
+      try {
+        showCli(await ctx.call('cli.status'));
+      } catch {
+        showCli(null);
+      }
       return 'ok';
     },
   };
@@ -78,32 +126,150 @@ export function generalSection(ctx: Ctx): Section {
 
 export function modelSection(ctx: Ctx): Section {
   const el = h('section', {}, sectionTitle('Model'));
-  const providerRows: { el: HTMLElement; provider: AppConfig['provider'] }[] = [];
-  const tag = <T extends { el: HTMLElement }>(r: T, provider: AppConfig['provider']): T => {
+  /** 'ollama', 'portkey', or 'named' for every named provider (they share one set of rows) */
+  type Kind = 'ollama' | 'portkey' | 'named';
+  const providerRows: { el: HTMLElement; provider: Kind }[] = [];
+  const tag = <T extends { el: HTMLElement }>(r: T, provider: Kind): T => {
     r.el.dataset.provider = provider;
     providerRows.push({ el: r.el, provider });
     return r;
   };
+  const kindOf = (p: string): Kind => (p === 'ollama' || p === 'portkey' ? p : 'named');
   const syncProvider = (p: AppConfig['provider']) => {
-    for (const r of providerRows) r.el.classList.toggle('provider-off', r.provider !== p);
-    advanced.classList.toggle('provider-off', p !== 'portkey');
+    const k = kindOf(p);
+    for (const r of providerRows) r.el.classList.toggle('provider-off', r.provider !== k);
+    advanced.classList.toggle('provider-off', k !== 'portkey');
   };
 
-  const provider = ctx.segField({
+  // The choices are every provider the config has; sync() rebuilds them (the selectField keeps this array).
+  const providerChoices: Choice<string>[] = [];
+  const choicesFor = (cfg: AppConfig): Choice<string>[] =>
+    allProviders(cfg).map((p) => ({ value: p.name, label: p.name === 'ollama' ? 'Ollama' : p.name === 'portkey' ? `${p.label} (the gateway fields)` : p.label === p.name ? p.name : `${p.label} (${p.name})` }));
+  const setChoices = (cfg: AppConfig) => {
+    const next = choicesFor(cfg);
+    // An unknown name stays visible as it is, so the select does not pretend another provider is in use
+    if (!next.some((c) => c.value === cfg.provider)) next.push({ value: cfg.provider, label: `${cfg.provider} (not defined)` });
+    providerChoices.splice(0, providerChoices.length, ...next);
+    const select = provider.control.querySelector('select');
+    if (!select) return;
+    const want = next.map((c) => `${c.value}\u0000${c.label}`).join('\u0001');
+    if (select.dataset.choices !== want) {
+      select.replaceChildren(...next.map((c) => h('option', { value: c.value }, c.label)));
+      select.dataset.choices = want;
+    }
+    select.value = cfg.provider;
+  };
+
+  const provider = ctx.selectField({
     id: 'provider',
+    inputId: 'provider',
     title: 'Provider',
-    desc: 'Where Open Harness sends model requests: Ollama on this Mac, or an AI gateway such as Portkey.',
-    keywords: 'ollama portkey gateway local cloud',
+    desc: 'Where Open Harness sends model requests: Ollama on this Mac, a gateway such as Portkey, or any provider named in settings.json (OpenRouter, OpenAI, Anthropic, LM Studio, …).',
+    keywords: 'ollama portkey gateway local cloud openrouter openai anthropic groq deepseek together lm studio service',
     field: 'provider',
-    choices: [
-      { value: 'ollama', label: 'Ollama' },
-      { value: 'portkey', label: 'Gateway' },
-    ],
+    width: 300,
+    choices: providerChoices,
     onSaved: (v) => {
-      syncProvider(v as AppConfig['provider']);
+      syncProvider(v);
       ctx.refreshSearch();
     },
   });
+  setChoices(ctx.config());
+
+  // Named providers: what the entry resolves to, its model, and a test
+  const named = (): ProviderView => activeProvider(ctx.config());
+  const service = tag(row({ id: 'provider-service', title: 'Service', desc: '', keywords: 'base url endpoint type test check' }, null), 'named');
+  service.descEl.classList.add('sp-path');
+  const testBtn = button('Test', () => void runTest(), { icon: 'play' });
+  service.control.append(testBtn);
+  async function runTest(): Promise<void> {
+    testBtn.disabled = true;
+    service.problem(null);
+    try {
+      const r = await ctx.call('providers.test', named().name);
+      if (r.ok) {
+        service.setDesc(`${serviceText(named())} · answered with ${r.model} in ${r.ms} ms`);
+        service.saved();
+      } else service.problem(r.error ?? 'It did not answer.');
+    } catch (err) {
+      service.problem(ctx.cleanError(err));
+    } finally {
+      testBtn.disabled = false;
+    }
+  }
+  const serviceText = (p: ProviderView) => `${p.label} · ${p.type} · ${p.baseURL || 'no base URL'}`;
+  const keyRow = tag(row({ id: 'provider-key', title: 'API key', desc: '', keywords: 'token secret credential environment variable' }, null), 'named');
+
+  const namedModels = h('datalist', { id: 'provider-models' });
+  const namedModel = textControl({
+    value: '',
+    placeholder: 'Model id',
+    width: 260,
+    mono: true,
+    id: 'provider-model',
+    onCommit: async (text) => {
+      const m = text.trim();
+      const p = named();
+      if (!m || m === p.model) {
+        namedModel.set(p.model);
+        return;
+      }
+      try {
+        await ctx.call('providers.setModel', p.name, m);
+        modelRow.problem(null);
+        modelRow.saved();
+      } catch (err) {
+        modelRow.problem(ctx.cleanError(err));
+        namedModel.set(p.model);
+      }
+    },
+  });
+  namedModel.input.setAttribute('list', 'provider-models');
+  const namedRefresh = iconButton('refresh', 'Ask the service for its models', () => void refreshNamedModels());
+  const modelRow = tag(row({ id: 'provider-model', title: 'Model', desc: '', keywords: 'llm model id' }, namedModel), 'named');
+  modelRow.control.append(namedModels, namedRefresh);
+  async function refreshNamedModels(): Promise<void> {
+    const p = named();
+    if (p.builtIn) return;
+    namedRefresh.classList.add('spinning');
+    try {
+      const models = await ctx.call('providers.models', p.name);
+      if (named().name !== p.name) return;
+      namedModels.replaceChildren(...models.map((m) => h('option', { value: m })));
+      modelRow.setDesc(models.length ? `${models.length} model${models.length === 1 ? '' : 's'} offered${p.models.length ? ' (the entry\'s list first)' : ''}.` : 'The service listed no models; type the model id.');
+    } catch (err) {
+      if (named().name !== p.name) return;
+      namedModels.replaceChildren(...p.models.map((m) => h('option', { value: m })));
+      modelRow.setDesc(`Type the model id; the service could not be asked for its list (${ctx.cleanError(err)}).`);
+    } finally {
+      namedRefresh.classList.remove('spinning');
+    }
+  }
+  const windowRow = tag(row({ id: 'provider-contextWindow', title: 'Context window', desc: '', keywords: 'tokens size memory' }, null), 'named');
+
+  const files = row(
+    { id: 'provider-files', title: 'More providers', desc: 'Add OpenRouter, OpenAI, Anthropic, Groq, DeepSeek, Together, LM Studio or any OpenAI-compatible service in settings.json, or from the command line: open-harness provider add <name> --type <type>. A coding agent can do it for you; see docs/configure.md.', keywords: 'add provider new openrouter openai anthropic groq deepseek together lmstudio cli command settings.json configure' },
+    button('Open settings.json', () => void ctx.call('settings.open', 'user').catch((err) => files.problem(ctx.cleanError(err))), { icon: 'file' }),
+  );
+
+  let lastNamed = '';
+  const syncNamed = (cfg: AppConfig) => {
+    const p = activeProvider(cfg);
+    if (p.builtIn) return;
+    service.setDesc(serviceText(p));
+    service.problem(p.error && p.key !== 'missing' ? p.error : null);
+    keyRow.setDesc(p.key === 'none' ? 'Not needed for this service.' : p.key === 'set' ? `Set (${p.keySource}). Keys are never shown here.` : `Not set. ${p.error ?? ''}`);
+    keyRow.el.classList.toggle('invalid', p.key === 'missing');
+    if (document.activeElement !== namedModel.input) namedModel.set(p.model);
+    const owner = p.owner;
+    modelRow.setDesc(owner ? `Defined in ${owner === 'project' ? "the project's" : 'your'} settings.json; a model chosen here lasts until the file is read again.` : 'The model to run, as the service names it.');
+    windowRow.setDesc(`${p.contextWindow.toLocaleString('en-US')} tokens${p.maxOutput ? `, replies up to ${p.maxOutput.toLocaleString('en-US')}` : ''}. Set contextWindow in the entry when the model's is different.`);
+    if (p.name !== lastNamed) {
+      lastNamed = p.name;
+      namedModels.replaceChildren(...p.models.map((m) => h('option', { value: m })));
+      void refreshNamedModels();
+    }
+  };
 
   // Ollama
   const modelList = h('datalist', { id: 'ollama-models' });
@@ -209,19 +375,27 @@ export function modelSection(ctx: Ctx): Section {
   });
   gateway.append(advanced);
 
-  el.append(group(null, provider), ollama, gateway);
+  const namedGroup = group(null, service, keyRow, modelRow, windowRow);
+  el.append(group(null, provider), ollama, gateway, namedGroup, group(null, files));
 
   let lastProvider = '';
   return {
     id: 'model',
     el,
     sync(cfg) {
+      setChoices(cfg);
       syncProvider(cfg.provider);
+      syncNamed(cfg);
       if (cfg.provider === 'ollama' && lastProvider !== 'ollama') void refreshModels();
       lastProvider = cfg.provider;
     },
     async load() {
-      lastProvider = ctx.config().provider;
+      const cfg = ctx.config();
+      lastProvider = cfg.provider;
+      setChoices(cfg);
+      syncProvider(cfg.provider);
+      lastNamed = '';
+      syncNamed(cfg);
       void refreshModels();
       return 'ok';
     },

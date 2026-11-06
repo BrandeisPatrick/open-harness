@@ -212,6 +212,7 @@ What the model can do (images, tools) is detected for Ollama; for the other serv
   - a service that takes a key (any type but `ollama`, `lmstudio` and `openai-compatible`, or any entry that names `apiKeyEnv`) keeps its documented address: an entry that sets its own `baseURL` is skipped whole. Define such a provider in your own settings.json and select it from the project with `"provider"`;
   - an `openai-compatible` entry may not name `apiKeyEnv` (its address is always its own); it applies without a key;
   - a header value may not contain a `${VAR}` reference;
+  - the built-in gateway block's `portkey.baseURL` is ignored (the gateway key would follow it); `portkey.model`, `virtualKey`, `provider` and `configId` still apply, since they go to the address you chose;
   - `apiKeyEnv` for a type at its documented address, and a `baseURL` for `ollama` or `lmstudio` (no key), are fine.
 
 ### The other settings

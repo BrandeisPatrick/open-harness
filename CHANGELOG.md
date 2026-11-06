@@ -23,7 +23,7 @@ Open Harness now works with whichever model service you use, and can be set up f
 
 - Keys never reach the window, the logs, the transcript, what mods can read or the command's output: Settings shows "Set (OPENROUTER_API_KEY)" or "Not set".
 - A project's settings.json may no longer carry a key: `apiKey`, `portkey.apiKey`, `portkey.providerApiKey` and `env` variables named like a key are ignored there, with a problem line.
-- Nor may it send your key somewhere of its own choosing: a provider entry for a service that takes a key cannot set its own address there (define it in your own settings.json and select it from the project with `"provider"`), an `openai-compatible` entry cannot name a key variable, and a header cannot hold a `${VAR}`. Naming the key's variable for a service at its documented address, and the address of a local Ollama or LM Studio, are fine.
+- Nor may it send your key somewhere of its own choosing: a provider entry for a service that takes a key cannot set its own address there (define it in your own settings.json and select it from the project with `"provider"`), an `openai-compatible` entry cannot name a key variable, a header cannot hold a `${VAR}`, and the gateway block's `portkey.baseURL` is ignored (its model, virtual key, provider slug and config id still apply). Naming the key's variable for a service at its documented address, and the address of a local Ollama or LM Studio, are fine.
 
 ## 0.5.0
 

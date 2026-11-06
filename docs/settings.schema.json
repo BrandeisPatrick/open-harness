@@ -149,7 +149,7 @@
       "properties": {
         "baseURL": {
           "type": "string",
-          "description": "The gateway endpoint (Portkey, or any OpenAI-compatible gateway)."
+          "description": "The gateway endpoint (Portkey, or any OpenAI-compatible gateway). Not allowed in a project file."
         },
         "apiKey": {
           "type": "string",

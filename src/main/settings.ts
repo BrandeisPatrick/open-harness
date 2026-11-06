@@ -84,7 +84,7 @@ const SECTIONS: Record<'ollama' | 'portkey' | 'dreaming', Record<string, Check>>
     think: describe(oneOf('auto', 'on', 'off'), 'Thinking mode for models that can reason.'),
   },
   portkey: {
-    baseURL: describe(str, 'The gateway endpoint (Portkey, or any OpenAI-compatible gateway).'),
+    baseURL: describe(str, "The gateway endpoint (Portkey, or any OpenAI-compatible gateway). Not allowed in a project file."),
     apiKey: describe(str, 'The gateway key (x-portkey-api-key); falls back to PORTKEY_API_KEY. Not allowed in a project file.'),
     model: describe(str, 'The model id, e.g. @openai/gpt-4o-mini.'),
     virtualKey: describe(str, 'x-portkey-virtual-key'),
@@ -295,6 +295,12 @@ function analyse(file: string, scope: Scope, opts: { trustedHash?: string; apply
     if (key === 'portkey' && scope === 'project' && isRecord(value)) {
       // A repository must not carry or override a secret; the rest of the block applies.
       const block: Record<string, unknown> = { ...value };
+      // The gateway key goes to portkey.baseURL: a project may not move it. Model, virtual key, provider slug and
+      // config id still apply; they go to the address the user chose.
+      if ('baseURL' in block) {
+        bad('portkey.baseURL', "a project's settings.json may not change where the gateway key is sent; set the gateway's address in your own settings.json");
+        delete block.baseURL;
+      }
       for (const f of ['apiKey', 'providerApiKey']) {
         if (f in block) {
           bad(`portkey.${f}`, "a project's settings.json may not hold a key; set it in your own settings.json or with PORTKEY_API_KEY");

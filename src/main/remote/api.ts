@@ -36,10 +36,13 @@ function appInfo(appRoot: string): { name: string; version: string } {
 export class Api {
   private info: { name: string; version: string } | null = null;
 
-  /** `sessionsMoved` is called after a request that changes the session list (a new session). */
+  /**
+   * `sessionsMoved` is called after a request that changes the session list (a new session); `mark` flushes the
+   * stream's held-back text of a session and returns the last event number (see EventStream.mark).
+   */
   constructor(
     private readonly app: App,
-    private readonly sessionsMoved: () => void,
+    private readonly hooks: { sessionsMoved: () => void; mark: (sessionId: string) => number },
   ) {}
 
   /** Answers a request whose path (after /api/) is `route`. False when there is no such route. */
@@ -91,7 +94,7 @@ export class Api {
         const s = rt.create({ foreground: false });
         // The runtime's list carries the status; a brand-new empty session may not be listed yet.
         const meta = rt.list().find((m) => m.id === s.id) ?? { ...toMeta(s), status: { running: false } };
-        this.sessionsMoved();
+        this.hooks.sessionsMoved();
         json(res, 200, meta);
         break;
       }
@@ -116,7 +119,9 @@ export class Api {
   transcript(id: string) {
     const s = this.app.store.get(id);
     if (!id || !s) throw new HttpError(404, 'No such session.');
-    return { items: toTranscript(s).map(remoteItem), live: remoteLive(this.app.runtime.live(id)) };
+    // Marked first: the snapshot below then holds every event up to `seq` and none after it.
+    const seq = this.hooks.mark(id);
+    return { items: toTranscript(s).map(remoteItem), live: remoteLive(this.app.runtime.live(id)), seq };
   }
 
   private known(id: string): string {

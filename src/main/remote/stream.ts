@@ -11,12 +11,19 @@ export const MAX_STREAMS = 8;
 
 type Delta = { type: 'text_delta' | 'thinking_delta'; text: string };
 
+/**
+ * Every agent event gets the next number; a streamed message carries the number of the last event it contains.
+ * api/transcript answers with the number its snapshot covers, so the page can drop what the snapshot already holds
+ * and apply the rest: nothing missed, nothing twice.
+ */
+
 /** Events after which the session list (with its run status) is sent again */
 const MOVES_STATUS = new Set<AgentEvent['type']>(['run_start', 'run_end', 'session_changed', 'approval_request', 'approval_resolved', 'plan_proposed']);
 
 export class EventStream {
   private clients = new Set<ServerResponse>();
-  private pending = new Map<string, { delta: Delta; timer: NodeJS.Timeout }>();
+  private pending = new Map<string, { delta: Delta; seq: number; timer: NodeJS.Timeout }>();
+  private seq = 0;
   private heartbeat: NodeJS.Timeout | null = null;
   private sessionsQueued = false;
 
@@ -56,21 +63,23 @@ export class EventStream {
   }
 
   publish(sessionId: string, ev: AgentEvent): void {
+    const seq = ++this.seq;
     if (ev.type === 'text_delta' || ev.type === 'thinking_delta') {
       const held = this.pending.get(sessionId);
       if (held && held.delta.type === ev.type) {
         held.delta.text += ev.text;
+        held.seq = seq;
         return;
       }
       if (held) this.flush(sessionId);
       const timer = setTimeout(() => this.flush(sessionId), this.opts.coalesceMs);
-      this.pending.set(sessionId, { delta: { type: ev.type, text: ev.text }, timer });
+      this.pending.set(sessionId, { delta: { type: ev.type, text: ev.text }, seq, timer });
       return;
     }
     // Anything else goes out at once, after whatever text of that session was still held back.
     this.flush(sessionId);
     const out = remoteEvent(ev);
-    if (out) this.broadcast('agent', { sessionId, ev: out });
+    if (out) this.broadcast('agent', { sessionId, seq, ev: out });
     if (MOVES_STATUS.has(ev.type)) this.sessionsChanged();
   }
 
@@ -95,12 +104,21 @@ export class EventStream {
     if (all.length) this.onCount(0);
   }
 
+  /**
+   * Sends what is held back for a session and returns the number of the last event so far. A snapshot of the
+   * session taken right after this covers exactly the events up to that number.
+   */
+  mark(sessionId: string): number {
+    this.flush(sessionId);
+    return this.seq;
+  }
+
   private flush(sessionId: string): void {
     const held = this.pending.get(sessionId);
     if (!held) return;
     clearTimeout(held.timer);
     this.pending.delete(sessionId);
-    this.broadcast('agent', { sessionId, ev: held.delta });
+    this.broadcast('agent', { sessionId, seq: held.seq, ev: held.delta });
   }
 
   private changed(): void {

@@ -57,7 +57,7 @@ export class RemoteServer {
   ) {
     this.digest = tokenDigest(token);
     this.stream = new EventStream(() => app.runtime.list(), onClients);
-    this.api = new Api(app, () => this.stream.sessionsChanged());
+    this.api = new Api(app, { sessionsMoved: () => this.stream.sessionsChanged(), mark: (id) => this.stream.mark(id) });
   }
 
   get listening(): { bind: Bind; port: number } | null {

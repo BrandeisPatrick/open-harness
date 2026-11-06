@@ -16,7 +16,8 @@
     "package": "npm run build && electron-builder --mac --dir -c.mac.identity=null",
     "dist": "npm run build && electron-builder --mac -c.mac.identity=null",
     "icon": "electron scripts/render-icon.js && scripts/make-icns.sh",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "schema": "node scripts/settings-schema.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -50,6 +51,7 @@
       "modkit/**",
       "!modkit/playground/**",
       "mods/**",
+      "bin/**",
       "package.json"
     ],
     "directories": {
@@ -60,7 +62,13 @@
       "node_modules/node-pty/**"
     ],
     "npmRebuild": false,
-    "artifactName": "Open-Harness-${version}-${arch}.${ext}"
+    "artifactName": "Open-Harness-${version}-${arch}.${ext}",
+    "extraResources": [
+      {
+        "from": "bin/open-harness",
+        "to": "bin/open-harness"
+      }
+    ]
   },
   "author": "Open Harness contributors"
 }

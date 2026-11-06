@@ -1,0 +1,29 @@
+#!/bin/sh
+# open-harness: configure Open Harness from the command line (see open-harness --help).
+# Inside the app (Contents/Resources/bin/open-harness) it runs bin/open-harness.js with the app's own Electron in
+# Node mode, so nothing else has to be installed. In a checkout it uses node, or the checkout's Electron.
+self="$0"
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case "$link" in
+    /*) self="$link" ;;
+    *) self="$(dirname "$self")/$link" ;;
+  esac
+done
+dir=$(cd "$(dirname "$self")" && pwd -P)
+
+app="$dir/../../MacOS/Open Harness"
+if [ -x "$app" ] && [ -f "$dir/../app.asar" ]; then
+  ELECTRON_RUN_AS_NODE=1 exec "$app" "$dir/../app.asar/bin/open-harness.js" "$@"
+fi
+
+root=$(cd "$dir/.." && pwd -P)
+if command -v node >/dev/null 2>&1; then
+  exec node "$root/bin/open-harness.js" "$@"
+fi
+electron="$root/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+if [ -x "$electron" ]; then
+  ELECTRON_RUN_AS_NODE=1 exec "$electron" "$root/bin/open-harness.js" "$@"
+fi
+echo "open-harness: found neither the app's Electron nor node to run $root/bin/open-harness.js" >&2
+exit 1

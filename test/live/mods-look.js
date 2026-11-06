@@ -553,7 +553,8 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
         fs.writeFileSync(path.join(dir, 'mod.json'), JSON.stringify({ protocol: 1, id, name: id, version: '0.1.0', contributes: { views: [{ id: 'main', title: id, entry: 'p.html', seat, order: 5 }] } }));
         fs.writeFileSync(path.join(dir, 'p.html'), pg(cls));
       }
-      await sleep(1500);
+      // The registry picks new folders up through a debounced watcher: wait for both, not a fixed time.
+      await app.waitFor(`window.oc.rpc('mods.list').then((l) => ['md-rail', 'md-tab'].every((k) => l.some((m) => m.key === k)))`, 15_000, 'the md mods to be listed');
       await rpc(app, 'mods.setEnabled', 'md-rail', true);
       await rpc(app, 'mods.setEnabled', 'md-tab', true);
       await sleep(1000);

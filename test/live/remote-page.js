@@ -68,7 +68,28 @@ function seed(store) {
   const c = store.create();
   c.title = 'Refactor the API client';
   c.titleLocked = true;
-  c.messages.push({ role: 'user', content: 'Split api.ts into one module per resource.' }, { role: 'assistant', content: 'Done: 6 modules under `src/api/`, all imports updated, tests pass.' });
+  // The session, schedule and mod tools, and a command that exited non-zero: each gets a readable row on the phone.
+  const tools = [
+    [tc('s1', 'session_spawn', { title: 'Split the users module', prompt: 'Move the user routes into src/api/users.ts.' }), 'Started sub-session "Split the users module" (id x1).'],
+    [tc('s2', 'session_send', { to: b.id, message: 'The API client is split; rebase on it.' }), `Delivered to "${b.title}" (${b.id}) and it started working on it.`],
+    [tc('s3', 'session_list', {}), '3 sessions'],
+    [tc('s4', 'session_read', { id: a.id }), 'user: The login test fails…'],
+    [tc('s5', 'session_merge', { id: a.title }), 'Merged.'],
+    [tc('s6', 'schedule_create', { name: 'Nightly API smoke test', prompt: 'Run the smoke tests.', when: { kind: 'cron', expr: '0 3 * * *' } }), 'Scheduled "Nightly API smoke test" (id s_42): every day at 03:00.'],
+    [tc('s7', 'schedule_list', {}), '1 schedule:\ns_42  "Nightly API smoke test"  every day at 03:00'],
+    [tc('s8', 'schedule_update', { id: 's_42', enabled: false }), 'Updated: s_42  "Nightly API smoke test"  every day at 03:00  next: disabled  last: not run yet'],
+    [tc('s9', 'schedule_delete', { id: 's_7' }), 'Deleted schedule "Weekly changelog" (s_7).'],
+    [tc('s10', 'mod_check', { id: 'word-count' }), 'word-count: ok'],
+    [tc('s11', 'show_image', { path: '/Users/someone/shots/before.png' }), 'Error: no such file: /Users/someone/shots/before.png'],
+    [tc('s12', 'bash', { command: 'npm run lint' }), 'src/api/users.ts\n  12:5  error  no-unused-vars\n\n1 problem\n[exit code: 1]'],
+    [tc('s13', 'bash', { command: 'npm test' }), 'Tests: 24 passed\n[exit code: 0]'],
+  ];
+  c.messages.push(
+    { role: 'user', content: 'Split api.ts into one module per resource.' },
+    { role: 'assistant', content: '', tool_calls: tools.map(([call]) => call) },
+    ...tools.map(([call, result]) => ({ role: 'tool', tool_call_id: call.id, content: result })),
+    { role: 'assistant', content: 'Done: 6 modules under `src/api/`, all imports updated, tests pass.' },
+  );
   store.save(c);
   // Oldest first in updatedAt so the list order is: login (running), dark mode, refactor.
   c.updatedAt = Date.now() - 3 * 3600_000;
@@ -194,7 +215,8 @@ async function main() {
   f.emit(A, { type: 'text_done' });
   f.emit(A, { type: 'assistant_message', text: reply + '.', toolCalls: 1 });
   // The assistant message with its pending tool call is stored before the tool has a result.
-  store({ role: 'assistant', content: reply + '.', tool_calls: [tc('t2', 'bash', { command: 'npm test -- test/auth/login.test.ts --runInBand' })] });
+  // Two calls in it, as a model often sends: the first runs (and waits for approval), the second has not started.
+  store({ role: 'assistant', content: reply + '.', tool_calls: [tc('t2', 'bash', { command: 'npm test -- test/auth/login.test.ts --runInBand' }), tc('t3', 'list_directory', { path: 'test/auth' })] });
   f.emit(A, { type: 'tool_start', id: 't2', name: 'bash', args: { command: 'npm test -- test/auth/login.test.ts --runInBand' } });
   const ap = { type: 'approval_request', id: 'ap-1', name: 'bash', detail: 'npm test -- test/auth/login.test.ts --runInBand', mode: 'ask', alwaysLabel: 'Allow npm for this session', projectLabel: 'Always allow npm in this project' };
   live.approvals = [ap];
@@ -213,6 +235,9 @@ async function main() {
   await sleep(300);
   const after = await js(win, `document.getElementById('transcript').innerText`);
   check('a reload during the run shows one approval card and one running tool', (await js(win, `document.querySelectorAll('.card.approval').length`)) === 1 && (await js(win, `document.querySelectorAll('.tool .spinner').length`)) === 1);
+  // The calls of the run's last message have no result yet: the one running shows once, the one not started not at all.
+  const rows = await js(win, `[...document.querySelectorAll('#transcript .tool summary')].map((s) => s.innerText.replace(/\\s+/g, ' ').trim())`);
+  check('…the command waiting for approval shows once, the call not started yet not at all', rows.filter((r) => r === 'Bash npm test -- test/auth/login.test.ts --runInBand').length === 1 && !rows.some((r) => r.startsWith('List')), rows);
   check('…and the earlier history once', (after.match(/Found it\./g) || []).length === 1, after.length);
   // Thinking and a message's origin are not stored with the conversation, so only those may differ.
   const norm = (t) => t.replace(/Thought|Thinking…|Sent from this device/g, '').replace(/\s+/g, ' ').trim();
@@ -229,6 +254,35 @@ async function main() {
   await js(win, `document.querySelector('.card.plan').scrollIntoView({ block: 'start' })`);
   await shot(win, '4-plan');
 
+  // 4b. The third session's tool rows: readable names for the session, schedule and mod tools, and a failed command
+  // judged by its exit code as the desktop does.
+  await tap(win, '#open-sessions');
+  await tap(win, '#session-list li:nth-child(3) button');
+  check('switching shows the third session', await waitFor(win, `document.getElementById('transcript').innerText.includes('Done: 6 modules')`));
+  const toolRows = await js(win, `[...document.querySelectorAll('#transcript .tool')].map((d) => ({ row: (d.querySelector('.tool-verb').textContent + ' ' + d.querySelector('.tool-arg').textContent).trim(), meta: d.querySelector('.tool-meta').textContent, err: d.querySelector('.tool-status').classList.contains('err') }))`);
+  const wanted = [
+    'Sub-session Split the users module',
+    'Message to Add dark mode to the settings page',
+    'Sessions',
+    'Read session Fix the flaky login test',
+    'Merge Fix the flaky login test',
+    'Schedule Nightly API smoke test',
+    'Schedules',
+    'Update schedule Nightly API smoke test',
+    'Delete schedule Weekly changelog',
+    'Check mod word-count',
+    'Show image before.png',
+    'Bash npm run lint',
+    'Bash npm test',
+  ];
+  check('session, schedule and mod tools have readable rows (no raw names or JSON)', JSON.stringify(toolRows.map((r) => r.row)) === JSON.stringify(wanted), toolRows.map((r) => r.row));
+  const lint = toolRows.find((r) => r.row === 'Bash npm run lint');
+  const passed = toolRows.find((r) => r.row === 'Bash npm test');
+  check('a stored command that exited 1 shows as failed with "exit 1"; one that exited 0 as done', lint && lint.err && lint.meta === 'exit 1' && passed && !passed.err && passed.meta === '', { lint, passed });
+  check('a failed show_image says failed', toolRows.find((r) => r.row === 'Show image before.png')?.meta === 'failed');
+  await js(win, `document.querySelector('#scroll').scrollTop = 0`);
+  await shot(win, '4b-tools');
+
   // 5. Drive it: back to the running session, tap Allow, type and send a message (queued: the run is still going).
   await tap(win, '#open-sessions');
   await tap(win, '#session-list li:nth-child(1) button');
@@ -241,6 +295,14 @@ async function main() {
   live.tools = [];
   f.emit(A, { type: 'tool_end', id: 't2', name: 'bash', result: 'PASS test/auth/login.test.ts\n  login\n    ✓ retries once on 503 (12 ms)\n\nTests: 1 passed', ok: true });
   store({ role: 'tool', tool_call_id: 't2', content: 'PASS test/auth/login.test.ts\n  login\n    ✓ retries once on 503 (12 ms)\n\nTests: 1 passed' });
+  f.emit(A, { type: 'tool_start', id: 't3', name: 'list_directory', args: { path: 'test/auth' } });
+  f.emit(A, { type: 'tool_end', id: 't3', name: 'list_directory', result: 'test/auth\n  login.test.ts', ok: true });
+  store({ role: 'tool', tool_call_id: 't3', content: 'test/auth\n  login.test.ts' });
+  // A command that exits non-zero, live: a red mark and its exit code, not a check mark.
+  f.emit(A, { type: 'tool_start', id: 't4', name: 'bash', args: { command: 'npm run lint' } });
+  f.emit(A, { type: 'tool_end', id: 't4', name: 'bash', result: 'src/auth/login.ts\n  3:1  error  no-unused-vars\n[exit code: 1]', ok: true });
+  store({ role: 'assistant', content: '', tool_calls: [tc('t4', 'bash', { command: 'npm run lint' })] }, { role: 'tool', tool_call_id: 't4', content: 'src/auth/login.ts\n  3:1  error  no-unused-vars\n[exit code: 1]' });
+  check('a live command that exited 1 shows as failed with "exit 1"', await waitFor(win, `(() => { const r = [...document.querySelectorAll('#transcript .tool')].pop(); return r && r.querySelector('.tool-arg').textContent === 'npm run lint' && r.querySelector('.tool-status').classList.contains('err') && r.querySelector('.tool-meta').textContent === 'exit 1'; })()`));
   await tap(win, '#input');
   win.webContents.insertText('Also add a test for three attempts');
   await sleep(100);

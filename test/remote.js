@@ -185,6 +185,27 @@ function seedSession(store, title, extra = []) {
     check('api/transcript unknown session → 404 with a message', missing.status === 404 && (await missing.json()).error);
   }
   {
+    // A run in progress: its assistant message (two calls) is stored, the first call runs (in live.tools), the second
+    // has not started. Neither belongs in the items: no "(no result)" row, and the running one only once (from live).
+    const tc = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
+    const s = seedSession(app.store, 'Mid-run');
+    s.messages.push({ role: 'user', content: 'Push it' }, { role: 'assistant', content: '', tool_calls: [tc('f1', 'bash', { command: 'git push' }), tc('f2', 'read_file', { path: 'README.md' })] });
+    app.store.save(s);
+    f.status.set(s.id, { running: true, attention: 'approval' });
+    f.live.set(s.id, { running: true, startedAt: 1, text: '', thinking: '', tools: [{ id: 'f1', name: 'bash', args: { command: 'git push' } }], approvals: [], queue: [] });
+    const mid = await (await fetch(base + 'api/transcript?session=' + s.id)).json();
+    const inFlight = mid.items.filter((i) => i.role === 'tool' && (i.args.includes('git push') || i.args.includes('README.md')));
+    check('api/transcript mid-run leaves out tool calls still in flight (live.tools has the running one)', inFlight.length === 0 && !mid.items.some((i) => i.role === 'tool' && i.result === '(no result)') && mid.live.tools.length === 1, mid.items.filter((i) => i.role === 'tool'));
+    // Once the run is over, a call that never got a result is shown as it is stored.
+    f.status.set(s.id, { running: false });
+    f.live.set(s.id, { running: false, text: '', thinking: '', tools: [], approvals: [], queue: [] });
+    const after = await (await fetch(base + 'api/transcript?session=' + s.id)).json();
+    check('…and keeps them once the session is not running', after.items.filter((i) => i.role === 'tool' && (i.args.includes('git push') || i.args.includes('README.md'))).length === 2);
+    app.store.delete(s.id);
+    f.status.delete(s.id);
+    f.live.delete(s.id);
+  }
+  {
     calls.length = 0;
     const r = await post(base, 'api/send', { session: s1.id, text: 'Also fix the footer', extra: 'ignored' });
     const body = await r.json();

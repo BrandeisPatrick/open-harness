@@ -1,7 +1,7 @@
 // Live checks of the mod host (src/renderer/mods-host.ts) in the real window, through the rig: the bundled mods in
 // the rail, the layout and its persistence, hot reload of a user mod, every seat, injected styles, isolation, the
 // native browser view's alignment, and (with an API key) a real run and the agent writing a mod.
-// Run: npm run build && node test/live/mods.js [phase…]   phases: bundled layout reload seats isolation agent
+// Run: npm run build && node test/live/mods.js [phase…]   phases: bundled layout narrow reload seats isolation agent
 // Screenshots go to $SHOTS (default: a temp folder).
 const fs = require('node:fs');
 const os = require('node:os');
@@ -40,6 +40,64 @@ async function browserViewSize(app) {
   ws.close();
   return res;
 }
+
+/** Runs an expression in the main process (through its inspector). */
+async function mainEval(app, expression) {
+  const list = await (await fetch(`http://127.0.0.1:${app.inspectPort}/json/list`)).json();
+  const ws = new WebSocket(list[0].webSocketDebuggerUrl);
+  await new Promise((r, j) => {
+    ws.addEventListener('open', r, { once: true });
+    ws.addEventListener('error', j, { once: true });
+  });
+  const res = await new Promise((resolve) => {
+    ws.addEventListener('message', (ev) => {
+      const m = JSON.parse(String(ev.data));
+      if (m.id === 1) resolve(m.result?.result?.value ?? null);
+    });
+    ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, returnByValue: true, awaitPromise: true } }));
+  });
+  ws.close();
+  return res;
+}
+
+/**
+ * A hidden window draws (and runs resize observers and animation frames) only when asked: draw a few frames after a
+ * layout change, before measuring or capturing it.
+ */
+async function paint(app) {
+  await mainEval(app, `(async () => { const w = process.mainModule.require('electron').BrowserWindow.getAllWindows()[0]; for (let i = 0; i < 3; i++) { w.webContents.invalidate(); await w.webContents.capturePage(); } return true; })()`);
+  await sleep(250);
+}
+
+/** Evaluates in a mod frame (an out-of-process iframe target) whose URL contains `part`; null when it cannot be reached. */
+async function frameEval(app, part, expression) {
+  const list = await (await fetch(`http://127.0.0.1:${app.port}/json/list`)).json();
+  const t = list.find((x) => x.type === 'iframe' && x.url.includes(part));
+  if (!t || !t.webSocketDebuggerUrl) return null;
+  const ws = new WebSocket(t.webSocketDebuggerUrl);
+  await new Promise((r, j) => {
+    ws.addEventListener('open', r, { once: true });
+    ws.addEventListener('error', j, { once: true });
+  });
+  const res = await new Promise((resolve) => {
+    ws.addEventListener('message', (ev) => {
+      const m = JSON.parse(String(ev.data));
+      if (m.id === 1) resolve(m.result?.result?.value ?? null);
+    });
+    ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, returnByValue: true, awaitPromise: true } }));
+    setTimeout(() => resolve(null), 4000);
+  });
+  ws.close();
+  return res;
+}
+
+/** In a mod frame: how far the page overflows its frame, scrollbars, and the controls that stick out of it. */
+const FRAME_FIT = `(() => {
+  const d = document.documentElement;
+  const vw = d.clientWidth;
+  const cut = [...document.querySelectorAll('button, input, select, .h-segmented, .h-switch')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > vw + 0.5 || r.left < -0.5); }).map((e) => (e.textContent || e.className).trim().replace(/\\s+/g, ' '));
+  return { width: vw, overflowX: d.scrollWidth - vw, overflowY: d.scrollHeight - d.clientHeight, scrollbars: (innerWidth - vw) + (innerHeight - d.clientHeight), cut };
+})()`;
 
 async function start(profile) {
   const inspectPort = 20000 + Math.floor(Math.random() * 20000);
@@ -228,6 +286,59 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
       await app.evaluate(`document.querySelector('.rail-section[data-view="context/main"] .rail-head-btn').click()`);
       await dbg(app, 'setRailWidth(300)');
       await sleep(400);
+    }
+
+    // ---------- Narrow: every bundled rail mod at the rail's narrowest; the pane's tab strip at its narrowest ----------
+    if (want('narrow')) {
+      const RAIL = ['environment', 'context', 'tasks', 'plan', 'outputs', 'sub-sessions', 'skills'];
+      for (const w of [240, 270]) {
+        await dbg(app, `setRailWidth(${w})`);
+        await paint(app);
+        for (const id of RAIL) {
+          // A frame scrolled out of the rail's view is not drawn (nor measured again): bring each one in first.
+          await app.evaluate(`document.querySelector('.rail-section[data-view="${id}/main"]').scrollIntoView()`);
+          await paint(app);
+          await sleep(300);
+          await paint(app);
+          const fit = await frameEval(app, id, FRAME_FIT);
+          check(`${id} at ${w} px: no scrollbar, no overflow, no control cut off`, fit && fit.overflowX <= 0 && fit.overflowY <= 0 && fit.scrollbars === 0 && fit.cut.length === 0, fit);
+        }
+        await app.evaluate(`document.querySelector('.rail-section[data-view="environment/main"]').scrollIntoView()`);
+        await paint(app);
+        await app.screenshotOf(path.join(SHOTS, `rail-${w}-light.png`), '#mod-rail', 0);
+      }
+      await dbg(app, 'setRailWidth(300)');
+
+      // The pane at its narrowest (360 px) with the Scheduled tab in front and a count on it.
+      const sched = await rpc(app, 'schedules.create', { name: 'Nightly audit', prompt: 'Run npm audit.', when: { kind: 'cron', expr: '0 3 * * *' }, target: 'new', cwd: app.project });
+      await app.evaluate(`(() => { if (document.querySelector('.shell').classList.contains('pane-hidden')) document.querySelector('#browser-toggle').click(); })()`);
+      await app.waitFor(`Boolean(document.querySelector('.mod-pane-tab[data-view="scheduled/main"]'))`, 10_000, 'the Scheduled tab');
+      await app.click('.mod-pane-tab[data-view="scheduled/main"]');
+      await app.waitFor(`!document.querySelector('.mod-pane-tab[data-view="scheduled/main"] .count-badge').hidden`, 10_000, 'the Scheduled count');
+      const STRIP = `(() => {
+        const strip = document.querySelector('.pane-tabs');
+        const tabs = [...strip.querySelectorAll(':scope > [role=tab]')].filter((t) => !t.hidden);
+        const box = (e) => e.getBoundingClientRect();
+        const sticksOut = [];
+        for (const t of tabs) for (const k of t.children) { const b = box(k); if (b.width > 1 && (b.left < box(t).left - 0.5 || b.right > box(t).right + 0.5)) sticksOut.push(t.id + ' ' + k.className); }
+        const overlaps = tabs.slice(1).filter((t, i) => box(t).left < box(tabs[i]).right - 0.5).map((t) => t.id);
+        const named = tabs.every((t) => (t.getAttribute('aria-label') || t.textContent).trim().length > 0);
+        const tips = tabs.filter((t) => t.classList.contains('icon-only') || (t.querySelector('.pane-tab-label') && t.querySelector('.pane-tab-label').scrollWidth > t.querySelector('.pane-tab-label').clientWidth + 1)).every((t) => !!t.dataset.tip);
+        const front = tabs.find((t) => t.getAttribute('aria-selected') === 'true');
+        const frontLabel = front && front.querySelector('.pane-tab-label');
+        return { pane: Math.round(box(document.getElementById('side-pane')).width), overflow: strip.scrollWidth - strip.clientWidth, sticksOut, overlaps, named, tips, frontWhole: !!frontLabel && !front.classList.contains('icon-only') && frontLabel.scrollWidth <= frontLabel.clientWidth + 1, iconOnly: tabs.filter((t) => t.classList.contains('icon-only')).length };
+      })()`;
+      for (const w of [360, 440, 520]) {
+        await app.evaluate(`document.getElementById('side-pane').style.setProperty('--browser-w', '${w}px')`);
+        await paint(app);
+        const st = await app.evaluate(STRIP);
+        check(`pane tabs at ${w} px: nothing clipped, no badge over a neighbour, every tab named, shortened ones have a tooltip, the front tab whole`, st.overflow <= 0 && !st.sticksOut.length && !st.overlaps.length && st.named && st.tips && st.frontWhole, st);
+        await app.screenshotOf(path.join(SHOTS, `pane-tabs-${w}-light.png`), '.pane-tabs', 0);
+      }
+      await app.evaluate(`document.getElementById('side-pane').style.removeProperty('--browser-w')`);
+      await app.click('#pane-tab-browser');
+      if (sched && sched.id) await rpc(app, 'schedules.remove', sched.id);
+      await paint(app);
     }
 
     // ---------- Hot reload of a user mod, from the offer card on ----------

@@ -851,7 +851,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     btn.setAttribute('aria-controls', panel.id);
     btn.tabIndex = -1;
     btn.dataset.view = ref.key;
-    btn.innerHTML = `${iconHtml(ref.view.icon, ref.mod, 14)}<span class="mod-tab-title"></span><span class="count-badge" hidden></span>`;
+    btn.innerHTML = `${iconHtml(ref.view.icon, ref.mod, 14)}<span class="mod-tab-title pane-tab-label"></span><span class="count-badge" hidden></span>`;
     panel.setAttribute('aria-labelledby', btn.id);
     btn.addEventListener('click', () => deps.showPane(`mod:${ref.key}`));
     const s: Slot = { ref, seat: 'tab', el: panel, body: panel, frame: null, next: null, title: ref.view.title, badge: null, height: 0, failedEl: null, queued: [], tabBtn: btn };
@@ -882,6 +882,112 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
       syncVisibility();
     },
   };
+
+  // ---------- Fitting the pane's tab strip ----------
+  //
+  // Browser, Diff, Terminal and the mod tabs share one row. When they do not all fit with their full titles, the
+  // tab in front keeps its title (as long as that fits), and the others' titles shorten evenly, built-in and mod
+  // tabs alike, down to icon-only. Widths are measured, so a count badge or the busy dot is always counted and
+  // never overlaps a neighbour. A shortened or hidden title stays the tab's accessible name and its tooltip.
+
+  /** The smallest shortened title worth showing (about four letters and the ellipsis); below it, icon-only. */
+  const MIN_TITLE = 40;
+  let fitting = false;
+
+  function fitPaneTabs(): void {
+    if (!paneTabs || fitting) return;
+    const width = paneTabs.clientWidth;
+    if (!width) return; // the pane is hidden; the resize observer calls again once it shows
+    fitting = true;
+    try {
+      const tabs = [...paneTabs.querySelectorAll<HTMLButtonElement>(':scope > .pane-tab')].filter((b) => !b.hidden);
+      const ceil = (el: Element) => Math.ceil(el.getBoundingClientRect().width);
+      // Measure each tab with its whole title, then icon-only.
+      const m = tabs.map((btn) => {
+        const label = btn.querySelector<HTMLElement>('.pane-tab-label');
+        btn.classList.remove('icon-only');
+        if (label) label.style.maxWidth = '';
+        const full = ceil(btn);
+        // The title as drawn at full size (a mod tab's title has a cap of its own in the CSS)
+        const text = label ? ceil(label) : 0;
+        btn.classList.add('icon-only');
+        const icon = ceil(btn);
+        btn.classList.remove('icon-only');
+        // What the tab is wide without its title: padding, icon, badge and the gaps around the title
+        const chrome = full - text;
+        return { btn, label, full, text, icon, chrome, active: btn.getAttribute('aria-selected') === 'true' };
+      });
+      const cs = getComputedStyle(paneTabs);
+      const gap = parseFloat(cs.columnGap) || 0;
+      const items = [...paneTabs.children].filter((c) => !(c as HTMLElement).hidden && getComputedStyle(c).display !== 'none');
+      const others = items.filter((c) => !tabs.includes(c as HTMLButtonElement) && c !== paneSpacer).reduce((sum, c) => sum + ceil(c), 0);
+      // One pixel of slack per tab against rounding
+      const room = width - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - others - gap * Math.max(0, items.length - 1) - tabs.length;
+
+      // title width per tab: its whole title, a shortened one, or null for icon-only
+      const title = new Map<HTMLButtonElement, number | null>();
+      if (m.reduce((sum, t) => sum + t.full, 0) <= room) for (const t of m) title.set(t.btn, t.text);
+      else {
+        const front = m.find((t) => t.active && t.text);
+        const rest = m.filter((t) => t !== front);
+        let left = room - rest.reduce((sum, t) => sum + t.icon, 0);
+        if (front) {
+          // The tab in front keeps what it can of its title, everything else at least icon-only.
+          const can = Math.min(front.text, left - front.chrome);
+          title.set(front.btn, can >= front.text ? front.text : can >= MIN_TITLE ? can : null);
+          left -= title.get(front.btn) !== null ? front.chrome + (title.get(front.btn) as number) : front.icon;
+        }
+        // Water-filling: the shortest titles stay whole, the rest share what is left equally. When the shares get too
+        // small to read, the longest titles go icon-only first and the others share again.
+        const want = rest.filter((t) => t.text).sort((a, b) => a.text - b.text);
+        for (const t of rest) title.set(t.btn, null);
+        for (let k = want.length; k > 0; k--) {
+          const widths = new Map<HTMLButtonElement, number>();
+          let free = left;
+          let n = k;
+          let ok = true;
+          for (const t of want.slice(0, k)) {
+            // Showing a title costs the tab's chrome minus its icon-only width, plus the title itself.
+            const extra = t.chrome - t.icon;
+            const share = free / n - extra;
+            if (share < Math.min(MIN_TITLE, t.text)) {
+              ok = false;
+              break;
+            }
+            const w = Math.min(t.text, Math.floor(share));
+            widths.set(t.btn, w);
+            free -= extra + w;
+            n--;
+          }
+          if (!ok) continue;
+          for (const [btn, w] of widths) title.set(btn, w);
+          break;
+        }
+      }
+      for (const t of m) {
+        const w = title.get(t.btn) ?? null;
+        t.btn.classList.toggle('icon-only', w === null || !t.label);
+        if (t.label) t.label.style.maxWidth = w !== null && w < t.text ? `${w}px` : '';
+        const name = (t.label?.textContent ?? '').trim();
+        const cut = w === null || w < t.text || (!!t.label && t.label.scrollWidth > t.label.clientWidth + 1);
+        // A mod tab always carries its title as a tooltip (renderSlotHead); a built-in one when it is shortened.
+        if (!t.btn.classList.contains('mod-pane-tab')) {
+          if (name && cut) t.btn.dataset.tip = name;
+          else delete t.btn.dataset.tip;
+        }
+      }
+    } finally {
+      fitting = false;
+    }
+  }
+
+  if (paneTabs) {
+    // Fitted right away (not on the next frame), so a narrower pane never draws an overflowing row first.
+    new ResizeObserver(() => fitPaneTabs()).observe(paneTabs);
+    // Tabs coming and going, the one in front changing, a badge or a title changing
+    new MutationObserver(() => fitPaneTabs()).observe(paneTabs, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'aria-selected'] });
+    void document.fonts?.ready.then(() => fitPaneTabs());
+  }
 
   // ---------- The composer strip ----------
 

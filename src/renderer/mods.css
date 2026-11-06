@@ -62,9 +62,14 @@
 .mod-icon-img { display: inline-block; flex: none; background: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
 
 /* ---------- Mod tabs in the side pane ---------- */
-.mod-pane-tab { flex: 0 1 auto; min-width: 0; max-width: 180px; }
-.mod-pane-tab .mod-tab-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mod-pane-tab .icon, .mod-pane-tab .mod-icon-img { flex: none; }
+/* The strip's tabs, built-in and mod alike: fitPaneTabs (mods-host.ts) shortens the titles (an inline max-width)
+   or makes a tab icon-only when the row is too narrow. An icon-only tab keeps its title for screen readers. */
+.pane-tab { position: relative; min-width: 0; }
+.pane-tab .icon, .pane-tab .mod-icon-img { flex: none; }
+.pane-tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-pane-tab .pane-tab-label { max-width: 160px; }
+.pane-tab.icon-only { padding: 0 8px; }
+.pane-tab.icon-only .pane-tab-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .mod-tab-panel { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .mod-tab-panel > .mod-frame { flex: 1; min-height: 0; height: 100%; }
 .mod-tab-panel > .mod-frame.mod-frame-next { bottom: 0; height: 100%; }

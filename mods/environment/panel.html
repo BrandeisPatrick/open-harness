@@ -12,6 +12,11 @@
   .rule { height: 1px; margin: 8px 0 6px; background: var(--border-subtle); }
   .ctl { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
   .ctl > span { color: var(--text-100); white-space: nowrap; }
+  /* Keep awake: when the rail is too narrow for the label and the three choices on one line, the choices move under
+     the label (flex-wrap) instead of pushing the panel wider than the rail. */
+  .ctl.wrap { flex-wrap: wrap; row-gap: 4px; padding: 2px 0; }
+  .ctl.wrap .h-segmented { max-width: 100%; min-width: 0; }
+  .ctl.wrap .h-segmented > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .remote { margin: 2px 0 4px; padding-left: 0; }
   .link { display: flex; align-items: center; gap: 4px; min-width: 0; }
   .link .url { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-200); }
@@ -34,7 +39,7 @@
     <div class="devices h-muted" id="devices"></div>
     <div class="error" id="remote-error" hidden></div>
   </div>
-  <div class="ctl"><span>Keep awake</span>
+  <div class="ctl wrap"><span>Keep awake</span>
     <div class="h-segmented" role="group" aria-label="Keep awake" id="awake">
       <button data-v="off" aria-pressed="false">Off</button>
       <button data-v="running" aria-pressed="false">While running</button>

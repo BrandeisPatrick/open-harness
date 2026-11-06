@@ -1,7 +1,9 @@
-// The generic bridge between the window and the main process: named methods (oc.rpc) and push events (oc.onPush).
-// Each feature declares its part in its own contract file; this file only joins them. Types only.
+// The generic RPC contract between the window and the main process: oc.rpc(method, …args) calls a handler
+// registered with app.rpc.handle, and app.push(channel, payload) reaches oc.onPush(channel, cb). Each feature
+// declares its methods and push channels in its own contract file; this file only joins them, so neither preload
+// nor index.ts changes when a feature does. Types only.
 
-import type { AppConfig, CommandInfo, CommandResult, LiveState, SessionMeta } from './types';
+import type { AppConfig, CommandInfo, CommandResult, LiveState, SessionMeta, TranscriptItem } from './types';
 import type { ModsEvents, ModsRpc } from './mods';
 import type { ContextRpc } from './context';
 import type { HistoryRpc } from './history';
@@ -15,11 +17,15 @@ export interface CoreRpc {
   'commands.list': () => CommandInfo[];
   'commands.run': (name: string, args: string) => CommandResult;
   'sessions.live': (id: string) => LiveState;
+  /** A session's transcript without bringing it on screen (sessions.switch does both) */
+  'sessions.transcript': (id: string) => TranscriptItem[];
 }
 
 export interface CoreEvents {
   'config:changed': AppConfig;
   'sessions:changed': SessionMeta[];
+  /** Bring this session on screen (a notification was clicked) */
+  'sessions:show': string;
 }
 
 export type RpcMethods = CoreRpc & ModsRpc & ContextRpc & HistoryRpc & ImagesRpc & SchedulesRpc & PowerRpc & SubagentsRpc & RemoteRpc & SettingsRpc;

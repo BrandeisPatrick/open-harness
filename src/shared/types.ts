@@ -3,6 +3,8 @@
 import type { ModsConfig } from './mods';
 import type { ImageInfo } from './images';
 
+import type { RpcEvents, RpcMethods } from './rpc';
+
 export type ProviderKind = 'ollama' | 'portkey';
 
 /**
@@ -303,8 +305,55 @@ export type AgentEvent =
   | { type: 'approval_resolved'; id: string; ok: boolean; scope: 'once' | 'session' | 'project' }
   /** The model showed an image with show_image; it appears inline in the reply */
   | { type: 'image'; image: ImageInfo }
-  /** `text` is the last assistant text of the run */
+  /** `text` is the last assistant text of the run, when it had any */
   | { type: 'run_end'; reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan'; text?: string };
+
+/** Where a user-role message came from. */
+export type MessageOrigin = 'user' | 'queue' | 'schedule' | 'session' | 'remote' | 'mod' | 'command';
+
+/** How a session came to be: started by the user, forked from another, spawned by an agent as a sub-session, or started by a schedule. */
+export type SessionOrigin = 'user' | 'fork' | 'spawn' | 'schedule';
+
+/** Run-time state of a session (only `unread` is stored). */
+export interface SessionStatus {
+  running: boolean;
+  /** The run is waiting for the user: an approval card or a proposed plan */
+  attention?: 'approval' | 'plan';
+  /** A run ended while the session was not on screen and it has not been opened since */
+  unread?: boolean;
+}
+
+/** What is in flight in a running session, so a window that switches to it can show what one that watched from the start would. */
+export interface LiveState {
+  running: boolean;
+  startedAt?: number;
+  /** Text of the assistant message being streamed (not yet in the transcript) */
+  text: string;
+  thinking: string;
+  /** Tool calls that have started and not finished */
+  tools: { id: string; name: string; args: unknown }[];
+  /** Approval cards waiting for an answer */
+  approvals: Extract<AgentEvent, { type: 'approval_request' }>[];
+  queue: QueuedMessage[];
+}
+
+export interface CommandInfo {
+  name: string;
+  description: string;
+  source: 'app' | 'mod';
+  /** Shown after the name in the menu, e.g. "<task>" */
+  argsHint?: string;
+}
+
+/** What running a slash command asks the window to do. */
+export interface CommandResult {
+  notice?: string;
+  error?: string;
+  /** Send this text as the user's message */
+  send?: string;
+  /** Put this text into the composer */
+  insert?: string;
+}
 
 export interface BrowserState {
   url: string;
@@ -429,6 +478,9 @@ export interface QueuedMessage {
   text: string;
   attachments: ImageAttachment[];
   createdAt: number;
+  /** Who queued it when it was not typed in the window (a schedule, another session, …); see MessageOrigin */
+  origin?: MessageOrigin;
+  from?: string;
 }
 
 export interface ModelCapabilities {
@@ -514,7 +566,12 @@ export interface OpenAgentApi {
   files: FilesApi;
   rules: RulesApi;
   instructions: InstructionsApi;
-  onAgentEvent(cb: (ev: AgentEvent) => void): () => void;
+  /** Every agent event of every session, tagged with the session it belongs to */
+  onAgentEvent(cb: (ev: AgentEvent, sessionId: string) => void): () => void;
+  /** Calls a method registered with app.rpc.handle in the main process (see src/shared/rpc.ts); rejects for unknown names */
+  rpc<K extends keyof RpcMethods>(method: K, ...args: Parameters<RpcMethods[K]>): Promise<Awaited<ReturnType<RpcMethods[K]>>>;
+  /** Follows a push channel the main process sends with app.push */
+  onPush<K extends keyof RpcEvents>(channel: K, cb: (payload: RpcEvents[K]) => void): () => void;
   sessions: SessionsApi;
   skills: SkillsApi;
   changes: ChangesApi;
@@ -554,11 +611,12 @@ export interface SessionMeta {
   compactions?: number;
   /** The agent's current task list, if it keeps one */
   tasks?: TaskItem[];
-  /** The folder this session works in */
+  /** The session's own working directory (absolute); older sessions have none until they are opened or run */
   cwd?: string;
-  /** The session this one was spawned from (a sub-session) */
+  /** The session this one was spawned from */
   parentId?: string;
   origin?: SessionOrigin;
+  /** Run-time state; set by the runtime (sessions:list, sessions:changed), not by toMeta */
   status?: SessionStatus;
   /** Set once the session was merged into another (its id) */
   mergedInto?: string;
@@ -574,9 +632,10 @@ export interface SkillInfo {
 export type TranscriptItem =
   /**
    * images: data URLs of the attached images, in order; mentions: @-mentioned paths whose contents went to the model;
-   * turn: the message's checkpoint index, present when the conversation can be rewound to it (sessions.rewind)
+   * turn: the message's checkpoint index, present when the conversation can be rewound to it (sessions.rewind);
+   * origin/from: set when the message was not typed in the window (see MessageOrigin)
    */
-  | { role: 'user'; text: string; images?: string[]; mentions?: string[]; turn?: number }
+  | { role: 'user'; text: string; images?: string[]; mentions?: string[]; turn?: number; origin?: MessageOrigin; from?: string }
   | { role: 'assistant'; text: string }
   | { role: 'tool'; name: string; args: string; result: string; ok: boolean }
   /** A submit_plan call is shown as a plan card instead of a tool row */
@@ -606,51 +665,4 @@ export interface SessionsApi {
 
 export interface SkillsApi {
   list(): Promise<SkillInfo[]>;
-}
-
-/** Where a user-role message came from. */
-export type MessageOrigin = 'user' | 'queue' | 'schedule' | 'session' | 'remote' | 'mod' | 'command';
-
-/** How a session came to be: started by the user, forked from another, spawned by an agent as a sub-session, or started by a schedule. */
-export type SessionOrigin = 'user' | 'fork' | 'spawn' | 'schedule';
-
-/** Run-time state of a session (only `unread` is stored). */
-export interface SessionStatus {
-  running: boolean;
-  /** The run is waiting for the user: an approval card or a proposed plan */
-  attention?: 'approval' | 'plan';
-  /** A run ended while the session was not on screen and it has not been opened since */
-  unread?: boolean;
-}
-
-/** What is in flight in a running session, so a window that switches to it can show what one that watched from the start would. */
-export interface LiveState {
-  running: boolean;
-  startedAt?: number;
-  /** Text of the assistant message being streamed (not yet in the transcript) */
-  text: string;
-  thinking: string;
-  /** Tool calls that have started and not finished */
-  tools: { id: string; name: string; args: unknown }[];
-  /** Approval cards waiting for an answer */
-  approvals: Extract<AgentEvent, { type: 'approval_request' }>[];
-  queue: QueuedMessage[];
-}
-
-export interface CommandInfo {
-  name: string;
-  description: string;
-  source: 'app' | 'mod';
-  /** Shown after the name in the menu, e.g. "<task>" */
-  argsHint?: string;
-}
-
-/** What running a slash command asks the window to do. */
-export interface CommandResult {
-  notice?: string;
-  error?: string;
-  /** Send this text as the user's message */
-  send?: string;
-  /** Put this text into the composer */
-  insert?: string;
 }

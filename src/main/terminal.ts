@@ -164,11 +164,13 @@ export class TerminalManager extends EventEmitter {
     return t ? { ...t.info } : undefined;
   }
 
-  /** Opens a shell tab. Without a size, the last size the renderer reported is used (or 120×30). */
-  create(cols?: number, rows?: number, agent = false): TerminalTabInfo {
+  /**
+   * Opens a shell tab. Without a size, the last size the renderer reported is used (or 120×30). `cwd` overrides the
+   * app's folder: the agent opens its tabs in its own session's folder, which may not be the one on screen.
+   */
+  create(cols?: number, rows?: number, agent = false, cwd = this.opts.cwd()): TerminalTabInfo {
     const shellPath = this.opts.shell ?? process.env.SHELL ?? '/bin/zsh';
     const shell = path.basename(shellPath);
-    const cwd = this.opts.cwd();
     const env = this.environment(shell);
     const id = `tab-${++this.seq}`;
     const wanted = cols && rows ? { cols, rows } : (this.lastSize ?? { cols: 120, rows: 30 });

@@ -45,7 +45,7 @@ export interface ScheduleInput {
   enabled?: boolean;
 }
 
-export type SchedulePatch = Partial<Pick<Schedule, 'name' | 'prompt' | 'when' | 'enabled' | 'target'>>;
+export type SchedulePatch = Partial<Pick<Schedule, 'name' | 'prompt' | 'when' | 'enabled' | 'target' | 'sessionId'>>;
 
 export interface SchedulesRpc {
   'schedules.list': () => Schedule[];

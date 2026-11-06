@@ -7,7 +7,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { App } from '../app';
 import type { PermissionMode, SessionMeta } from '../../shared/types';
-import { toMeta, toTranscript } from '../sessions';
+import { toTranscript } from '../sessions';
 import { bool, HttpError, json, readJson, str } from './guard';
 import { remoteItem, remoteLive } from './sanitize';
 
@@ -91,9 +91,8 @@ export class Api {
         break;
       }
       case 'new': {
-        const s = rt.create({ foreground: false });
-        // The runtime's list carries the status; a brand-new empty session may not be listed yet.
-        const meta = rt.list().find((m) => m.id === s.id) ?? { ...toMeta(s), status: { running: false } };
+        // The runtime hands back the new session's meta, status included.
+        const meta = rt.create({ foreground: false });
         this.hooks.sessionsMoved();
         json(res, 200, meta);
         break;

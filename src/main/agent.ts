@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type OpenAI from 'openai';
-import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, CompactionInfo, ContextInfo, ImageAttachment, PermissionMode, PlanInfo, QueuedMessage, TaskItem } from '../shared/types';
+import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, CompactionInfo, ContextInfo, ImageAttachment, MessageOrigin, PermissionMode, PlanInfo, QueuedMessage, TaskItem } from '../shared/types';
 import { expandMentions } from './mentions';
 import { makeClient, modelCapabilities } from './providers';
 import { contextSize, ollamaChat, ollamaComplete, type Usage } from './ollama';
 import { McpManager } from './mcp';
 import { COMPACT_THRESHOLD, cleanSummary, compactedPreamble, estimateSpecTokens, estimateTokens, summaryBudgetChars, summaryRequest } from './compact';
 import { instructionsPrompt, loadInstructions } from './instructions';
-import { allTools, toSpec, type ApprovalResult, type Tool, type ToolContext, type ToolResult } from './tools';
+import { allTools, toSpec, type ApprovalResult, type ApproveOptions, type Tool, type ToolContext, type ToolResult } from './tools';
 import { truncate } from './tools/types';
 import type { BrowserController } from './browser';
 import { expandSlashCommand, type Skill } from './skills';
@@ -19,6 +19,7 @@ import { ArtifactStore, type ArtifactInput } from './artifacts';
 import os from 'node:os';
 import path from 'node:path';
 import { listChanges, snapshotBeforeChange } from './changes';
+import type { App } from './app';
 
 type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 type ToolSpec = OpenAI.Chat.Completions.ChatCompletionTool;
@@ -31,6 +32,9 @@ const DENIED = 'Not permitted: the user denied this action. Do not retry it; exp
 const PLAN_EDIT_BLOCKED = 'Not permitted in plan mode: describe this step in your plan instead.';
 const PLAN_CMD_BLOCKED = 'Not permitted in plan mode: only read-only commands (ls, cat, grep, git status/log/diff …) run while planning. Describe this step in your plan instead.';
 const PLAN_MCP_BLOCKED = 'Not permitted in plan mode: this MCP tool is not marked read-only. Describe this step in your plan instead.';
+const PLAN_CUSTOM_BLOCKED = 'Not permitted in plan mode: this action needs the user\'s approval, which plan mode does not ask for. Describe this step in your plan instead.';
+/** What a browser_* call from a session that is not on screen gets back (the pane belongs to the session on screen). */
+export const BROWSER_BACKGROUND = 'Error: the built-in browser is only available while this session is on screen, and the user is looking at another session. Continue without the browser (use bash with curl for plain pages), or say that the user should open this session to let you browse.';
 const SUMMARY_TIMEOUT_MS = 240_000;
 const MIN_COMPACT_MESSAGES = 2;
 
@@ -42,7 +46,8 @@ export function contextLimit(cfg: AppConfig): number {
   return Math.max(4096, Number(cfg.portkey.contextWindow) || 128000);
 }
 
-function systemPrompt(cfg: AppConfig, skills: Skill[], mcp: McpManager | null): string {
+/** `cfg.workingDirectory` is the session's folder here (see Agent.sessionConfig). `extra` is the app's registered sections. */
+function systemPrompt(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = ''): string {
   const base = `You are OpenAgent, an autonomous coding agent running on the user's Mac.
 Working directory: ${cfg.workingDirectory}
 Today: ${new Date().toISOString().slice(0, 10)}
@@ -73,9 +78,10 @@ How to work:
   const mcpText = servers
     ? `\n\nMCP servers provide extra tools named mcp__<server>__<tool> (their descriptions say what they do). Use them when they fit the task; the user approves calls that can change something.\n${servers}`
     : '';
-  const extra = cfg.systemPromptExtra ? `\n\n${cfg.systemPromptExtra}` : '';
+  const userExtra = cfg.systemPromptExtra ? `\n\n${cfg.systemPromptExtra}` : '';
   const instructions = instructionsPrompt(loadInstructions(cfg.workingDirectory));
-  return base + skillList + mcpText + modeText + extra + instructions;
+  const sections = extra.trim() ? `\n\n${extra.trim()}` : '';
+  return base + skillList + mcpText + modeText + userExtra + instructions + sections;
 }
 
 /** A user message: plain text, or text plus image parts when images are attached. */
@@ -115,6 +121,30 @@ interface PendingApproval {
   name: string;
   programs: string[];
   reason: string | null;
+  /** A tool's own question (ApproveOptions.custom): no "always" answers */
+  custom?: boolean;
+}
+
+/** How a run's user message was sent (Agent.run, Agent.enqueue). */
+export interface SendOptions {
+  /** Default 'user' for run and 'queue' for enqueue */
+  origin?: MessageOrigin;
+  /** Who delivered it: the sending session's id, the schedule's or mod's name */
+  from?: string;
+}
+
+/** The final, optional constructor argument; the runtime passes all of it, bare tests none. */
+export interface AgentOptions {
+  /** The session this agent is bound to (default: a new one from the store) */
+  session?: Session;
+  /** The app's seams, handed to tools as ToolContext.app */
+  app?: App;
+  /** True while this agent's session is on screen (default: always) */
+  foreground?: () => boolean;
+  /** Extra tools offered next to the built-in and MCP ones (app.tools) */
+  tools?: () => Tool[];
+  /** Extra system-prompt text (app.prompt sections, already joined) */
+  prompt?: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string;
 }
 
 export class Agent {
@@ -155,13 +185,15 @@ export class Agent {
     private readonly getConfig: () => AppConfig,
     private readonly browser: BrowserController,
     private readonly store: SessionStore,
-    private readonly getSkills: () => Skill[],
+    private readonly getSkills: (cwd: string) => Skill[],
     private readonly emit: (ev: AgentEvent) => void,
     terminal?: TerminalManager,
     artifacts?: ArtifactStore,
     mcp?: McpManager,
+    opts: AgentOptions = {},
   ) {
-    this.session = store.create();
+    this.session = opts.session ?? store.create();
+    this.opts = opts;
     this.mcp = mcp ?? null;
     this.terminal = terminal ?? new TerminalManager({ dataDir: path.join(os.tmpdir(), 'openagent'), cwd: () => this.getConfig().workingDirectory });
     this.artifacts = artifacts ?? new ArtifactStore({ root: path.join(os.tmpdir(), 'openagent', 'artifacts'), rendererDir: path.join(__dirname, '..', 'renderer') });
@@ -175,11 +207,58 @@ export class Agent {
   readonly mcp: McpManager | null;
   /** Messages sent while a run was in progress; delivered before the model's next turn */
   private queued: QueuedMessage[] = [];
+  private readonly opts: AgentOptions;
+  /** The folder of the run in progress: a folder change while it runs applies from the next run on */
+  private runCwd: string | null = null;
+
+  /** The folder this agent works in: the run's, else the session's, else the app's (a session without one adopts it when it runs). */
+  cwd(): string {
+    return this.runCwd ?? this.session.cwd ?? this.getConfig().workingDirectory;
+  }
+
+  /** The app's config with the session's folder as the working directory, which is all the agent reads it for. */
+  private sessionConfig(): AppConfig {
+    const cfg = this.getConfig();
+    const cwd = this.cwd();
+    return cwd === cfg.workingDirectory ? cfg : { ...cfg, workingDirectory: cwd };
+  }
+
+  private isForeground(): boolean {
+    return this.opts.foreground ? this.opts.foreground() : true;
+  }
+
+  private promptExtra(cfg: AppConfig): string {
+    if (!this.opts.prompt) return '';
+    try {
+      return this.opts.prompt({ cwd: cfg.workingDirectory, mode: cfg.permissionMode, sessionId: this.session.id });
+    } catch (err) {
+      console.warn('[agent] a prompt section failed:', errorMessage(err));
+      return '';
+    }
+  }
+
+  private prompt(cfg: AppConfig, skills: Skill[]): string {
+    return systemPrompt(cfg, skills, this.mcp, this.promptExtra(cfg));
+  }
+
+  /** True while the approval card `id` is waiting for this agent. */
+  hasApproval(id: string): boolean {
+    return this.pendingApprovals.has(id);
+  }
+
+  /** True while the message `id` waits in this agent's queue. */
+  hasQueued(id: string): boolean {
+    return this.queued.some((m) => m.id === id);
+  }
 
   stop(): void {
     this.abortController?.abort();
-    for (const p of this.pendingApprovals.values()) p.resolve({ ok: false, message: 'Tool call was interrupted before it produced a result.' });
+    const pending = [...this.pendingApprovals.entries()];
     this.pendingApprovals.clear();
+    for (const [id, p] of pending) {
+      p.resolve({ ok: false, message: 'Tool call was interrupted before it produced a result.' });
+      this.emit({ type: 'approval_resolved', id, ok: false, scope: 'once' });
+    }
   }
 
   /**
@@ -192,6 +271,7 @@ export class Agent {
     if (!p) return {};
     this.pendingApprovals.delete(id);
     const out: ApprovalOutcome = {};
+    if (p.custom) always = false;
     if (ok && always) {
       const isMcp = p.name.startsWith('mcp__') && !!p.programs[0];
       const isCmd = p.name === 'bash' || p.name === 'terminal_run';
@@ -208,6 +288,7 @@ export class Agent {
       } else if (isEdit && this.getConfig().permissionMode === 'ask') out.setMode = 'acceptEdits';
     }
     p.resolve(ok ? { ok: true } : { ok: false, message: DENIED });
+    this.emit({ type: 'approval_resolved', id, ok, scope: ok && always ? scope : 'once' });
     return out;
   }
 
@@ -221,14 +302,19 @@ export class Agent {
   }
 
   /** Decides, per permission mode, whether an action runs, asks, or is refused. */
-  private requestApproval(name: string, detail: string, target?: string): Promise<ApprovalResult> {
-    const cfg = this.getConfig();
+  private requestApproval(name: string, detail: string, target?: string, opts: ApproveOptions = {}): Promise<ApprovalResult> {
+    const cfg = this.sessionConfig();
     const mode = cfg.permissionMode;
     const cwd = cfg.workingDirectory;
     const isEdit = name === 'write_file' || name === 'edit_file';
     const isCmd = name === 'bash' || name === 'terminal_run';
     const allow = Promise.resolve<ApprovalResult>({ ok: true });
     const refuse = (message: string) => Promise.resolve<ApprovalResult>({ ok: false, message });
+    if (opts.custom) {
+      if (mode === 'plan') return refuse(PLAN_CUSTOM_BLOCKED);
+      if (mode === 'bypass' && !opts.alwaysAsk) return allow;
+      return this.ask(name, detail, mode, null, [], true);
+    }
     if (mode === 'bypass') return allow;
     const rules = cfg.allowRules?.[cwd];
     const ref = this.mcp?.lookup(name);
@@ -254,8 +340,15 @@ export class Agent {
     return this.ask(name, detail, mode, null, programs);
   }
 
-  private ask(name: string, detail: string, mode: PermissionMode, reason: string | null, programs: string[]): Promise<ApprovalResult> {
+  private ask(name: string, detail: string, mode: PermissionMode, reason: string | null, programs: string[], custom = false): Promise<ApprovalResult> {
     const id = randomUUID();
+    if (custom) {
+      // Only Allow and Deny: the renderer hides the buttons whose label is empty.
+      return new Promise((resolve) => {
+        this.pendingApprovals.set(id, { resolve, name, programs, reason, custom: true });
+        this.emit({ type: 'approval_request', id, name, detail, mode, alwaysLabel: '', projectLabel: '' });
+      });
+    }
     const what = name.startsWith('mcp__')
       ? programs[0] ?? 'this server'
       : reason
@@ -294,34 +387,46 @@ export class Agent {
   /** Recomputes the changed-file count in the background and tells the renderer. */
   notifyChanges(): void {
     const session = this.session;
-    listChanges(session, this.getConfig().workingDirectory)
+    listChanges(session, this.cwd())
       .then((list) => this.emit({ type: 'changes_updated', count: list.length }))
       .catch((err: unknown) => console.warn('[changes] listing failed:', errorMessage(err)));
   }
 
-  async run(userText: string, attachments: ImageAttachment[] = []): Promise<void> {
+  async run(userText: string, attachments: ImageAttachment[] = [], opts: SendOptions = {}): Promise<void> {
     if (this.running) throw new Error('A run is already in progress.');
     this.running = true;
     this.planSubmitted = false;
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
-    const cfg = this.getConfig();
+    // A session from before folders were per session adopts the app's folder the first time it runs.
+    if (!this.session.cwd) this.session.cwd = this.getConfig().workingDirectory;
+    this.runCwd = this.session.cwd;
+    const cfg = this.sessionConfig();
     let reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan' = 'done';
+    let lastText = '';
 
-    const skills = this.getSkills();
+    const skills = this.getSkills(cfg.workingDirectory);
     const { content } = expandSlashCommand(expandMentions(userText, cfg.workingDirectory).content, skills);
     this.repairTail(); // a session saved mid-run (rename, generated title) and then quit may end in unanswered tool calls
-    this.startTurn(userText);
-    this.session.messages.push(userMessage(content, attachments));
+    const origin = opts.origin ?? 'user';
+    this.startTurn(userText, origin, opts.from);
+    this.store.append(this.session, userMessage(content, attachments));
     this.autoCompactFailed = false;
     this.compactedAt = -1;
     this.emit({ type: 'run_start' });
+    this.emitUserMessage(userText, attachments.length, origin, opts.from);
+    // Saved now, not only at the end: the session gets its title from this message at once, so a sidebar with
+    // several running sessions does not show several "New session" rows.
+    this.store.save(this.session);
+    this.emit({ type: 'session_changed', session: toMeta(this.session) });
 
     try {
       const { client, model } = cfg.provider === 'ollama' ? { client: null, model: cfg.ollama.model } : makeClient(cfg);
       if (!model) throw new Error('No model selected. Open Settings and pick one.');
       const mcpTools = this.mcp?.tools() ?? [];
-      const tools = [...allTools(cfg.permissionMode), ...(cfg.permissionMode === 'plan' ? mcpTools.filter((t) => t.mcp?.readOnly) : mcpTools)];
+      const plan = cfg.permissionMode === 'plan';
+      const extraTools = this.opts.tools?.() ?? [];
+      const tools = [...allTools(cfg.permissionMode), ...(plan ? extraTools.filter((t) => t.readOnly) : extraTools), ...(plan ? mcpTools.filter((t) => t.mcp?.readOnly) : mcpTools)];
       const specs = tools.map(toSpec);
       this.specTokens = estimateSpecTokens(specs);
       this.emitContext();
@@ -340,12 +445,15 @@ export class Agent {
       }
       const ctx: ToolContext = {
         cwd: cfg.workingDirectory,
+        sessionId: this.session.id,
+        app: this.opts.app,
+        foreground: () => this.isForeground(),
         config: cfg,
         mode: cfg.permissionMode,
         browser: this.browser,
         skills,
         terminal: this.terminal,
-        approve: (name, detail, target) => this.requestApproval(name, detail, target),
+        approve: (name, detail, target, approveOpts) => this.requestApproval(name, detail, target, approveOpts),
         beforeChange: (abs) => {
           snapshotBeforeChange(this.session, abs);
           if (this.currentTurn) turnSnapshot(this.currentTurn, abs);
@@ -372,7 +480,7 @@ export class Agent {
           reason = 'aborted';
           break;
         }
-        const history: Msg[] = [{ role: 'system', content: systemPrompt(cfg, skills, this.mcp) }, ...this.session.messages];
+        const history: Msg[] = [{ role: 'system', content: this.prompt(cfg, skills) }, ...this.session.messages];
         this.lastUsage = null;
         const { text, toolCalls } = await this.complete(cfg, client, model, history, activeSpecs, signal, turn);
         this.emit({ type: 'thinking_done' });
@@ -381,15 +489,17 @@ export class Agent {
           // Small models sometimes return nothing after a tool result. Nudge once, then give up.
           if (!nudged) {
             nudged = true;
-            this.session.messages.push({ role: 'user', content: 'You returned an empty response. If the task is complete, summarize the result. If a tool failed, fix the problem and continue.' });
+            this.store.append(this.session, { role: 'user', content: 'You returned an empty response. If the task is complete, summarize the result. If a tool failed, fix the problem and continue.' });
             continue;
           }
         }
         const assistant: Msg = { role: 'assistant', content: text };
         if (toolCalls.length) assistant.tool_calls = toolCalls;
-        this.session.messages.push(assistant);
+        this.store.append(this.session, assistant);
+        if (text.trim()) lastText = text;
         this.markPrompt();
         if (text) this.emit({ type: 'text_done' });
+        this.emit({ type: 'assistant_message', text, toolCalls: toolCalls.length });
         if (!toolCalls.length) {
           // A message queued during the run keeps it going instead of ending it.
           if (this.drainQueue(skills)) continue;
@@ -399,11 +509,11 @@ export class Agent {
         for (const call of toolCalls) {
           if (signal.aborted) break;
           const result = await this.execTool(call, tools, ctx);
-          this.session.messages.push({ role: 'tool', tool_call_id: call.id, content: result.content });
+          this.store.append(this.session, { role: 'tool', tool_call_id: call.id, content: result.content });
           const used = tools.find((t) => t.name === call.function.name);
           if (CHANGING_TOOLS.has(call.function.name) || (used?.mcp && !used.mcp.readOnly)) this.notifyChanges();
           if (result.image && cfg.sendScreenshotsToModel) {
-            this.session.messages.push({
+            this.store.append(this.session, {
               role: 'user',
               content: [
                 { type: 'text', text: `[Screenshot returned by ${call.function.name}]` },
@@ -429,9 +539,10 @@ export class Agent {
       this.store.save(this.session);
       this.running = false;
       this.abortController = null;
+      this.runCwd = null;
       this.dropQueue();
       this.emit({ type: 'session_changed', session: toMeta(this.session) });
-      this.emit({ type: 'run_end', reason });
+      this.emit(lastText ? { type: 'run_end', reason, text: lastText } : { type: 'run_end', reason });
       if (reason === 'done' || reason === 'max_turns' || reason === 'plan') {
         this.generateSessionTitle(this.session).catch((err: unknown) => console.warn('[agent] title generation failed:', errorMessage(err)));
       }
@@ -442,13 +553,13 @@ export class Agent {
 
   /** Where the next request stands against the context window. */
   contextInfo(): ContextInfo {
-    const cfg = this.getConfig();
+    const cfg = this.sessionConfig();
     const limit = contextLimit(cfg);
     const s = this.session;
     const mark = s.lastPrompt;
     let tokens: number;
     if (mark && mark.at <= s.messages.length) tokens = mark.tokens + estimateTokens(s.messages.slice(mark.at));
-    else tokens = estimateTokens([{ role: 'system', content: systemPrompt(cfg, this.getSkills(), this.mcp) }, ...s.messages]) + this.specTokens;
+    else tokens = estimateTokens([{ role: 'system', content: this.prompt(cfg, this.getSkills(cfg.workingDirectory)) }, ...s.messages]) + this.specTokens;
     return { tokens, limit, threshold: COMPACT_THRESHOLD, autoCompact: cfg.autoCompact !== false };
   }
 
@@ -471,7 +582,7 @@ export class Agent {
 
   /** What every request costs before any conversation: the system prompt and the tool definitions. */
   private baseTokens(cfg: AppConfig): number {
-    return estimateTokens([{ role: 'system', content: systemPrompt(cfg, this.getSkills(), this.mcp) }]) + this.specTokens;
+    return estimateTokens([{ role: 'system', content: this.prompt(cfg, this.getSkills(cfg.workingDirectory)) }]) + this.specTokens;
   }
 
   private async autoCompactIfNeeded(cfg: AppConfig, client: OpenAI | null, model: string, signal: AbortSignal): Promise<void> {
@@ -498,7 +609,7 @@ export class Agent {
   async compactNow(focus?: string): Promise<{ ok: boolean; error?: string }> {
     if (this.running || this.compacting) return { ok: false, error: 'Wait for the current run to finish, then compact.' };
     if (this.session.messages.length < MIN_COMPACT_MESSAGES) return { ok: false, error: 'Nothing to compact yet.' };
-    const cfg = this.getConfig();
+    const cfg = this.sessionConfig();
     this.compacting = true;
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
@@ -526,9 +637,9 @@ export class Agent {
     try {
       const summary = await this.summarize(cfg, client, model, focus, signal);
       if (signal.aborted) throw new Error('Compaction was stopped.');
-      const folded = s.messages.splice(0);
+      const folded = [...s.messages];
       const info: CompactionInfo = { id: randomUUID(), createdAt: Date.now(), reason, tokensBefore: before, tokensAfter: 0, summary, messages: folded.length };
-      s.messages.push({ role: 'user', content: compactedPreamble(summary) });
+      this.store.replaceAll(s, [{ role: 'user', content: compactedPreamble(summary) }], 'compaction');
       s.lastPrompt = undefined;
       // Checkpoints point into the folded messages: nothing before the brief can be rewound to any more.
       s.turns = [];
@@ -579,9 +690,11 @@ export class Agent {
   }
 
   /** Queues a message while a run is in progress; it is handed to the model before its next turn. */
-  enqueue(text: string, attachments: ImageAttachment[] = []): QueuedMessage {
+  enqueue(text: string, attachments: ImageAttachment[] = [], opts: SendOptions = {}): QueuedMessage {
     if (!this.running) throw new Error('No run is in progress; send the message normally.');
     const m: QueuedMessage = { id: randomUUID(), text, attachments, createdAt: Date.now() };
+    if (opts.origin && opts.origin !== 'queue' && opts.origin !== 'user') m.origin = opts.origin;
+    if (opts.from) m.from = opts.from;
     this.queued.push(m);
     return m;
   }
@@ -601,12 +714,14 @@ export class Agent {
   private drainQueue(skills: Skill[]): boolean {
     if (!this.queued.length) return false;
     const batch = this.queued.splice(0);
-    const cwd = this.getConfig().workingDirectory;
+    const cwd = this.cwd();
     for (const m of batch) {
       const { content } = expandSlashCommand(expandMentions(m.text, cwd).content, skills);
-      this.startTurn(m.text);
-      this.session.messages.push(userMessage(content, m.attachments));
+      const origin = m.origin ?? 'queue';
+      this.startTurn(m.text, origin, m.from);
+      this.store.append(this.session, userMessage(content, m.attachments));
       this.emit({ type: 'queue_delivered', id: m.id });
+      this.emitUserMessage(m.text, m.attachments.length, origin, m.from);
     }
     return true;
   }
@@ -617,11 +732,22 @@ export class Agent {
     for (const m of left) this.emit({ type: 'queue_dropped', id: m.id });
   }
 
+  /** user_message for the message just added; `turn` is its checkpoint. */
+  private emitUserMessage(text: string, images: number, origin: MessageOrigin, from?: string): void {
+    const turns = this.session.turns ?? [];
+    const ev: Extract<AgentEvent, { type: 'user_message' }> = { type: 'user_message', text, images, origin };
+    if (turns.length) ev.turn = turns.length - 1;
+    if (from) ev.from = from;
+    this.emit(ev);
+  }
+
   /** Opens a checkpoint for the user message about to be pushed; file changes until the next one are recorded on it. */
-  private startTurn(text: string): void {
+  private startTurn(text: string, origin: MessageOrigin = 'user', from?: string): void {
     const s = this.session;
     s.turns ??= [];
     const turn: Turn = { at: s.messages.length, createdAt: Date.now(), text, files: {} };
+    if (origin !== 'user') turn.origin = origin;
+    if (from) turn.from = from;
     if (s.tasks?.length) turn.tasks = structuredClone(s.tasks);
     s.turns.push(turn);
     this.currentTurn = turn;
@@ -639,6 +765,8 @@ export class Agent {
     const r = this.artifacts.save(this.session, input);
     this.store.save(this.session, false);
     this.emit({ type: 'artifact', artifact: r.info, action: r.action });
+    // The pane belongs to the session on screen: a background session's artifact is stored and waits for its card.
+    if (!this.isForeground()) return r;
     const b = this.browser as { navigate?: (url: string) => Promise<string> };
     if (typeof b.navigate === 'function') b.navigate(r.info.url).catch((err: unknown) => console.warn('[artifact] could not open in the browser pane:', errorMessage(err)));
     return r;
@@ -656,7 +784,7 @@ export class Agent {
     if (!last || last.role !== 'assistant' || !last.tool_calls?.length) return;
     const answered = new Set(msgs.slice(i + 1).flatMap((m) => (m.role === 'tool' ? [m.tool_call_id] : [])));
     for (const call of last.tool_calls) {
-      if (!answered.has(call.id)) msgs.push({ role: 'tool', tool_call_id: call.id, content: 'Tool call was interrupted before it produced a result.' });
+      if (!answered.has(call.id)) this.store.append(this.session, { role: 'tool', tool_call_id: call.id, content: 'Tool call was interrupted before it produced a result.' });
     }
   }
 
@@ -838,6 +966,10 @@ export class Agent {
       return { content };
     }
     this.emit({ type: 'tool_start', id: call.id, name, args });
+    if (name.startsWith('browser_') && !this.isForeground()) {
+      this.emit({ type: 'tool_end', id: call.id, name, result: BROWSER_BACKGROUND, ok: false, durationMs: 0 });
+      return { content: BROWSER_BACKGROUND };
+    }
     const tool = tools.find((t) => t.name === name);
     if (!tool) {
       const content = `Error: unknown tool "${name}". Available tools: ${tools.map((t) => t.name).join(', ')}`;
@@ -848,10 +980,10 @@ export class Agent {
     let waited = 0;
     const timedCtx: ToolContext = {
       ...ctx,
-      approve: async (toolName, detail, target) => {
+      approve: async (toolName, detail, target, approveOpts) => {
         const askedAt = Date.now();
         try {
-          return await ctx.approve(toolName, detail, target);
+          return await ctx.approve(toolName, detail, target, approveOpts);
         } finally {
           waited += Date.now() - askedAt;
         }

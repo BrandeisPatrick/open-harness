@@ -1,0 +1,442 @@
+// The session runtime: one Agent per session, any number of sessions running at once (up to MAX_RUNNING), and the
+// one on screen (the foreground) tracked separately from the ones that run. Every agent event passes through here,
+// tagged with its session, so the runtime always knows what is in flight in each session (LiveState) and whether it
+// needs the user (SessionStatus). No Electron here: the headless tests drive it directly.
+
+import type { AgentEvent, AppConfig, ApprovalScope, ImageAttachment, LiveState, SendResult, SessionMeta, SessionOrigin, SessionStatus, StoredRules } from '../shared/types';
+import { Agent, PLAN_APPROVED_TEXT, type SendOptions } from './agent';
+import type { App } from './app';
+import type { ArtifactStore } from './artifacts';
+import type { BrowserController } from './browser';
+import type { McpManager } from './mcp';
+import { toMeta, type Session, type SessionStore } from './sessions';
+import type { Skill } from './skills';
+import type { TerminalManager } from './terminal';
+import type { Tool } from './tools';
+
+/** How many sessions may run at once. */
+export const MAX_RUNNING = 6;
+
+type Disposer = () => void;
+
+export interface RuntimeOptions {
+  store: SessionStore;
+  config: () => AppConfig;
+  /** The skills of a folder (project ones first) */
+  skills: (cwd: string) => Skill[];
+  /** The window's browser pane, or null while there is no window */
+  browser: () => BrowserController | null;
+  terminal?: TerminalManager;
+  artifacts?: ArtifactStore;
+  /** Read when an agent is made: the manager is created after the app, which it reads its config through */
+  mcp?: () => McpManager | null;
+  app?: App;
+  /** Registered tools (app.tools) */
+  tools?: () => Tool[];
+  /**
+   * Changes the app's config (app.updateConfig). Answering an approval or a plan may switch the permission mode or
+   * save a project rule; without it (bare tests) those parts are skipped.
+   */
+  updateConfig?: (change: (current: AppConfig) => AppConfig) => AppConfig;
+  /** Registered prompt sections (app.prompt), joined */
+  prompt?: (info: { cwd: string; mode: AppConfig['permissionMode']; sessionId: string }) => string;
+}
+
+export interface CreateOptions {
+  /** Default: the app's folder */
+  cwd?: string;
+  parentId?: string;
+  /** Default 'user' */
+  origin?: SessionOrigin;
+  /** A fixed title (it is not replaced by a derived or generated one) */
+  title?: string;
+  /** Bring it on screen */
+  foreground?: boolean;
+}
+
+/** What the runtime keeps per session about the run in progress (see LiveState). */
+interface Live {
+  running: boolean;
+  startedAt?: number;
+  text: string;
+  thinking: string;
+  tools: Map<string, { id: string; name: string; args: unknown }>;
+  approvals: Map<string, Extract<AgentEvent, { type: 'approval_request' }>>;
+  /** The last run ended with a plan the user has not decided on yet */
+  planWaiting: boolean;
+}
+
+/**
+ * The agents get this instead of the window's BrowserController: the window (and with it the controller) can be
+ * closed and made again while the agents live on, so every call looks the current one up.
+ */
+function browserHandle(current: () => BrowserController | null): BrowserController {
+  return new Proxy({} as BrowserController, {
+    get(_target, key) {
+      const b = current();
+      if (!b) {
+        if (key === 'then') return undefined;
+        return () => Promise.reject(new Error('The browser pane is not available: the window is closed.'));
+      }
+      const v = (b as unknown as Record<PropertyKey, unknown>)[key];
+      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(b) : v;
+    },
+  });
+}
+
+export class SessionRuntime {
+  private readonly agents = new Map<string, Agent>();
+  private readonly lives = new Map<string, Live>();
+  private fg: string;
+  private readonly browser: BrowserController;
+  private readonly eventListeners = new Set<(sessionId: string, ev: AgentEvent) => void>();
+  private readonly statusListeners = new Set<(sessionId: string, status: SessionStatus) => void>();
+  private readonly listListeners = new Set<() => void>();
+  private readonly foregroundListeners = new Set<(id: string, prev: string) => void>();
+  private sink: ((sessionId: string, ev: AgentEvent) => void) | null = null;
+
+  constructor(private readonly opts: RuntimeOptions) {
+    this.browser = browserHandle(opts.browser);
+    this.fg = opts.store.create({ cwd: opts.config().workingDirectory, origin: 'user' }).id;
+  }
+
+  get store(): SessionStore {
+    return this.opts.store;
+  }
+
+  // ---------- Foreground ----------
+
+  /** The session on screen. */
+  foregroundId(): string {
+    if (!this.opts.store.get(this.fg)) this.fg = this.opts.store.create({ cwd: this.opts.config().workingDirectory, origin: 'user' }).id;
+    return this.fg;
+  }
+
+  /** Brings a session on screen: it is marked read, and the foreground listeners run (the app moves its folder there). */
+  setForeground(id: string): Session {
+    const s = this.opts.store.get(id);
+    if (!s) throw new Error(`No conversation ${id}`);
+    const prev = this.fg;
+    this.fg = id;
+    if (s.unread) {
+      s.unread = false;
+      this.opts.store.save(s, false);
+      this.statusChanged(id);
+    }
+    if (prev !== id) for (const cb of [...this.foregroundListeners]) cb(id, prev);
+    return s;
+  }
+
+  onForeground(cb: (id: string, prev: string) => void): Disposer {
+    this.foregroundListeners.add(cb);
+    return () => this.foregroundListeners.delete(cb);
+  }
+
+  // ---------- Sessions and their agents ----------
+
+  get(id: string): Session | undefined {
+    return this.opts.store.get(id);
+  }
+
+  /** The agent bound to the session for the rest of its life, made on first use. */
+  agentFor(id: string): Agent {
+    const known = this.agents.get(id);
+    if (known) return known;
+    const session = this.opts.store.get(id);
+    if (!session) throw new Error(`No conversation ${id}`);
+    const o = this.opts;
+    const agent = new Agent(o.config, this.browser, o.store, o.skills, (ev) => this.dispatch(id, ev), o.terminal, o.artifacts, o.mcp?.() ?? undefined, {
+      session,
+      app: o.app,
+      foreground: () => this.fg === id,
+      tools: o.tools,
+      prompt: o.prompt,
+    });
+    this.agents.set(id, agent);
+    return agent;
+  }
+
+  /** A new session. It is listed once it has messages (send to it, or bring it on screen). */
+  create(opts: CreateOptions = {}): SessionMeta {
+    const s = this.opts.store.create({ cwd: opts.cwd ?? this.opts.config().workingDirectory, parentId: opts.parentId, origin: opts.origin ?? 'user', title: opts.title });
+    if (opts.foreground) this.setForeground(s.id);
+    this.listChanged();
+    return this.meta(s.id);
+  }
+
+  /** Stops and forgets a deleted session's agent. The caller deletes the session from the store. */
+  forget(id: string): void {
+    this.agents.get(id)?.stop();
+    this.agents.delete(id);
+    this.lives.delete(id);
+    this.listChanged();
+  }
+
+  /**
+   * Starts a run in the session, or queues the message when the session is running (it reaches the model after the
+   * current step). Refused while the session compacts and when MAX_RUNNING sessions already run.
+   */
+  send(id: string, text: string, attachments: ImageAttachment[] = [], opts: SendOptions = {}): SendResult {
+    if (!text.trim() && !attachments.length) return { ok: false, error: 'Nothing to send.' };
+    let agent: Agent;
+    try {
+      agent = this.agentFor(id);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+    if (agent.compacting) return { ok: false, error: 'The context is being compacted; send the message again in a moment.' };
+    if (agent.running) {
+      const queued = agent.enqueue(text, attachments, { ...opts, origin: opts.origin ?? 'queue' });
+      return { ok: true, queued: true, id: queued.id };
+    }
+    if (this.running().length >= MAX_RUNNING) return { ok: false, error: `${MAX_RUNNING} sessions are already running. Wait for one to finish, or stop one, then send again.` };
+    agent.run(text, attachments, opts).catch((err: unknown) => console.error('[agent] run failed', err));
+    return { ok: true };
+  }
+
+  stop(id: string): void {
+    this.agents.get(id)?.stop();
+  }
+
+  stopAll(): void {
+    for (const a of this.agents.values()) a.stop();
+  }
+
+  isRunning(id: string): boolean {
+    return this.agents.get(id)?.running === true;
+  }
+
+  /** Ids of the sessions with a run in progress. */
+  running(): string[] {
+    return [...this.agents.entries()].filter(([, a]) => a.running).map(([id]) => id);
+  }
+
+  status(id: string): SessionStatus {
+    const live = this.lives.get(id);
+    const running = this.isRunning(id);
+    const st: SessionStatus = { running };
+    if (live?.approvals.size) st.attention = 'approval';
+    else if (live?.planWaiting && !running) st.attention = 'plan';
+    if (this.opts.store.get(id)?.unread) st.unread = true;
+    return st;
+  }
+
+  /** What is in flight in the session (all empty when it is idle). */
+  live(id: string): LiveState {
+    const l = this.lives.get(id);
+    const agent = this.agents.get(id);
+    const running = agent?.running === true;
+    if (!l || !running) return { running: false, text: '', thinking: '', tools: [], approvals: [], queue: [] };
+    return {
+      running: true,
+      startedAt: l.startedAt,
+      text: l.text,
+      thinking: l.thinking,
+      tools: [...l.tools.values()].map((t) => ({ ...t })),
+      approvals: [...l.approvals.values()].map((a) => ({ ...a })),
+      queue: agent?.queue() ?? [],
+    };
+  }
+
+  meta(id: string): SessionMeta {
+    const s = this.opts.store.get(id);
+    if (!s) throw new Error(`No conversation ${id}`);
+    return { ...toMeta(s), status: this.status(id) };
+  }
+
+  /** The stored sessions (those with messages), newest first, with their status. */
+  list(): SessionMeta[] {
+    return this.opts.store.list().map((m) => ({ ...m, status: this.status(m.id) }));
+  }
+
+  /** The agent waiting on the approval card `id`. */
+  findApproval(id: string): Agent | undefined {
+    for (const a of this.agents.values()) if (a.hasApproval(id)) return a;
+    return undefined;
+  }
+
+  /** The agent holding the queued message `id`. */
+  findQueued(id: string): Agent | undefined {
+    for (const a of this.agents.values()) if (a.hasQueued(id)) return a;
+    return undefined;
+  }
+
+  /**
+   * Answers an approval card, whichever session holds it, with everything the answer implies (a mode switch, a saved
+   * project rule). False when no session has that card any more.
+   */
+  respondApproval(id: string, ok: boolean, always = false, scope: ApprovalScope = 'session'): boolean {
+    const agent = this.findApproval(id);
+    if (!agent) return false;
+    // The rule belongs to the folder of the session that asked, which need not be the one on screen.
+    const cwd = agent.cwd();
+    const outcome = agent.resolveApproval(id, ok, always, scope === 'project' ? 'project' : 'session');
+    const update = this.opts.updateConfig;
+    if (!update) return true;
+    if (outcome.setMode) {
+      const mode = outcome.setMode;
+      update((c) => ({ ...c, permissionMode: mode }));
+    }
+    const rule = outcome.rule;
+    if (rule) {
+      update((c) => {
+        const r: StoredRules = { ...(c.allowRules?.[cwd] ?? {}) };
+        const add = (list: string[] | undefined) => [...new Set([...(list ?? []), ...rule.values])];
+        if (rule.kind === 'program') r.programs = add(r.programs);
+        else if (rule.kind === 'reason') r.reasons = add(r.reasons);
+        else if (rule.kind === 'mcp') r.mcp = add(r.mcp);
+        else if (rule.kind === 'edits') r.edits = true;
+        return { ...c, allowRules: { ...(c.allowRules ?? {}), [cwd]: r } };
+      });
+    }
+    return true;
+  }
+
+  /** Decides a proposed plan of a session; the build decisions switch the permission mode and start the build run. */
+  respondPlan(sessionId: string, planId: string, decision: 'build-ask' | 'build-acceptEdits' | 'keep'): void {
+    if (decision !== 'build-ask' && decision !== 'build-acceptEdits' && decision !== 'keep') throw new Error(`Unknown plan decision ${decision}`);
+    const agent = this.agentFor(sessionId);
+    if (agent.running) throw new Error('Wait for the current run to finish before deciding on the plan.');
+    agent.respondPlan(planId, decision);
+    this.planDecided(sessionId);
+    if (decision !== 'keep') this.opts.updateConfig?.((c) => ({ ...c, permissionMode: decision === 'build-ask' ? 'ask' : 'acceptEdits' }));
+    const s = this.opts.store.get(sessionId);
+    if (s) this.dispatch(sessionId, { type: 'session_changed', session: toMeta(s) });
+    if (decision === 'keep') return;
+    const r = this.send(sessionId, PLAN_APPROVED_TEXT);
+    if (!r.ok) throw new Error(r.error ?? 'Could not start the build.');
+  }
+
+  /** The session's proposed plan was decided: it no longer waits for the user. */
+  planDecided(id: string): void {
+    const l = this.lives.get(id);
+    if (!l?.planWaiting) return;
+    l.planWaiting = false;
+    this.statusChanged(id);
+  }
+
+  // ---------- Events ----------
+
+  /** Every event of every session, in order, after the runtime has noted it and before the window gets it. */
+  onEvent(cb: (sessionId: string, ev: AgentEvent) => void): Disposer {
+    this.eventListeners.add(cb);
+    return () => this.eventListeners.delete(cb);
+  }
+
+  /** A session's status changed (a run started or ended, it waits for the user or no longer does, it was read). */
+  onStatus(cb: (sessionId: string, status: SessionStatus) => void): Disposer {
+    this.statusListeners.add(cb);
+    return () => this.statusListeners.delete(cb);
+  }
+
+  /** Something the session list shows changed: a status, or a session was made or forgotten. */
+  onListChanged(cb: () => void): Disposer {
+    this.listListeners.add(cb);
+    return () => this.listListeners.delete(cb);
+  }
+
+  /** The window: called last for each event (the app coalesces and sends it). */
+  setSink(sink: ((sessionId: string, ev: AgentEvent) => void) | null): void {
+    this.sink = sink;
+  }
+
+  private liveOf(id: string): Live {
+    let l = this.lives.get(id);
+    if (!l) {
+      l = { running: false, text: '', thinking: '', tools: new Map(), approvals: new Map(), planWaiting: false };
+      this.lives.set(id, l);
+    }
+    return l;
+  }
+
+  /** Notes what the event changes in the session's LiveState and status, then hands it on. */
+  private dispatch(id: string, ev: AgentEvent): void {
+    const l = this.liveOf(id);
+    let status = false;
+    switch (ev.type) {
+      case 'run_start':
+        Object.assign(l, { running: true, startedAt: Date.now(), text: '', thinking: '', planWaiting: false });
+        l.tools.clear();
+        l.approvals.clear();
+        status = true;
+        break;
+      case 'text_delta':
+        l.text += ev.text;
+        break;
+      case 'thinking_delta':
+        l.thinking += ev.text;
+        break;
+      case 'thinking_done':
+        // Emitted once the model call is complete: its text is about to become a message (assistant_message) or be
+        // dropped (an empty reply), so nothing of it is in flight any more. A finished thought is not kept: the
+        // transcript does not store thinking, so a window that switches here sees what a reload would.
+        l.text = '';
+        l.thinking = '';
+        break;
+      case 'assistant_message':
+        l.text = '';
+        l.thinking = '';
+        break;
+      case 'tool_start':
+        l.tools.set(ev.id, { id: ev.id, name: ev.name, args: ev.args });
+        break;
+      case 'tool_end':
+        l.tools.delete(ev.id);
+        break;
+      case 'approval_request':
+        l.approvals.set(ev.id, ev);
+        status = true;
+        break;
+      case 'approval_resolved':
+        status = l.approvals.delete(ev.id);
+        break;
+      case 'plan_proposed':
+        l.planWaiting = true;
+        break;
+      case 'run_end': {
+        Object.assign(l, { running: false, startedAt: undefined, text: '', thinking: '' });
+        l.tools.clear();
+        l.approvals.clear();
+        if (ev.reason !== 'plan') l.planWaiting = false;
+        const s = this.opts.store.get(id);
+        if (s && id !== this.fg && !s.unread) {
+          s.unread = true;
+          this.opts.store.save(s, false);
+        }
+        status = true;
+        break;
+      }
+    }
+    for (const cb of [...this.eventListeners]) {
+      try {
+        cb(id, ev);
+      } catch (err) {
+        console.warn('[runtime] an event listener failed:', err);
+      }
+    }
+    this.sink?.(id, ev);
+    if (status) this.statusChanged(id);
+  }
+
+  private statusChanged(id: string): void {
+    const st = this.status(id);
+    for (const cb of [...this.statusListeners]) {
+      try {
+        cb(id, st);
+      } catch (err) {
+        console.warn('[runtime] a status listener failed:', err);
+      }
+    }
+    this.listChanged();
+  }
+
+  private listChanged(): void {
+    for (const cb of [...this.listListeners]) {
+      try {
+        cb();
+      } catch (err) {
+        console.warn('[runtime] a list listener failed:', err);
+      }
+    }
+  }
+}

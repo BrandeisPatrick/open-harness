@@ -67,7 +67,7 @@ export const terminalRun: Tool = {
     const approval = await ctx.approve('terminal_run', command);
     if (!approval.ok) return { content: approval.message };
     const tm = ctx.terminal;
-    const tabId = args.tab_id !== undefined && args.tab_id !== null && String(args.tab_id).trim() ? resolveTab(tm, args.tab_id).id : tm.create(undefined, undefined, true).id;
+    const tabId = args.tab_id !== undefined && args.tab_id !== null && String(args.tab_id).trim() ? resolveTab(tm, args.tab_id).id : tm.create(undefined, undefined, true, ctx.cwd).id;
     const timeout = clampInt(args.timeout_ms, 1000, MAX_TIMEOUT, 15_000);
     const r = await tm.run(tabId, command, timeout);
     const t = tm.get(tabId);

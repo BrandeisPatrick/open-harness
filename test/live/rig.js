@@ -46,11 +46,16 @@ async function freePort() {
  *   config      extra fields merged into the seeded config.json
  *   env         extra environment variables for the app
  *   size        { width, height } of the page for screenshots (default 1440 x 900)
+ *   ownsProfile whether close() removes the profile (default: only when the rig made it)
+ *
+ * For crash tests: kill() ends the app with SIGKILL (nothing runs on the way out) and keeps the profile and the
+ * project; relaunch(extra) starts the app again on them, and the new instance's close() cleans up what this one
+ * would have.
  */
 async function launch(opts = {}) {
   const root = opts.root || ROOT;
   if (!fs.existsSync(path.join(root, 'dist', 'main', 'index.js'))) throw new Error('Build first: npm run build');
-  const ownsProfile = !opts.profile;
+  let ownsProfile = opts.ownsProfile ?? !opts.profile;
   const profile = opts.profile || fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-profile-'));
   const project = opts.project || fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-project-'));
   const home = path.join(profile, 'home-config');
@@ -235,6 +240,27 @@ async function launch(opts = {}) {
     async approve(answer = 'allow') {
       await waitFor(`Boolean(document.querySelector('.approval:not(.decided) .btn'))`, 60_000, 'an approval card');
       await evaluate(`(() => { const card = [...document.querySelectorAll('.approval')].filter((c) => !c.classList.contains('decided')).pop(); const btns = [...card.querySelectorAll('.btn')]; const pick = ${JSON.stringify(answer)} === 'deny' ? btns.find((b) => /deny/i.test(b.innerText)) : card.querySelector('.btn.primary'); pick.click(); })()`);
+    },
+    /** The Electron process */
+    child,
+    /** Kills the app at once, as a crash would; the profile and the project stay for relaunch(). */
+    async kill() {
+      try {
+        ws.close();
+      } catch {
+        /* already closed */
+      }
+      if (!exited) {
+        child.kill('SIGKILL');
+        await Promise.race([new Promise((r) => child.once('exit', r)), sleep(4000)]);
+      }
+      mock?.close();
+    },
+    /** Starts the app again on the same profile and project (after kill() or close()); the new instance owns the clean-up. */
+    async relaunch(extra = {}) {
+      const owned = ownsProfile;
+      ownsProfile = false;
+      return launch({ ...opts, ...extra, root, profile, project, ownsProfile: owned });
     },
     async close() {
       try {

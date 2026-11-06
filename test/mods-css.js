@@ -67,9 +67,9 @@ check('an unclosed url( is closed', texts('a { b: url(x')[0] === 'a { b: url(x)}
   check('everything goes inside @scope (root)', /^@scope \(#messages\) \{\na \{ color: red \}\n:scope \{ --x: 1 \}\n\}$/.test(out), out);
 }
 {
-  const out = scopeCss('@keyframes k { from { opacity: 0 } } @font-face { font-family: "Holo Face"; src: url(x.woff2) } @property --holo-p { syntax: "<number>"; inherits: false; initial-value: 0 } @counter-style c { system: cyclic; symbols: "*" } a { animation: k 1s }', '#messages', { prefix: 'holo' });
+  const out = scopeCss('@keyframes k { from { opacity: 0 } } @font-face { font-family: "mod-holo Face"; src: url(x.woff2) } @property --mod-holo-p { syntax: "<number>"; inherits: false; initial-value: 0 } @counter-style c { system: cyclic; symbols: "*" } a { animation: k 1s }', '#messages', { prefix: 'holo' });
   const scopeAt = out.indexOf('@scope');
-  check('@keyframes, @font-face, @property and @counter-style are hoisted in front of the scope', ['@keyframes k', '@font-face', '@property --holo-p', '@counter-style c'].every((s) => out.indexOf(s) >= 0 && out.indexOf(s) < scopeAt), out);
+  check('@keyframes, @font-face, @property and @counter-style are hoisted in front of the scope', ['@keyframes k', '@font-face', '@property --mod-holo-p', '@counter-style c'].every((s) => out.indexOf(s) >= 0 && out.indexOf(s) < scopeAt), out);
   check('… inside the looks cascade layer, so the app\'s own names win a collision', out.startsWith(`@layer ${LOOK_LAYER} {\n@keyframes k`) && out.lastIndexOf('}', scopeAt) > out.indexOf('@counter-style c') && LOOK_LAYER === 'mod-looks', out);
   check('… and the rules stay inside it', out.slice(scopeAt).includes('a { animation: k 1s }'));
 }
@@ -82,13 +82,16 @@ check('an unclosed url( is closed', texts('a { b: url(x')[0] === 'a { b: url(x)}
   check('a @keyframes inside @media is hoisted inside the same condition', /^@layer mod-looks \{\n@media \(prefers-reduced-motion: no-preference\) \{\n@keyframes k/.test(out) && /@scope \(#messages\) \{\n@media \(prefers-reduced-motion: no-preference\) \{\na \{ animation: k 1s \}/.test(out), out);
 }
 {
-  // Global registrations: only under the look's prefix (its mod id)
-  const bad = scopeCss("@property --bg-100 { syntax: '<color>'; inherits: false; initial-value: red; } @property --holo-glow { syntax: '<color>'; inherits: true; initial-value: blue; } @font-face { font-family: \"SF Pro Text\"; src: local(Courier); } @font-face { font-family: -apple-system; src: local(Courier) } @font-face { font-family: 'holo display'; src: url(f.woff2) } a{}", '#messages', { prefix: 'holo' });
+  // Global registrations: only in the namespace kept for mods (--mod-<id>-…, "mod-<id>…")
+  const bad = scopeCss("@property --bg-100 { syntax: '<color>'; inherits: false; initial-value: red; } @property --mod-holo-glow { syntax: '<color>'; inherits: true; initial-value: blue; } @property --holo-plain { syntax: '*'; inherits: false } @font-face { font-family: \"SF Pro Text\"; src: local(Courier); } @font-face { font-family: -apple-system; src: local(Courier) } @font-face { font-family: 'mod-holo display'; src: url(f.woff2) } @font-face { font-family: 'holo plain'; src: url(g.woff2) } a{}", '#messages', { prefix: 'holo' });
   check('@property for an app token is dropped', !bad.includes('--bg-100'), bad);
-  check('@property under the look\'s prefix is kept', bad.includes('@property --holo-glow'));
+  check('@property in the mod\'s namespace is kept', bad.includes('@property --mod-holo-glow'));
+  check('@property under the bare mod id is dropped (a mod may be called bg or text)', !bad.includes('--holo-plain') && !scopeCss("@property --bg-100 { syntax: '<color>'; inherits: false; initial-value: red }", '#messages', { prefix: 'bg' }).includes('--bg-100'));
   check('@font-face for a family the app uses is dropped', !/SF Pro Text|apple-system/.test(bad), bad);
-  check('@font-face under the prefix is kept (any case, quoted or not)', bad.includes("'holo display'"));
-  const none = scopeCss('@property --holo-x { syntax: "*"; inherits: false } @font-face { font-family: holo; src: url(a.woff) } a{}', '#messages');
+  check('@font-face in the mod\'s namespace is kept (any case, quoted or not)', bad.includes("'mod-holo display'") && !bad.includes('holo plain'));
+  check('@font-face with a second font-family outside the namespace is dropped (the browser uses the last one)', !scopeCss('@font-face { font-family: "mod-holo a"; font-family: "SF Pro Text"; src: local(Courier) } a{}', '#messages', { prefix: 'holo' }).includes('@font-face'));
+  check('… and so is one that spells the second with an escape', !scopeCss('@font-face { font-family: "mod-holo a"; font\\-family: BlinkMacSystemFont; src: local(Courier) } a{}', '#messages', { prefix: 'holo' }).includes('@font-face'));
+  const none = scopeCss('@property --mod-holo-x { syntax: "*"; inherits: false } @font-face { font-family: mod-holo; src: url(a.woff) } a{}', '#messages');
   check('without a prefix, no @property or @font-face survives', !/@property|@font-face/.test(none), none);
   check('@property inside @media is checked too', !scopeCss('@media (x) { @property --bg-100 { syntax: "*"; inherits: false } }', '#messages', { prefix: 'holo' }).includes('--bg-100'));
   check('a look\'s @keyframes spin stays a layered rule (the app\'s unlayered spin wins)', /^@layer mod-looks \{\n@keyframes spin/.test(scopeCss('@keyframes spin { to { opacity: 0 } }', '#messages')));

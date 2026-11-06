@@ -1,7 +1,7 @@
 // Mod stylesheets on the app's own page: a small top-level splitter, and what the app does with a mod's CSS before
 // the window gets it. A look's CSS is wrapped in `@scope (<region root>) { … }` so its selectors reach only that
 // region; the at-rules that cannot live inside @scope (@keyframes, @font-face, …) are hoisted out of it into a cascade
-// layer (so the app's own names win a collision), and global registrations are kept only under the look's prefix; @import is
+// layer (so the app's own names win a collision), and global registrations are kept only in the mod's own namespace; @import is
 // dropped (a stylesheet a mod adds may not pull in others); relative url()s point at the mod's own files.
 //
 // The splitter is not a CSS parser. It knows just enough to find where each top-level statement ends: strings,
@@ -29,11 +29,12 @@ export interface CssOptions {
 
 export interface ScopeOptions extends CssOptions {
   /**
-   * The look's own name prefix (its mod id). A look may register a custom property (@property) or a font family
-   * (@font-face) only under it: `@property --<prefix>-glow`, `font-family: "<prefix> Display"`. Others are dropped,
+   * The look's mod id. A look may register a custom property (@property) or a font family (@font-face) only in the
+   * namespace kept for mods: `@property --mod-<id>-glow`, `font-family: "mod-<id> Display"`. Others are dropped,
    * because both are global and would reach the whole app: an @property for --bg-100 changes how every surface of
    * the app inherits its colour, and an @font-face for a family the app's stack names replaces that font
-   * everywhere. Without a prefix, every @property and @font-face is dropped.
+   * everywhere. The "mod-" in front is what makes the rule hold: a mod may be called "bg" or "text", and --bg-…
+   * would then be the app's own token. Without an id, every @property and @font-face is dropped.
    */
   prefix?: string;
 }
@@ -202,18 +203,19 @@ function blockStart(text: string): number {
 }
 
 /** Separates what must sit outside @scope from what goes inside it; dropped at-rules go nowhere. */
-/** Whether a hoisted at-rule may stay: @property and @font-face only under the look's prefix. */
+/** Whether a hoisted at-rule may stay: @property and @font-face only in the mod's namespace (--mod-<id>-…, "mod-<id>…"). */
 function allowedGlobal(s: CssStatement, prefix: string | undefined): boolean {
+  if (s.name !== 'property' && s.name !== 'font-face') return true;
+  if (!prefix) return false;
+  const ns = `mod-${prefix.toLowerCase()}`;
   if (s.name === 'property') {
     const name = /^@property\s+(--[\w-]+)/i.exec(s.text)?.[1] ?? '';
-    return !!prefix && name.toLowerCase().startsWith(`--${prefix.toLowerCase()}-`);
+    return name.toLowerCase().startsWith(`--${ns}-`);
   }
-  if (s.name === 'font-face') {
-    const family = /(?:^|[;{\s])font-family\s*:\s*(?:"([^"]*)"|'([^']*)'|([^;}]*))/i.exec(s.body);
-    const value = (family?.[1] ?? family?.[2] ?? family?.[3] ?? '').trim().toLowerCase();
-    return !!prefix && value.startsWith(prefix.toLowerCase());
-  }
-  return true;
+  // Every font-family in the block has to be in the namespace: the browser uses the last one, and an escaped
+  // spelling ("font\-family") names the same descriptor.
+  const families = [...unescapeIdent(s.body).matchAll(/(?:^|[;{\s])font-family\s*:\s*(?:"([^"]*)"|'([^']*)'|([^;}]*))/gi)].map((m) => (m[1] ?? m[2] ?? m[3] ?? '').trim().toLowerCase());
+  return families.length > 0 && families.every((f) => f.startsWith(ns));
 }
 
 function partition(statements: CssStatement[], depth: number, opts: ScopeOptions = {}): { hoisted: string[]; scoped: string[] } {
@@ -239,7 +241,7 @@ function partition(statements: CssStatement[], depth: number, opts: ScopeOptions
 /**
  * A look's CSS for the window: everything inside `@scope (<root>) { … }`; the at-rules that cannot be inside it in
  * front of it, in the cascade layer LOOK_LAYER (so the app's own names win a collision), @property and @font-face
- * only under the look's prefix; @import and the other dropped at-rules removed. Inside, `:scope` is the region's root.
+ * only in the mod's namespace; @import and the other dropped at-rules removed. Inside, `:scope` is the region's root.
  */
 export function scopeCss(css: string, root: string, opts: ScopeOptions = {}): string {
   const { hoisted, scoped } = partition(splitCss(css, opts), 0, opts);

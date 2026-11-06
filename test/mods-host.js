@@ -80,8 +80,8 @@ process.emitWarning = () => {};
   {
     const m = mod('w', [v('main', 'rail', 'W')], { permissions: ['session:read'] });
     const theme = { scheme: 'dark', tokens: { '--bg-100': '#262624' } };
-    const h = L.buildHello(m, m.manifest.contributes.views[0], { name: 'Open Harness', version: '0.1.0' }, theme, true);
-    check('hello: protocol 1, mod, view, app, grant, theme, settings, visible', h.protocol === 1 && h.mod.id === 'w' && h.mod.name === 'W' && h.mod.scope === 'user' && h.view.seat === 'rail' && h.app.name === 'Open Harness' && h.granted[0] === 'session:read' && h.theme.tokens['--bg-100'] === '#262624' && h.settings.a === 1 && h.visible === true, h);
+    const h = L.buildHello(m, m.manifest.contributes.views[0], { name: 'Silo Harness', version: '0.1.0' }, theme, true);
+    check('hello: protocol 1, mod, view, app, grant, theme, settings, visible', h.protocol === 1 && h.mod.id === 'w' && h.mod.name === 'W' && h.mod.scope === 'user' && h.view.seat === 'rail' && h.app.name === 'Silo Harness' && h.granted[0] === 'session:read' && h.theme.tokens['--bg-100'] === '#262624' && h.settings.a === 1 && h.visible === true, h);
     h.granted.push('model');
     check('hello: a copy, not the live grant', m.granted.length === 1);
   }

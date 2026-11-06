@@ -245,7 +245,7 @@ Rail and composer views are sized to their content automatically. Use the app's 
 
 `harness.ready` resolves once the app has answered the page's hello; until then calls wait (the hello itself never times out; every other call gives up after 30 seconds, except `model.complete`). Every call returns a promise. A failed call rejects with an `Error` whose `code` is `'permission'` (with `.permission` naming it), `'unavailable'`, `'timeout'`, `'unknown-method'`, `'bad-params'` or `'error'`.
 
-`harness.info` is the hello's answer: `{ protocol, mod: { id, name, version, scope }, view: { id, seat, title }, app: { name, version }, granted: [...], theme, settings, visible }`. `app.name` is `"Open Harness"` under protocol 1, the name the protocol shipped with, even though the app is now called Silo Harness; `app.version` is the app's version.
+`harness.info` is the hello's answer: `{ protocol, mod: { id, name, version, scope }, view: { id, seat, title }, app: { name, version }, granted: [...], theme, settings, visible }`. `app.name` is the app's name, `"Silo Harness"` (it was `"Open Harness"` before 0.6.0: a mod that shows it needs no change, one that compares it should accept both); `app.version` is the app's version.
 
 `harness.on(event, handler)` subscribes and returns a function that unsubscribes. The app only sends events a view has subscribed to. Subscribing to an event the mod has no permission for does nothing (a console warning says so); an unknown event name is accepted and never arrives.
 

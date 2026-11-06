@@ -150,7 +150,7 @@ export function isWindowMethod(method: string): boolean {
  * The host's name in the hello (`harness.info.app.name`). It stays "Open Harness", the name protocol 1 shipped with,
  * so a mod that checks it keeps working after the rename to Silo Harness; the version is the app's own.
  */
-export const MOD_HOST_NAME = 'Open Harness';
+export const MOD_HOST_NAME = 'Silo Harness';
 
 export function buildHello(mod: ModInfo, view: ModViewManifest, app: { name: string; version: string }, theme: ModTheme, visible: boolean): ModHello {
   const m = mod.manifest;

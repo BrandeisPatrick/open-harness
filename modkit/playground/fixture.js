@@ -71,7 +71,7 @@
     var now = Date.now();
     return {
       scheme: 'light',
-      app: { name: 'Open Harness', version: '0.1.0 (playground)' },
+      app: { name: 'Silo Harness', version: '0.1.0 (playground)' },
       home: HOME,
       config: { provider: 'ollama', model: 'qwen3:8b', workingDirectory: HOME, permissionMode: 'ask', theme: 'system', autoCompact: true, compactThreshold: 0.8, keepAwake: 'off', notifications: true, background: null, contextLimit: 200000 },
       remote: { enabled: false, running: false, bind: 'lan', port: null, urls: [], clients: 0 },

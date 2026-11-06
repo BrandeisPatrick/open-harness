@@ -53,7 +53,8 @@ export function moveFolder(from: string, to: string, log: Log = console.log, ren
   if (!old) return 'none';
   if (old.isSymbolicLink() || !old.isDirectory()) return 'not-a-folder';
   try {
-    if (next) fs.rmdirSync(to);
+    // An empty new folder (at most a .DS_Store) makes way for the old one
+    if (next) fs.rmSync(to, { recursive: true, force: true });
     rename(from, to);
   } catch (err) {
     log(`[migrate] could not move ${from} to ${to}, still using ${from}: ${err instanceof Error ? err.message : String(err)}`);

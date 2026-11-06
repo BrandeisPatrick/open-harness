@@ -12,7 +12,7 @@ The app is now called **Silo Harness** (it was Open Harness). Nothing you have i
 - **New names, old ones still read.** A project's folder is `.silo-harness/` (skills, mods, settings.json); `.open-harness/` is still read when a project has only that one. The instructions file is `SILOHARNESS.md`, in a project and in `~/.silo-harness`; `OPENHARNESS.md` (and `OPENAGENT.md`, `OPENCODER.md`) are still read when it is absent, and the `#` shortcut and dreams add to the file you already have.
 - **Variables.** `SILO_HARNESS_CONFIG_DIR`, `SILO_HARNESS_USER_DATA` and `SILO_HARNESS_CLI_LINK_DIR`; the `OPEN_HARNESS_…` names still work when the new ones are not set. The terminal sets `SILO_HARNESS_TERMINAL` and, for this release, `OPEN_HARNESS_TERMINAL` too, and `TERM_PROGRAM` is `Silo Harness`.
 - **The command is `silo`** (it was `open-harness`), at `Contents/Resources/bin/silo`. Settings → General → Command line tool → Install links it into `~/.local/bin` and takes away the old `open-harness` link the app made there.
-- **Mods** keep working unchanged: the mod protocol, `mod.json`, the CSS tokens and the bridge are the same, and `harness.info.app.name` still says "Open Harness".
+- **Mods** keep working unchanged: the mod protocol, `mod.json`, the CSS tokens and the bridge are the same. `harness.info.app.name` now says "Silo Harness".
 - **The old app can go.** Once Silo Harness has started once, drag Open Harness to the Trash.
 
 ### Any provider

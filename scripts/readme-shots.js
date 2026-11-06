@@ -1,4 +1,6 @@
 // Makes the README screenshots in the real app: hero, mods, sidebar, images, settings, remote and approval.
+// With --dark the same scenes are taken in the dark theme, as <name>-dark.png beside the light ones (the website
+// shows the pair that matches its theme; the README keeps the light ones).
 //
 // The built app runs hidden on a throwaway profile (test/live/rig.js) against the scripted model
 // (test/support/mock-model.js, Ollama path, reported as qwen3:8b). Only the model's replies and a few earlier
@@ -9,7 +11,7 @@
 // phone-sized window (this script, re-run under Electron).
 //
 //   npm run build   (once; dist/ must be current)
-//   node scripts/readme-shots.js [out-dir]      default: docs/screenshots
+//   node scripts/readme-shots.js [out-dir] [--dark]      default: docs/screenshots
 //
 // Required as a module it runs nothing and hands out its fixtures (the project, the seeded sessions, the scripted
 // replies, the PNG helpers), for other screenshot scripts.
@@ -33,7 +35,7 @@ if (process.versions.electron && process.type === 'browser') {
   app.dock?.hide();
   app.whenReady().then(async () => {
     try {
-      nativeTheme.themeSource = 'light';
+      nativeTheme.themeSource = process.env.README_SHOTS_THEME === 'dark' ? 'dark' : 'light';
       const W = 390;
       const H = 844;
       const win = new BrowserWindow({ width: W, height: H, show: false, paintWhenInitiallyHidden: true, webPreferences: { sandbox: true, contextIsolation: true } });
@@ -86,7 +88,10 @@ if (process.versions.electron && process.type === 'browser') {
 const { launch, sleep } = require(path.join(ROOT, 'test', 'live', 'rig.js'));
 const { startMock } = require(path.join(ROOT, 'test', 'support', 'mock-model.js'));
 
-const OUT = path.resolve(process.argv[2] || path.join(ROOT, 'docs', 'screenshots'));
+const DARK = process.argv.includes('--dark');
+const OUT = path.resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) || path.join(ROOT, 'docs', 'screenshots'));
+/** The file a scene is written to: hero.png, or hero-dark.png in the dark pass */
+const outFile = (name) => path.join(OUT, `${name}${DARK ? '-dark' : ''}.png`);
 // Everything the run makes lives in one temp home: the app runs with HOME pointing at it, so the project at
 // <home>/code/atlas-api shows as ~/code/atlas-api and the app's config folder is <home>/.open-harness.
 const HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-home-')));
@@ -738,7 +743,7 @@ async function main() {
       config: {
         provider: 'ollama',
         ollama: { baseURL: `http://127.0.0.1:${mock.port}`, model: 'qwen3:8b', numCtx: 32768, think: 'auto' },
-        theme: 'light',
+        theme: DARK ? 'dark' : 'light',
         remote: { enabled: false, bind: 'localhost', port: 0 },
         recentDirs: [PROJECT],
         mcpServers: { grafana: { command: process.execPath, args: [grafana] } },
@@ -776,7 +781,7 @@ async function main() {
       const r = await app.cdp('Page.captureScreenshot', { format: 'png' });
       let png = Buffer.from(r.data, 'base64');
       png = clip ? cropPng(png, clip.x * 2, clip.y * 2, clip.width * 2, clip.height * 2) : cropPng(png, 0, 0, Infinity, Infinity);
-      const file = path.join(OUT, `${name}.png`);
+      const file = outFile(name);
       fs.writeFileSync(file, png);
       console.log(`wrote ${file} (${Math.round(png.length / 1024)} KB)`);
     };
@@ -938,7 +943,7 @@ async function main() {
     let phoneReady;
     const ready = new Promise((r) => (phoneReady = r));
     const phoneDone = new Promise((resolve, reject) => {
-      phone = spawn(electron, [`--user-data-dir=${path.join(HOME, '.phone-window')}`, __filename, url, path.join(OUT, 'remote.png'), path.join(HOME, '.phone-window')], { env: { ...env, HOME }, stdio: ['ignore', 'pipe', 'inherit'] });
+      phone = spawn(electron, [`--user-data-dir=${path.join(HOME, '.phone-window')}`, __filename, url, outFile('remote'), path.join(HOME, '.phone-window')], { env: { ...env, HOME, README_SHOTS_THEME: DARK ? 'dark' : 'light' }, stdio: ['ignore', 'pipe', 'inherit'] });
       phone.stdout.on('data', (d) => {
         if (String(d).includes('PHONE_READY')) phoneReady();
         process.stdout.write(String(d).replace(/PHONE_READY\n?/, ''));

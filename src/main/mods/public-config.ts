@@ -1,6 +1,7 @@
 // The settings a mod may see (config:read) and change (config:write). Built field by field from the config so a
 // key, token, header or URL with credentials can never slip through, whatever is added to AppConfig later.
 
+import os from 'node:os';
 import type { AppConfig } from '../../shared/types';
 import type { ModInfo, PublicConfig, PublicConfigPatch } from '../../shared/mods';
 import { contextLimit } from '../agent';
@@ -14,13 +15,15 @@ function modelName(s: unknown): string {
   return typeof s === 'string' ? s.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s]*/gi, '').slice(0, 200) : '';
 }
 
-export function publicConfig(cfg: AppConfig): PublicConfig {
+/** `sessionCwd`: the folder of the session on screen (the config's working directory when unknown). */
+export function publicConfig(cfg: AppConfig, sessionCwd?: string): PublicConfig {
   const layout = cfg.mods?.layout;
   const background = layout?.background ? String(layout.background) : layout?.backgroundImage ? 'image' : null;
   return {
     provider: cfg.provider === 'portkey' ? 'portkey' : 'ollama',
     model: modelName(cfg.provider === 'portkey' ? cfg.portkey?.model : cfg.ollama?.model),
-    workingDirectory: String(cfg.workingDirectory ?? ''),
+    workingDirectory: String(sessionCwd || cfg.workingDirectory || ''),
+    home: os.homedir(),
     permissionMode: cfg.permissionMode,
     theme: (THEMES as readonly string[]).includes(cfg.theme) ? cfg.theme : 'system',
     autoCompact: cfg.autoCompact !== false,

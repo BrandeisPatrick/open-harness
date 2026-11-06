@@ -212,7 +212,10 @@ export interface OutputItem {
 export interface PublicConfig {
   provider: string;
   model: string;
+  /** The folder of the session on screen */
   workingDirectory: string;
+  /** The user's home folder, for showing paths as ~/… */
+  home: string;
   permissionMode: PermissionMode;
   theme: 'system' | 'light' | 'dark';
   autoCompact: boolean;
@@ -292,7 +295,8 @@ export interface ModBridge {
   'sessions.list': () => { sessions: ModSession[] };
   'sessions.search': (p: { query: string; limit?: number }) => { hits: SearchHit[] };
 
-  'model.complete': (p: ModelRequest) => { text: string; usage?: { promptTokens: number; completionTokens: number } };
+  /** After model.cancel the call resolves with what had arrived and stopped: true (not an error) */
+  'model.complete': (p: ModelRequest) => { text: string; usage?: { promptTokens: number; completionTokens: number }; stopped?: boolean };
   'model.cancel': (p: { requestId?: string }) => void;
 
   'skills.list': () => { skills: SkillInfo[] };

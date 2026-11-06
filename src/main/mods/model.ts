@@ -85,7 +85,7 @@ export async function completeOnce(
   maxTokens: number,
   signal: AbortSignal,
   onDelta: (text: string) => void,
-): Promise<{ text: string; usage?: { promptTokens: number; completionTokens: number } }> {
+): Promise<{ text: string; usage?: { promptTokens: number; completionTokens: number }; stopped?: boolean }> {
   const timeout = AbortSignal.timeout(MODEL_TIMEOUT_MS);
   const both = AbortSignal.any([signal, timeout]);
   let text = '';
@@ -111,7 +111,7 @@ export async function completeOnce(
         onText: delta,
         onUsage: (u) => (usage = u),
       });
-      return { text, usage };
+      return signal.aborted ? { text, stopped: true } : { text, usage };
     }
     const { client, model } = makeClient(cfg);
     let usage: { promptTokens: number; completionTokens: number } | undefined;
@@ -133,9 +133,9 @@ export async function completeOnce(
       if (both.aborted || text || !/stream_options|include_usage/i.test(String((err as Error)?.message))) throw err;
       await run(false);
     }
-    return { text, usage };
+    return signal.aborted ? { text, stopped: true } : { text, usage };
   } catch (err) {
-    if (signal.aborted) return { text };
+    if (signal.aborted) return { text, stopped: true };
     if (timeout.aborted) throw new ModelCallError(`The model did not finish within ${MODEL_TIMEOUT_MS / 1000} s.`, 4008);
     if (err instanceof ModelCallError) throw err;
     throw new ModelCallError(err instanceof Error ? err.message : String(err), 4000);

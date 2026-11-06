@@ -119,7 +119,7 @@ export function toModTranscript(items: TranscriptItem[]): ModTranscriptItem[] {
 }
 
 /** A breakdown from the agent's own estimate, for when no context service is installed. */
-export function simpleBreakdown(info: { tokens: number; limit: number; threshold: number; autoCompact: boolean }, s: Session | undefined, reported: boolean): ContextBreakdown {
+export function simpleBreakdown(info: { tokens: number; limit: number; threshold: number; autoCompact: boolean }, s: Session | undefined, reported: boolean, running = false): ContextBreakdown {
   const limit = Math.max(1, info.limit);
   const used = Math.min(limit, Math.max(0, Math.round(info.tokens)));
   const reserve = Math.max(0, Math.min(limit - used, Math.round(limit * (1 - (info.threshold || COMPACT_THRESHOLD)))));
@@ -135,6 +135,7 @@ export function simpleBreakdown(info: { tokens: number; limit: number; threshold
     limit,
     threshold: info.threshold,
     autoCompact: info.autoCompact,
+    compactable: !running && (s?.messages.length ?? 0) >= 2,
     basis: reported ? 'reported' : 'estimated',
     slices,
     messages: s?.messages.length ?? 0,
@@ -251,7 +252,7 @@ export class ModBridgeHandler {
         const svc = this.app.service<ContextService>('context');
         if (svc) return svc.breakdown(fg);
         const s = this.session();
-        return simpleBreakdown(this.app.runtime.agentFor(fg).contextInfo(), s, !!s?.lastPrompt);
+        return simpleBreakdown(this.app.runtime.agentFor(fg).contextInfo(), s, !!s?.lastPrompt, this.app.runtime.isRunning(fg));
       }
       case 'session.related': {
         const svc = this.app.service<SubagentsService>('subagents');
@@ -320,13 +321,13 @@ export class ModBridgeHandler {
       }
 
       case 'config.get':
-        return publicConfig(this.app.config());
+        return publicConfig(this.app.config(), this.meta(fg)?.cwd);
       case 'config.set': {
         const patch = p.patch;
         const list = this.o.registry.list();
         applyPublicPatch(this.app.config(), patch, list); // validate before anything is written
         const next = this.app.updateConfig((cur) => applyPublicPatch(cur, patch, list));
-        return publicConfig(next);
+        return publicConfig(next, this.meta(fg)?.cwd);
       }
 
       case 'schedules.list':
@@ -404,7 +405,7 @@ export class ModBridgeHandler {
       const cfg = this.app.config();
       const messages = buildMessages(cfg, call, call.context === 'session' ? this.session()?.messages ?? null : null);
       const r = await completeOnce(cfg, messages, call.maxTokens, ctrl.signal, (text) => this.o.emit(mod.key, 'model.delta', { requestId: call.requestId, text }));
-      return r.usage ? { text: r.text, usage: r.usage } : { text: r.text };
+      return { text: r.text, ...(r.usage ? { usage: r.usage } : {}), ...(r.stopped ? { stopped: true } : {}) };
     } finally {
       mine.delete(call.requestId);
       if (!mine.size) this.calls.delete(mod.key);

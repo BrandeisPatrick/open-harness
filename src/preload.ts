@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
+import type { RpcEvents, RpcMethods } from './shared/rpc';
 import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, Bounds, BrowserState, ChangeDiff, ChangeEntry, ContextInfo, FileHit, ImageAttachment, McpScope, McpServerInfo, ModelCapabilities, OpenAgentApi, ProjectRules, QueuedMessage, RewindResult, SendResult, SessionMeta, SkillInfo, TerminalTabInfo, TranscriptItem } from './shared/types';
 
 const api: OpenAgentApi = {
@@ -38,10 +39,19 @@ const api: OpenAgentApi = {
     list: (): Promise<ProjectRules> => ipcRenderer.invoke('rules:list'),
     remove: (kind: 'program' | 'reason' | 'edits' | 'mcp', value?: string): Promise<ProjectRules> => ipcRenderer.invoke('rules:remove', kind, value),
   },
-  onAgentEvent: (cb: (ev: AgentEvent) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, ev: AgentEvent) => cb(ev);
+  onAgentEvent: (cb: (ev: AgentEvent, sessionId: string) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, ev: AgentEvent, sessionId: string) => cb(ev, sessionId);
     ipcRenderer.on('agent:event', handler);
     return () => ipcRenderer.removeListener('agent:event', handler);
+  },
+  // The two generic bridges: features add RPC methods and push channels without touching this file.
+  rpc: <K extends keyof RpcMethods>(method: K, ...args: Parameters<RpcMethods[K]>): Promise<Awaited<ReturnType<RpcMethods[K]>>> => ipcRenderer.invoke('rpc', method, ...args),
+  onPush: <K extends keyof RpcEvents>(channel: K, cb: (payload: RpcEvents[K]) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, ch: string, payload: RpcEvents[K]) => {
+      if (ch === channel) cb(payload);
+    };
+    ipcRenderer.on('rpc:push', handler);
+    return () => ipcRenderer.removeListener('rpc:push', handler);
   },
 
   sessions: {

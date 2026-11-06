@@ -1,7 +1,8 @@
 /*
  * The playground page: lists the mods the server found, mounts the selected mod's views in mock seats, wires them to
  * PlaygroundHost, and offers controls that change the fixture world and emit the events.
- * URL parameters: ?mod=<id>|all &state=empty|busy|full &scheme=light|dark &shot=1 (only the rail, for shot.js)
+ * URL parameters: ?mod=<id>|all &state=empty|busy|full &scheme=light|dark &model=ok|slow|hold|nokey|unreachable
+ *   &shot=1 (only the rail, or the tab pane for a mod with tab views and no rail view, for shot.js) &pane=<px> (tab width)
  */
 (function () {
   'use strict';
@@ -24,7 +25,9 @@
     collapsed: {},
     log: [],
     frames: {}, // view key → { iframe, section, rec }
-    activeTab: 'browser',
+    activeTab: params.get('tab') || 'browser',
+    modelMode: params.get('model') || store.get('model') || 'ok',
+    pane: Number(params.get('pane')) || Number(store.get('pane')) || 0,
     streaming: null,
   };
 
@@ -73,8 +76,14 @@
 
   // ---------- the host ----------
 
+  function buildWorld(name) {
+    var w = PlaygroundFixture.build(name);
+    w.model.mode = state.modelMode;
+    return w;
+  }
+
   var host = new PlaygroundHost({
-    world: PlaygroundFixture.build(state.fixture),
+    world: buildWorld(state.fixture),
     ui: {
       theme: theme,
       setScheme: setScheme,
@@ -257,6 +266,17 @@
 
     rail.sort(function (a, b) { return (a.v.order === undefined ? 100 : a.v.order) - (b.v.order === undefined ? 100 : b.v.order); });
     rail.forEach(function (x) { mountRail(x.m, x.v); });
+    var mainEl = document.querySelector('.pg-main');
+    mainEl.classList.toggle('no-rail', !SHOT && !rail.length && !!tabs.length);
+    applyPane();
+
+    // shot.js and a mod whose only views are tabs: the side pane alone, filling the window
+    document.body.classList.toggle('shot-tab', SHOT && !rail.length && !!tabs.length);
+    if (SHOT && !rail.length && tabs.length) {
+      var pick = tabs.filter(function (x) { return x.m.manifest.id + '/' + x.v.id === state.activeTab || x.v.id === state.activeTab; })[0] || tabs[0];
+      mountTab(pick.m, pick.v);
+      selectTab(pick.m.manifest.id + '/' + pick.v.id);
+    }
 
     if (!SHOT) {
       var browserTab = document.createElement('button');
@@ -339,6 +359,14 @@
     });
   }
 
+  /** The side pane's width in the mock window (0: the grid decides). */
+  function applyPane() {
+    var main = document.querySelector('.pg-main');
+    if (!main || SHOT) return;
+    var rail = main.classList.contains('no-rail') ? ' ' : ' 300px ';
+    main.style.gridTemplateColumns = state.pane ? 'minmax(320px, 1fr)' + rail + state.pane + 'px' : '';
+  }
+
   // ---------- side panels ----------
 
   function seg(el, options, value, onPick) {
@@ -358,12 +386,24 @@
       state.fixture = s;
       store.set('state', s);
       host.stopRun('switched');
-      host.world = PlaygroundFixture.build(s);
+      host.world = buildWorld(s);
       renderSegs();
       renderWorld();
       mount();
     });
     seg($('scheme-seg'), [['light', 'Light'], ['dark', 'Dark']], state.scheme, setScheme);
+    seg($('model-seg'), [['ok', 'Works'], ['slow', 'Slow'], ['hold', 'Hangs'], ['nokey', 'No key'], ['unreachable', 'Down']], state.modelMode, function (m) {
+      state.modelMode = m;
+      store.set('model', m);
+      host.world.model = { mode: m };
+      renderSegs();
+    });
+    seg($('pane-seg'), [[0, 'Auto'], [420, '420'], [640, '640'], [900, '900']], state.pane, function (px) {
+      state.pane = px;
+      store.set('pane', String(px));
+      applyPane();
+      renderSegs();
+    });
   }
 
   function renderModList() {
@@ -555,6 +595,25 @@
       host.addOutput({ kind: o.kind, id: o.kind === 'file' ? o.title + '#' + outputN : 'o' + Date.now(), title: o.title, detail: o.detail, updatedAt: Date.now() });
     };
     $('act-switch').onclick = function () { host.switchTo(host.world.currentId === 's-main' ? 's-other' : 's-main'); };
+    $('act-related').onclick = function () {
+      // The first related session that is going finishes; if none is, the first finished one starts again
+      var rel = host.related();
+      var all = rel.children.concat(rel.forks);
+      if (!all.length) return toast('This session has no sub-sessions or forks', 'error');
+      var going = all.filter(function (s) { return s.running || s.attention; })[0];
+      if (going) host.setRelatedState(going.id, { running: false, attention: null });
+      else host.setRelatedState(all[0].id, { running: true });
+      toast((going ? 'Finished: ' : 'Started: ') + (going || all[0]).title);
+    };
+    var fireN = 0;
+    $('act-fire').onclick = function () {
+      var list = host.world.schedules.filter(function (x) { return x.lastStatus !== 'running'; });
+      if (!list.length) return toast('No schedule to fire', 'error');
+      var outcomes = ['ok', 'error', 'skipped', 'missed', 'stopped'];
+      var o = outcomes[fireN++ % outcomes.length];
+      host.fireSchedule(list[0], o);
+      toast('Fired "' + list[0].name + '" → ' + o);
+    };
     $('act-skill').onclick = function () {
       var sk = host.world.skills;
       if (!sk.length) return toast('No skills in this fixture', 'error');
@@ -638,7 +697,7 @@
   // ---------- go ----------
 
   loadMods().then(function () {
-    if (!SHOT) { wire(); renderSegs(); renderModList(); renderWorld(); }
+    if (!SHOT) { wire(); renderSegs(); renderModList(); renderWorld(); applyPane(); }
     mount();
     if (SHOT) watchReady();
     else poll();

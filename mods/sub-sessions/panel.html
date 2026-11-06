@@ -32,7 +32,6 @@
   let rel = { parent: null, children: [], forks: [] };
   const notes = {}; // session id → { ok, text }
   const merging = new Set();
-  let poll = null;
 
   function status(s) {
     if (s.running) return { glyph: '<span class="h-spin sm"></span>', label: 'Running' };
@@ -110,11 +109,7 @@
     if (parent) root.appendChild(group('Parent', [parent], 'parent'));
     if (children.length) root.appendChild(group('Sub-sessions', children, 'child'));
     if (forks.length) root.appendChild(group('Forks', forks, 'fork'));
-    const active = children.concat(forks).filter((s) => s.running || s.attention).length;
     harness.ui.setBadge(children.length + forks.length || null);
-    // Nothing tells this view when a sub-session finishes, so look again while one is going
-    clearTimeout(poll);
-    if (active) poll = setTimeout(load, 4000);
   }
 
   async function merge(s) {
@@ -144,7 +139,10 @@
     if (s && s.id !== lastId) { lastId = s.id; for (const k in notes) delete notes[k]; }
     load();
   });
+  // A sub-session, fork or the parent changed state (finished, waiting for an approval, merged)
+  harness.on('related.changed', load);
   harness.on('run.ended', load);
+  // Hidden views may have missed nothing, but a collapsed section catches up once when it opens again
   harness.on('visibility.changed', (v) => { if (v && v.visible) load(); });
   harness.ready.then(async () => {
     const s = await harness.session.get().catch(() => null);

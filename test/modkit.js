@@ -384,6 +384,148 @@ async function readyPage(hello = HELLO) {
     check('on() and its unsubscribe work without a host', ok);
   }
 
+  // --- the playground host: the protocol as it now stands -------------------------------------------------
+  {
+    const hostModule = require(path.join(ROOT, 'modkit/playground/host.js'));
+    const Fixture = require(path.join(ROOT, 'modkit/playground/fixture.js'));
+    hostModule.PlaygroundFixture = Fixture; // host.js reaches the fixture through its root, as in the page
+    const mkHost = (state = 'full') => {
+      const host = new PlaygroundHost({ world: Fixture.build(state), ui: { theme: () => ({ scheme: 'light', tokens: {} }) } });
+      const view = (id, permissions) => {
+        const got = [];
+        host.addMod({ protocol: 1, id, name: id, version: '1.0.0', permissions, contributes: { views: [{ id: 'main', title: id, entry: 'panel.html', seat: 'tab' }] } }, {});
+        host.attach({ key: id + '/main', modId: id, view: { id: 'main', seat: 'tab', title: id }, win: { postMessage: (m) => got.push(JSON.parse(JSON.stringify(m))) } });
+        const rec = host.views[host.views.length - 1];
+        const events = (name) => got.filter((m) => m.method === 'event' && (!name || m.params.name === name)).map((m) => m.params.data);
+        return { rec, got, events, call: (method, params = {}) => Promise.resolve().then(() => host.handle(rec, method, params)) };
+      };
+      return { host, view };
+    };
+    const refusal = async (fn) => { try { await fn(); return null; } catch (e) { return e; } };
+
+    // model.complete resolves with the partial text and stopped: true after model.cancel
+    {
+      const { view } = mkHost();
+      const v = view('chat', ['model', 'session:read']);
+      await v.call('events.subscribe', { events: ['model.delta'] });
+      const run = v.call('model.complete', { messages: [{ role: 'user', content: 'what does --no-verify do?' }], requestId: 'r1', context: 'session' });
+      await new Promise((r) => setTimeout(r, 200));
+      await v.call('model.cancel', { requestId: 'r1' });
+      const r = await run;
+      const streamed = v.events('model.delta').map((d) => d.text).join('');
+      check('host: model.complete resolves after model.cancel with stopped: true', r && r.stopped === true && typeof r.text === 'string' && r.text.length > 0, r);
+      check('host: the stopped result holds exactly what was streamed', r.text === streamed, { text: r.text, streamed });
+      const full = await v.call('model.complete', { messages: [{ role: 'user', content: 'hi' }], requestId: 'r2' });
+      check('host: an uncancelled reply has no stopped flag and carries usage', !full.stopped && full.usage && full.usage.completionTokens > 0, full);
+      const bad = await refusal(() => v.call('model.complete', { messages: [{ role: 'system', content: 'x' }] }));
+      check('host: model.complete refuses a message without a user/assistant role', bad && bad.code === -32602);
+    }
+    // model failures the playground can simulate
+    {
+      const { host, view } = mkHost();
+      const v = view('chat', ['model']);
+      host.world.model.mode = 'nokey';
+      const e1 = await refusal(() => v.call('model.complete', { messages: [{ role: 'user', content: 'x' }] }));
+      host.world.model.mode = 'unreachable';
+      const e2 = await refusal(() => v.call('model.complete', { messages: [{ role: 'user', content: 'x' }] }));
+      check('host: model mode nokey refuses with 4004, unreachable with 4000', e1 && e1.code === 4004 && e2 && e2.code === 4000, [e1, e2]);
+    }
+    // session.switched reaches every subscribed view, with no permission
+    {
+      const { host, view } = mkHost();
+      const bare = view('bare', []);
+      const reader = view('reader', ['session:read']);
+      const quiet = view('quiet', ['session:read']);
+      await bare.call('events.subscribe', { events: ['session.switched'] });
+      await reader.call('events.subscribe', { events: ['session.switched', 'session.changed'] });
+      host.switchTo('s-other');
+      check('host: session.switched reaches a view without session:read', JSON.stringify(bare.events('session.switched')) === JSON.stringify([{ id: 's-other' }]), bare.events());
+      check('host: session.switched and session.changed reach a session:read view', reader.events('session.switched').length === 1 && reader.events('session.changed').some((s) => s.id === 's-other'));
+      check('host: a view that did not subscribe gets nothing', quiet.events().length === 0);
+      host.switchTo('s-other');
+      check('host: switching to the session already on screen sends no session.switched', bare.events('session.switched').length === 1);
+    }
+    // related.changed goes to session:read holders when a related session changes state
+    {
+      const { host, view } = mkHost('full');
+      const reader = view('reader', ['session:read']);
+      const bare = view('bare', []);
+      await reader.call('events.subscribe', { events: ['related.changed'] });
+      const refused = await refusal(() => bare.call('events.subscribe', { events: ['related.changed'] }));
+      check('host: subscribing to an event without its permission is refused with 4003', refused && refused.code === 4003 && refused.data.permission === 'session:read', refused);
+      host.setRelatedState('s-c2', { running: false });
+      check('host: a sub-session finishing sends related.changed', reader.events('related.changed').length === 1);
+      host.setRelatedState('s-other', { running: true });
+      check('host: an unrelated session changing sends nothing', reader.events('related.changed').length === 1);
+      const rel = await reader.call('session.related');
+      check('host: session.related shows the new state', rel.children.find((c) => c.id === 's-c2').running === false);
+    }
+    // the context breakdown carries compactable
+    {
+      const { host, view } = mkHost('full');
+      const v = view('ctx', ['session:read']);
+      const c = await v.call('session.context');
+      check('host: the context breakdown carries compactable', c.compactable === true, c.compactable);
+      host.cur().session.running = true;
+      check('host: compactable is false while a run is going', (await v.call('session.context')).compactable === false);
+      host.switchTo('s-other');
+      host.cur().context.messages = 2;
+      check('host: compactable is false for a short conversation', (await v.call('session.context')).compactable === false);
+    }
+    // the public config: home, workingDirectory follows the session on screen, config.set refuses other keys
+    {
+      const { host, view } = mkHost('full');
+      const v = view('env', ['config:read', 'config:write']);
+      const c = await v.call('config.get');
+      check('host: config.get carries home', c.home === host.world.home && typeof c.home === 'string');
+      check('host: workingDirectory is the folder of the session on screen', c.workingDirectory === host.cur().session.cwd);
+      host.world.sessions['s-other'].session.cwd = '/tmp/elsewhere';
+      host.switchTo('s-other');
+      check('host: workingDirectory follows a switch', (await v.call('config.get')).workingDirectory === '/tmp/elsewhere');
+      const e = await refusal(() => v.call('config.set', { patch: { permissionMode: 'bypass' } }));
+      check('host: config.set with another key is refused as bad params', e && e.code === -32602, e);
+      const ok = await v.call('config.set', { patch: { keepAwake: 'always' } });
+      check('host: config.set of a writable key answers with the public config', ok.keepAwake === 'always' && ok.home === host.world.home);
+    }
+    // schedules: validation, the calls and the event
+    {
+      const { host, view } = mkHost('empty');
+      const v = view('sched', ['schedules', 'session:control']);
+      await v.call('events.subscribe', { events: ['schedules.changed'] });
+      const at = new Date(Date.now() + 3 * 3600 * 1000).toISOString();
+      const refusedWith = async (input, re, label) => {
+        const e = await refusal(() => v.call('schedules.create', { input }));
+        check('host: schedules.create refuses ' + label, e && e.code === -32602 && re.test(e.message), e && e.message);
+      };
+      await refusedWith({ name: 'x', prompt: 'p', when: { kind: 'at', at: new Date(Date.now() - 60000).toISOString() } }, /passed/, 'a past time');
+      await refusedWith({ name: 'x', prompt: 'p', when: { kind: 'every', minutes: 4 } }, /5 minutes/, 'under five minutes');
+      await refusedWith({ name: 'x', prompt: '  ', when: { kind: 'every', minutes: 30 } }, /prompt/, 'an empty prompt');
+      await refusedWith({ name: 'x', prompt: 'p', when: { kind: 'cron', expr: '0 25 * * *' } }, /hour/, 'a cron field out of range');
+      await refusedWith({ name: 'x', prompt: 'p', when: { kind: 'cron', expr: '0 9 * *' } }, /five fields/, 'a cron expression without five fields');
+      const a = await v.call('schedules.create', { input: { name: 'Once', prompt: 'p', when: { kind: 'at', at } } });
+      const b = await v.call('schedules.create', { input: { name: 'Rhythm', prompt: 'p', when: { kind: 'every', minutes: 90 }, target: 'session' } });
+      const c = await v.call('schedules.create', { input: { name: 'Cron', prompt: 'p', when: { kind: 'cron', expr: '0 9 * * 1-5' } } });
+      check('host: created schedules have a next run and a description', a.nextRunAt === Date.parse(at) && /^once on /.test(a.describe) && b.describe === 'every 90 minutes' && c.describe === 'weekdays at 09:00' && c.nextRunAt > Date.now(), [a.describe, b.describe, c.describe]);
+      check('host: "This session" without an id is the session on screen', b.target === 'session' && b.sessionId === host.cur().session.id);
+      check('host: each create sends schedules.changed with the list', v.events('schedules.changed').length === 3 && v.events('schedules.changed')[2].schedules.length === 3);
+      const off = await v.call('schedules.update', { id: b.id, patch: { enabled: false } });
+      check('host: turning one off clears its next run', off.enabled === false && off.nextRunAt === null);
+      const ed = await v.call('schedules.update', { id: b.id, patch: { name: 'Every two hours', when: { kind: 'every', minutes: 120 }, enabled: true, target: 'new' } });
+      check('host: an edit changes the rhythm, the description and the target', ed.describe === 'every 2 hours' && ed.nextRunAt > Date.now() && ed.target === 'new' && !ed.sessionId, ed);
+      const e = await refusal(() => v.call('schedules.update', { id: b.id, patch: { cwd: '/' } }));
+      check('host: schedules.update refuses a field it cannot change', e && e.code === -32602);
+      await v.call('schedules.runNow', { id: c.id });
+      const ran = host.world.schedules.find((x) => x.id === c.id);
+      check('host: runNow marks it running with a session for the run', ran.lastStatus === 'running' && ran.runs === 1 && !!host.world.sessions[ran.lastSessionId]);
+      const again = await refusal(() => v.call('schedules.runNow', { id: c.id }));
+      check('host: runNow refuses while it is running', again && again.code === 4000 && /already running/.test(again.message));
+      await v.call('schedules.remove', { id: a.id });
+      check('host: remove takes it out of the list and says so', !host.world.schedules.some((x) => x.id === a.id) && v.events('schedules.changed').pop().schedules.length === 2);
+      const gone = await refusal(() => v.call('schedules.remove', { id: a.id }));
+      check('host: an unknown schedule id is unavailable', gone && gone.code === 4004);
+    }
+  }
+
   // --- the bundled mods ---------------------------------------------------------------------------------
   const EXPECTED = {
     environment: { order: 10, permissions: ['config:read', 'config:write', 'remote'] },
@@ -393,16 +535,19 @@ async function readyPage(hello = HELLO) {
     outputs: { order: 40, permissions: ['session:read'] },
     'sub-sessions': { order: 45, permissions: ['session:read', 'session:control'] },
     skills: { order: 50, permissions: ['skills:read'] },
+    'side-chat': { seat: 'tab', permissions: ['model', 'session:read', 'session:send'] },
+    scheduled: { seat: 'tab', permissions: ['schedules', 'session:control'] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
-  check('mods/ holds the seven bundled mods', same(mods.map((m) => m.folder).sort(), Object.keys(EXPECTED).sort()), mods.map((m) => m.folder));
+  check('mods/ holds the bundled mods', same(mods.map((m) => m.folder).sort(), Object.keys(EXPECTED).sort()), mods.map((m) => m.folder));
   for (const m of mods) {
     const man = m.manifest || {};
     const exp = EXPECTED[m.folder] || {};
     check(`${m.folder}: mod.json has no problems`, m.valid && m.problems.length === 0, m.problems);
     check(`${m.folder}: metadata`, man.version === '1.0.0' && man.author === 'OpenAgent' && man.license === 'MIT' && typeof man.description === 'string' && man.description.length > 10 && typeof man.icon === 'string');
     const views = (man.contributes && man.contributes.views) || [];
-    check(`${m.folder}: one rail view at order ${exp.order}`, views.length === 1 && views[0].seat === 'rail' && views[0].order === exp.order, views);
+    if (exp.seat === 'tab') check(`${m.folder}: one tab view, with no rail-only fields`, views.length === 1 && views[0].seat === 'tab' && views[0].order === undefined && views[0].maxHeight === undefined, views);
+    else check(`${m.folder}: one rail view at order ${exp.order}`, views.length === 1 && views[0].seat === 'rail' && views[0].order === exp.order, views);
     check(`${m.folder}: permissions`, same((man.permissions || []).slice().sort(), (exp.permissions || []).slice().sort()), man.permissions);
 
     // Every harness call and event in the page is allowed by the manifest
@@ -425,6 +570,54 @@ async function readyPage(hello = HELLO) {
       }
       check(`${m.folder}: every call and event is covered by its permissions`, missing.length === 0, missing);
     }
+  }
+
+  // --- the bundled mods follow the protocol as it now stands ------------------------------------------------
+  {
+    const src = (folder) => fs.readFileSync(path.join(ROOT, 'mods', folder, 'panel.html'), 'utf8');
+    const skills = src('skills');
+    check('skills: follows session.switched instead of polling', /harness\.on\('session\.switched'/.test(skills) && !/setInterval/.test(skills));
+    const sub = src('sub-sessions');
+    check('sub-sessions: follows related.changed instead of the 4-second poll', /harness\.on\('related\.changed'/.test(sub) && !/setTimeout\(load/.test(sub) && !/setInterval/.test(sub));
+    check('sub-sessions: still refreshes once on visibility.changed', /harness\.on\('visibility\.changed'/.test(sub));
+    const ctx = src('context');
+    check('context: Compact now uses compactable from the app', /ctx\.compactable/.test(ctx) && !/key === 'messages' \|\| s\.key === 'toolResults'/.test(ctx));
+    const env = src('environment');
+    check('environment: shortens paths with home from config.get', /config\.home/.test(env) && !/\\\/Users\\\//.test(env));
+    check('environment: reads the config again when the session switches', /harness\.on\('session\.switched'/.test(env));
+    const tasks = src('tasks');
+    check('tasks: no paused spinner; a still half-filled circle when no run is going', !/paused/.test(tasks) && /running \? '<span class="h-spin sm"><\/span>' : ICON\.half/.test(tasks));
+  }
+
+  // --- Side chat ------------------------------------------------------------------------------------------
+  {
+    const man = JSON.parse(fs.readFileSync(path.join(ROOT, 'mods/side-chat/mod.json'), 'utf8'));
+    const html = fs.readFileSync(path.join(ROOT, 'mods/side-chat/panel.html'), 'utf8');
+    check('side-chat: the description says it uses the model', /model/i.test(man.description) && /token/i.test(man.description), man.description);
+    check('side-chat: icon is message', man.icon === 'message');
+    check('side-chat: streams with model.complete and an onDelta, cancels with model.cancel', /harness\.model\.complete\(\{[^)]*\}, \(delta\)/.test(html) && /harness\.model\.cancel\(\)/.test(html));
+    check('side-chat: the switch maps to context session or none', /context: include \? 'session' : 'none'/.test(html));
+    check('side-chat: keeps the conversation per session', /harness\.storage\.session\.(get|set)\('chat'/.test(html));
+    check('side-chat: follows session.switched and puts answers in the composer', /harness\.on\('session\.switched'/.test(html) && /harness\.composer\.insert\(/.test(html));
+    check('side-chat: Enter sends unless Shift is held or an IME is composing', /e\.key === 'Enter' && !e\.shiftKey && !e\.isComposing/.test(html));
+  }
+
+  // --- Scheduled ----------------------------------------------------------------------------------------------
+  {
+    const man = JSON.parse(fs.readFileSync(path.join(ROOT, 'mods/scheduled/mod.json'), 'utf8'));
+    const html = fs.readFileSync(path.join(ROOT, 'mods/scheduled/panel.html'), 'utf8');
+    check('scheduled: icon is clock', man.icon === 'clock');
+    for (const call of ['list', 'create', 'update', 'remove', 'runNow']) check(`scheduled: uses schedules.${call}`, html.includes(`harness.schedules.${call}(`));
+    check('scheduled: follows schedules.changed', /harness\.on\('schedules\.changed'/.test(html));
+    check('scheduled: opens a run\'s session with sessions.open', /harness\.sessions\.open\(/.test(html));
+    check('scheduled: Esc closes the delete confirmation', /e\.key !== 'Escape'/.test(html) && /confirming = null/.test(html));
+    check('scheduled: catches a past time, under five minutes and an empty prompt before sending', /has passed/.test(html) && /every 5 minutes/.test(html) && /errors\.prompt/.test(html));
+    // The page's own date handling: a local date and time become ISO with this machine's offset
+    const iso = /function isoLocal[\s\S]*?\n  \}/.exec(html);
+    const pad = (n) => String(n).padStart(2, '0');
+    const isoLocal = iso && new Function('pad', iso[0] + '; return isoLocal;')(pad);
+    const at = isoLocal && isoLocal('2026-11-06', '09:00');
+    check('scheduled: a local time becomes ISO with an offset that means the same moment', at && /^2026-11-06T09:00:00[+-]\d\d:\d\d$/.test(at) && new Date(Date.parse(at)).getHours() === 9, at);
   }
 
   // --- the manifest rules themselves -----------------------------------------------------------------------

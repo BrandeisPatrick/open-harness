@@ -27,8 +27,8 @@ body.has-bg .pg-side, body.has-bg .pg-chat, body.has-bg .pg-rail, body.has-bg .p
 .pg-problem.error { color: var(--danger); }
 .pg-problem.warning { color: var(--text-200); }
 .pg-problem.runtime { color: var(--danger); font-family: var(--mono); font-size: 11px; }
-.pg-field-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pg-field-label { color: var(--text-200); }
+.pg-field-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; }
+.pg-field-label { flex: none; color: var(--text-200); white-space: nowrap; }
 .pg-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .pg-tasks { min-height: 96px; font-size: 12px; line-height: 18px; }
 .pg-form { display: flex; flex-direction: column; gap: 8px; }
@@ -64,6 +64,9 @@ body.has-bg .pg-side, body.has-bg .pg-chat, body.has-bg .pg-rail, body.has-bg .p
 
 /* ---------- rail ---------- */
 .pg-rail { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; background: var(--bg-100); border-left: 1px solid var(--border-subtle); }
+/* A mod with no rail views gives the rail's room to the side pane */
+.pg-main.no-rail { grid-template-columns: minmax(320px, 1fr) minmax(380px, 640px); }
+.pg-main.no-rail .pg-rail { display: none; }
 .pg-rail:empty::before { content: 'No rail views in this mod.'; padding: 16px 12px; color: var(--text-400); font-size: 12px; }
 .pg-section { flex: none; border-bottom: 1px solid var(--border-subtle); }
 .pg-section-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 36px; padding: 0 8px 0 12px; color: var(--text-100); user-select: none; }
@@ -121,5 +124,12 @@ body.pg.shot .pg-main { display: block; }
 body.pg.shot .pg-rail { border-left: 0; overflow: visible; }
 body.pg.shot .pg-section:last-child { border-bottom: 0; }
 html.shot { height: auto; }
+/* shot mode for a mod with only tab views: the side pane fills the window */
+html.shot body.pg.shot-tab, body.pg.shot.shot-tab { width: 100%; height: 100vh; overflow: hidden; }
+html.shot:has(body.shot-tab) { height: 100%; }
+body.pg.shot.shot-tab .pg-main { height: 100%; }
+body.pg.shot.shot-tab .pg-rail { display: none; }
+body.pg.shot.shot-tab .pg-pane { display: flex; height: 100%; border-left: 0; }
+body.pg.shot.shot-tab .pg-tabs { display: none; }
 
 @media (prefers-reduced-motion: reduce) { .pg-section.flash, .pg-toast { animation: none; } }

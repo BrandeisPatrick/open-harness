@@ -72,10 +72,13 @@
   let awakeError = '';
   let copiedTimer = null;
 
-  /** /Users/<name>/… and /home/<name>/… become ~/… (the protocol does not say where home is). */
-  function tilde(p) {
-    const m = /^(\/Users\/[^/]+|\/home\/[^/]+)(\/.*)?$/.exec(p || '');
-    return m ? '~' + (m[2] || '') : p || '';
+  /** A path under the user's home folder (config.home) becomes ~/… */
+  function tilde(p, home) {
+    p = p || '';
+    home = String(home || '').replace(/\/+$/, '');
+    if (!home) return p;
+    if (p === home) return '~';
+    return p.startsWith(home + '/') ? '~' + p.slice(home.length) : p;
   }
   function base(p) {
     const parts = String(p || '').replace(/\/+$/, '').split('/');
@@ -96,7 +99,7 @@
     $('empty').hidden = !!config;
     if (!config) return;
     const dir = config.workingDirectory || '';
-    info($('folder'), ICON.folder, dir ? base(dir) : 'No folder', dir ? tilde(dir) : '', dir);
+    info($('folder'), ICON.folder, dir ? base(dir) : 'No folder', dir ? tilde(dir, config.home) : '', dir);
     const provider = PROVIDERS[config.provider] || config.provider || '';
     info($('model'), ICON.model, [provider, config.model].filter(Boolean).join(' · ') || 'No model', '', `Provider: ${provider || '—'}\nModel: ${config.model || '—'}`);
     const mode = config.permissionMode;
@@ -163,6 +166,11 @@
   }));
 
   harness.on('config.changed', (c) => { if (c) { config = c; render(); } });
+  // workingDirectory is the folder of the session on screen, so read it again when another session comes on screen
+  harness.on('session.switched', async () => {
+    const c = await harness.config.get().catch(() => null);
+    if (c) { config = c; render(); }
+  });
   harness.on('remote.changed', (r) => { if (r) { remote = r; remoteError = ''; render(); } });
   harness.ready.then(async () => {
     const [c, r] = await Promise.all([harness.config.get().catch(() => null), harness.remote.status().catch(() => null)]);

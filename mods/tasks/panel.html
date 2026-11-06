@@ -17,6 +17,9 @@
   .check { width: 16px; height: 16px; }
   .check circle { fill: currentColor; stroke: none; }
   .check path { stroke: var(--bg-100); stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .half { width: 14px; height: 14px; color: var(--accent); }
+  .half circle { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  .half path { fill: currentColor; stroke: none; }
 </style>
 </head>
 <body>
@@ -30,6 +33,8 @@
   const ICON = {
     done: '<svg class="check" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.75"/><path d="M5.25 8.25l1.9 1.9 3.6-3.9"/></svg>',
     pending: '<svg class="h-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75" stroke-dasharray="2.1 2.4"/></svg>',
+    // In progress while no run is going: a still, half-filled circle (the spinner is for a running session only)
+    half: '<svg class="half" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 2.25a5.75 5.75 0 0 1 0 11.5z"/></svg>',
   };
   const LABEL = { completed: 'Done', in_progress: 'In progress', pending: 'Pending' };
   let tasks = [];
@@ -53,7 +58,7 @@
       g.className = 'glyph';
       g.setAttribute('aria-label', LABEL[t.status] || '');
       if (t.status === 'completed') g.innerHTML = ICON.done;
-      else if (t.status === 'in_progress') g.innerHTML = `<span class="h-spin sm${running ? '' : ' paused'}"></span>`;
+      else if (t.status === 'in_progress') g.innerHTML = running ? '<span class="h-spin sm"></span>' : ICON.half;
       else g.innerHTML = ICON.pending;
       const title = document.createElement('span');
       title.className = 'title';

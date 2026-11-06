@@ -56,7 +56,9 @@ async function checkAligned(app, label) {
   const e = b.element;
   const same = b.bounds && ['x', 'y', 'width', 'height'].every((k) => Math.abs(b.bounds[k] - e[k]) < 1);
   const placed = size && [e.x, e.y, e.width, e.height].every((v, i) => Math.abs(size[i] - v) <= 1);
-  check(`browser view covers #browser-view (${label})`, b.visible && same && placed, { sent: b.bounds, element: e, view: size });
+  // What the window thinks is in front, for the failure message: an open dialog or another tab explains a hidden view.
+  const state = await app.evaluate(`({ dialogs: [...document.querySelectorAll('dialog')].filter((d) => d.open).map((d) => d.id), shell: document.querySelector('.shell').className, tab: document.querySelector('.pane-tab.active')?.id, menu: Boolean(document.querySelector('.popover')) })`);
+  check(`browser view covers #browser-view (${label})`, b.visible && same && placed, { sent: b.bounds, element: e, view: size, state, errors: app.console.filter((l) => /^\[(error|exception)\]/.test(l)).slice(-3) });
 }
 
 async function checkHidden(app, label) {
@@ -391,7 +393,7 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
       await app.click('#pane-tab-browser');
       await app.click('#settings-btn');
       await checkHidden(app, 'Settings open');
-      await app.click('#settings-cancel');
+      await app.click('#settings-close');
       await checkAligned(app, 'Settings closed');
     }
 

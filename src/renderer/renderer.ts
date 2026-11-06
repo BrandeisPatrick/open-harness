@@ -3080,6 +3080,14 @@ function syncBrowserView(): void {
   } else setBrowserVisible(false);
 }
 
+// A dialog's own 'close' event is delivered with the next painted frame, and a window that is hidden or covered
+// may not paint one for a long time: the view it hid would stay hidden. The attribute change is reported at once.
+for (const d of [settingsDialog, shortcutsDialog, confirmDialog, lightbox]) {
+  new MutationObserver(() => {
+    if (!d.open) syncBrowserView();
+  }).observe(d, { attributes: true, attributeFilter: ['open'] });
+}
+
 function applyPane(persist = true): void {
   // A mod tab whose mod went off or away: back to the Browser.
   if (modTabKey(paneTab) && !paneMods?.has(modTabKey(paneTab)!)) paneTab = 'browser';

@@ -35,7 +35,7 @@
     slices.push({ key: 'free', label: LABELS.free, tokens: Math.max(0, limit - used - reserve) });
     return {
       tokens: used, limit: limit, threshold: o.threshold || 0.8, autoCompact: o.autoCompact !== false, basis: o.basis || 'reported',
-      slices: slices, messages: o.messages || 0, compactions: o.compactions || 0, lastCompaction: o.lastCompaction, updatedAt: o.updatedAt || Date.now(),
+      slices: slices, messages: o.messages || 0, compactable: (o.messages || 0) >= 4, compactions: o.compactions || 0, lastCompaction: o.lastCompaction, updatedAt: o.updatedAt || Date.now(),
     };
   }
 
@@ -75,6 +75,8 @@
       home: HOME,
       config: { provider: 'ollama', model: 'qwen3:8b', workingDirectory: HOME, permissionMode: 'ask', theme: 'system', autoCompact: true, compactThreshold: 0.8, keepAwake: 'off', notifications: true, background: null, contextLimit: 200000 },
       remote: { enabled: false, running: false, bind: 'lan', port: null, urls: [], clients: 0 },
+      // How the playground's model answers: ok, slow, hold (streams a little, then waits for a cancel), nokey, unreachable
+      model: { mode: 'ok' },
       sessions: {},
       currentId: 's-main',
       skills: SKILLS.slice(),
@@ -87,6 +89,27 @@
   function addSession(w, s, data) {
     w.sessions[s.id] = Object.assign({ session: s, transcript: [], tasks: [], plan: null, outputs: [], skillUsage: {}, context: context(w.config.contextLimit, { system: 2900, instructions: 1200, skills: 900, tools: 4100 }, { messages: 0 }) }, data || {});
     return w.sessions[s.id];
+  }
+
+  var HOUR = 60 * MIN;
+  var DAY = 24 * HOUR;
+  /** One schedule of every kind and state the Scheduled mod has to show. */
+  function schedules(now, cwd) {
+    var at = function (t) { var d = new Date(t); var off = -d.getTimezoneOffset(); var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':00' + (off >= 0 ? '+' : '-') + pad(Math.floor(Math.abs(off) / 60)) + ':' + pad(Math.abs(off) % 60); };
+    var soon = new Date(now + 26 * HOUR); soon.setMinutes(0, 0, 0);
+    var past = new Date(now - 2 * DAY); past.setHours(14, 30, 0, 0);
+    var base = { cwd: cwd, enabled: true, createdBy: 'user', target: 'new', runs: 0 };
+    var mk = function (o) { return Object.assign({}, base, o); };
+    return [
+      mk({ id: 'sch1', name: 'Morning summary', prompt: 'Summarise what changed in the repo since yesterday: commits, open PRs and anything that failed in CI.', when: { kind: 'cron', expr: '0 9 * * 1-5' }, createdAt: now - 7 * DAY, nextRunAt: now + 15 * HOUR + 12 * MIN, lastRunAt: now - 9 * HOUR, lastStatus: 'ok', lastSessionId: 's-other', runs: 5, describe: 'weekdays at 09:00' }),
+      mk({ id: 'sch3', name: 'Check CI', prompt: 'Look at the last CI run on main and fix what broke.', when: { kind: 'every', minutes: 30 }, target: 'session', sessionId: 's-main', createdBy: 'agent', createdInSession: 's-main', createdAt: now - DAY, nextRunAt: now + 12 * MIN, lastRunAt: now - 18 * MIN, lastStatus: 'error', lastSessionId: 's-main', runs: 12, describe: 'every 30 minutes' }),
+      mk({ id: 'sch4', name: 'Dependency audit', prompt: 'Run npm audit and open a PR for anything with a fix.', when: { kind: 'every', minutes: 1440 }, createdAt: now - 3 * DAY, nextRunAt: now + 5 * HOUR, lastRunAt: now - 19 * HOUR, lastStatus: 'skipped', runs: 3, describe: 'every day' }),
+      mk({ id: 'sch5', name: 'Release notes draft', prompt: 'Draft release notes from the commits since the last tag.', when: { kind: 'cron', expr: '0 16 * * 5' }, createdAt: now - 20 * DAY, nextRunAt: now + 2 * DAY + 3 * HOUR, lastRunAt: now - 5 * DAY, lastStatus: 'missed', runs: 2, describe: 'Fridays at 16:00' }),
+      mk({ id: 'sch6', name: 'Remind me to rotate the staging key', prompt: 'Remind me that the staging API key expires this week and list where it is used.', when: { kind: 'at', at: at(soon.getTime()) }, createdAt: now - 2 * HOUR, nextRunAt: soon.getTime(), runs: 0, describe: 'once on ' + soon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at ' + String(soon.getHours()).padStart(2, '0') + ':00' }),
+      mk({ id: 'sch7', name: 'Nightly flaky-test sweep', prompt: 'Run the test suite five times and list the tests that failed at least once.', when: { kind: 'cron', expr: '30 2 * * *' }, enabled: false, createdAt: now - 12 * DAY, nextRunAt: null, lastRunAt: now - 4 * DAY, lastStatus: 'ok', runs: 8, describe: 'every day at 02:30' }),
+      mk({ id: 'sch8', name: 'Look at the benchmark once the cache lands', prompt: 'Run the startup benchmark and compare it with last week.', when: { kind: 'at', at: at(past.getTime()) }, createdAt: now - 3 * DAY, nextRunAt: null, lastRunAt: past.getTime(), lastStatus: 'ok', lastSessionId: 's-other', runs: 1, describe: 'once on ' + past.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at 14:30' }),
+    ];
   }
 
   function build(state) {
@@ -121,6 +144,7 @@
       });
       addSession(w, session('s-c2', 'Audit mod permissions', { parentId: 's-main', origin: 'agent', running: true, messageCount: 3, createdAt: now - 6 * MIN, updatedAt: now - 20 * 1000 }));
       w.skillsAll = { 'git-commit': { count: 14, lastUsedAt: now - 5 * MIN }, review: { count: 6, lastUsedAt: now - 26 * 3600 * 1000 } };
+      w.schedules = schedules(now, HOME + '/code/openagent').filter(function (x) { return x.id === 'sch1' || x.id === 'sch3'; });
     } else if (state === 'full') {
       w.config = Object.assign(w.config, { provider: 'portkey', model: '@anthropic/claude-sonnet-5', workingDirectory: HOME + '/Documents/claudecode/openagent', permissionMode: 'auto', keepAwake: 'always', contextLimit: 1000000 });
       w.remote = { enabled: true, running: true, bind: 'lan', port: 7788, urls: ['http://192.168.1.23:7788/?t=7f3a9c2e81d44b0f', 'http://patricks-mac.local:7788/?t=7f3a9c2e81d44b0f'], clients: 2, startedAt: now - 52 * MIN };
@@ -167,10 +191,7 @@
       addSession(w, session('s-c3', 'Check that every icon name exists', { parentId: 's-main', origin: 'agent', attention: 'approval', messageCount: 4, createdAt: now - 6 * MIN, updatedAt: now - 60 * 1000 }));
       addSession(w, session('s-f1', 'Try a CSS-only theme instead', { forkedFrom: 's-main', messageCount: 22, createdAt: now - 35 * MIN, updatedAt: now - 18 * MIN }));
       w.skillsAll = { 'create-mod': { count: 9, lastUsedAt: now - 3 * MIN }, 'git-commit': { count: 41, lastUsedAt: now - 20 * MIN }, review: { count: 17, lastUsedAt: now - 40 * MIN }, pdf: { count: 2, lastUsedAt: now - 9 * 86400 * 1000 }, 'release-notes': { count: 3, lastUsedAt: now - 14 * 86400 * 1000 } };
-      w.schedules = [
-        { id: 'sch1', name: 'Morning summary', prompt: 'Summarise what changed in the repo since yesterday.', when: { kind: 'cron', expr: '0 9 * * 1-5' }, target: 'new', cwd: HOME + '/Documents/claudecode/openagent', enabled: true, createdAt: now - 7 * 86400 * 1000, createdBy: 'user', nextRunAt: now + 15 * 3600 * 1000, lastRunAt: now - 9 * 3600 * 1000, lastStatus: 'ok', runs: 5, describe: 'weekdays at 09:00' },
-        { id: 'sch2', name: 'Check CI', prompt: 'Look at the last CI run and fix what broke.', when: { kind: 'every', minutes: 30 }, target: 'session', sessionId: 's-main', cwd: HOME + '/Documents/claudecode/openagent', enabled: false, createdAt: now - 86400 * 1000, createdBy: 'agent', createdInSession: 's-main', nextRunAt: null, runs: 12, describe: 'every 30 minutes' },
-      ];
+      w.schedules = schedules(now, HOME + '/Documents/claudecode/openagent');
     } else {
       addSession(w, session('s-main', 'New session', { cwd: HOME, messageCount: 0, createdAt: now - 20 * 1000, updatedAt: now - 20 * 1000 }));
       w.skills = [];

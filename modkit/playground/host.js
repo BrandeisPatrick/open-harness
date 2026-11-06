@@ -28,8 +28,8 @@
 
   /** Event → the permission a view needs to receive it. */
   var EVENT_PERMS = {
-    'theme.changed': null, 'settings.changed': null, 'visibility.changed': null, command: null,
-    'session.changed': 'session:read', 'run.started': 'session:read', 'run.ended': 'session:read', 'message.user': 'session:read',
+    'theme.changed': null, 'settings.changed': null, 'visibility.changed': null, command: null, 'session.switched': null,
+    'session.changed': 'session:read', 'related.changed': 'session:read', 'run.started': 'session:read', 'run.ended': 'session:read', 'message.user': 'session:read',
     'message.assistant': 'session:read', 'message.delta': 'session:read', 'tool.started': 'session:read', 'tool.ended': 'session:read',
     'tasks.changed': 'session:read', 'plan.changed': 'session:read', 'outputs.changed': 'session:read', 'context.changed': 'session:read',
     'model.delta': 'model', 'skills.used': 'skills:read', 'config.changed': 'config:read', 'schedules.changed': 'schedules', 'remote.changed': 'remote',
@@ -157,10 +157,51 @@
   PlaygroundHost.prototype.switchTo = function (id) {
     if (!this.world.sessions[id]) return false;
     this.stopRun('switched');
+    var changed = this.world.currentId !== id;
     this.world.currentId = id;
+    // session.switched needs no permission, so a view without session:read can still reset itself
+    if (changed) this.emit('session.switched', { id: id });
     this.sessionChanged();
     if (this.ui.worldChanged) this.ui.worldChanged();
     return true;
+  };
+
+  /** A sub-session, fork or the parent of the session on screen changed state. */
+  PlaygroundHost.prototype.relatedChanged = function () { this.emit('related.changed', {}); };
+
+  /** Is `id` the parent, a child or a fork of the session on screen? */
+  PlaygroundHost.prototype.isRelated = function (id) {
+    var s = this.cur().session;
+    var x = this.world.sessions[id];
+    if (!x || id === s.id) return false;
+    return id === s.parentId || x.session.parentId === s.id || x.session.forkedFrom === s.id;
+  };
+
+  /** Changes a related session's state (running, attention) and says so with related.changed. */
+  PlaygroundHost.prototype.setRelatedState = function (id, patch) {
+    var x = this.world.sessions[id];
+    if (!x) return false;
+    Object.assign(x.session, patch, { updatedAt: Date.now() });
+    if (patch.attention === null) delete x.session.attention;
+    if (this.isRelated(id)) this.relatedChanged();
+    if (this.ui.worldChanged) this.ui.worldChanged();
+    return true;
+  };
+
+  /** Whether compacting now could free anything: the same test session.compact applies. */
+  PlaygroundHost.prototype.compactable = function (cur) {
+    cur = cur || this.cur();
+    if (cur.session.running) return false;
+    var body = cur.context.slices.filter(function (s) { return s.key === 'messages' || s.key === 'toolResults'; }).reduce(function (n, s) { return n + s.tokens; }, 0);
+    return cur.context.messages >= 4 && body >= 2000;
+  };
+
+  /** The public config as a mod sees it: workingDirectory follows the session on screen. */
+  PlaygroundHost.prototype.publicConfig = function () {
+    var c = clone(this.world.config);
+    c.workingDirectory = this.cur().session.cwd;
+    c.home = this.world.home;
+    return c;
   };
 
   PlaygroundHost.prototype.contextChanged = function () {
@@ -306,6 +347,47 @@
     this.run = null;
   };
 
+  PlaygroundHost.prototype.schedulesChanged = function () {
+    this.emit('schedules.changed', { schedules: this.world.schedules });
+    if (this.ui.worldChanged) this.ui.worldChanged();
+  };
+
+  /**
+   * A schedule fires: lastStatus running, a session for the run (a new one, or the target session), then after a
+   * moment the result (`outcome`: ok by default, or error / stopped / skipped / missed) and the next run.
+   */
+  PlaygroundHost.prototype.fireSchedule = function (sc, outcome) {
+    var self = this;
+    var w = this.world;
+    var now = Date.now();
+    sc.lastRunAt = now;
+    if (outcome === 'skipped' || outcome === 'missed') {
+      sc.lastStatus = outcome;
+      sc.nextRunAt = sc.enabled && sc.when.kind !== 'at' ? nextRun(sc.when) : null;
+      this.schedulesChanged();
+      return;
+    }
+    var sid = sc.target === 'session' && sc.sessionId && w.sessions[sc.sessionId] ? sc.sessionId : null;
+    if (!sid) {
+      sid = 's-run-' + now.toString(36);
+      w.sessions[sid] = { session: { id: sid, title: sc.name, cwd: sc.cwd, origin: 'schedule', messageCount: 1, createdAt: now, updatedAt: now, running: true }, transcript: [{ role: 'user', text: sc.prompt }], tasks: [], plan: null, outputs: [], skillUsage: {}, context: root.PlaygroundFixture.context(w.config.contextLimit, { system: 2900, tools: 4100 }) };
+    }
+    sc.lastSessionId = sid;
+    sc.lastStatus = 'running';
+    sc.runs++;
+    if (sc.when.kind === 'at') sc.nextRunAt = null;
+    this.schedulesChanged();
+    setTimeout(function () {
+      if (w.schedules.indexOf(sc) < 0) return;
+      sc.lastStatus = outcome || 'ok';
+      if (sc.when.kind === 'at') { sc.nextRunAt = null; }
+      else sc.nextRunAt = sc.enabled ? nextRun(sc.when) : null;
+      var x = w.sessions[sid];
+      if (x && x.session.origin === 'schedule') x.session.running = false;
+      self.schedulesChanged();
+    }, 2500);
+  };
+
   // ---------- methods ----------
 
   PlaygroundHost.prototype.handle = function (view, method, p) {
@@ -393,7 +475,7 @@
         if (p.value === undefined) fail(ERR.PARAMS, '"value" is required (use storage.remove)');
         var json;
         try { json = JSON.stringify(p.value); } catch (e) { fail(ERR.PARAMS, '"value" must be JSON'); }
-        if (json.length > 1024 * 1024) fail(ERR.PARAMS, '"value" is larger than 1 MB');
+        if (json.length > 256 * 1024) fail(ERR.PARAMS, '"value" is larger than 256 KB');
         bag[key] = JSON.parse(json);
         if (ui.worldChanged) ui.worldChanged('storage');
         return null;
@@ -409,7 +491,7 @@
       case 'session.tasks': return { tasks: clone(cur.tasks) };
       case 'session.plan': return { plan: clone(cur.plan) };
       case 'session.outputs': return { outputs: clone(cur.outputs).sort(function (a, b) { return b.updatedAt - a.updatedAt; }) };
-      case 'session.context': return clone(cur.context);
+      case 'session.context': return Object.assign(clone(cur.context), { compactable: this.compactable(cur) });
       case 'session.related': return this.related();
       case 'outputs.open': {
         var k = str(p, 'kind');
@@ -474,8 +556,8 @@
         if (spawn) ns.parentId = cur.session.id;
         w.sessions[nid] = { session: ns, transcript: spawn ? [{ role: 'user', text: p.prompt }] : [], tasks: [], plan: null, outputs: [], skillUsage: {}, context: root.PlaygroundFixture.context(w.config.contextLimit, { system: 2900, tools: 4100 }) };
         if (spawn) {
-          this.sessionChanged();
-          setTimeout(function () { ns.running = false; ns.updatedAt = Date.now(); if (w.currentId === cur.session.id) self.sessionChanged(); }, 4000);
+          this.relatedChanged();
+          setTimeout(function () { self.setRelatedState(nid, { running: false }); }, 4000);
         } else this.switchTo(nid);
         return clone(ns);
       }
@@ -489,6 +571,7 @@
         if (ts.attention) return { ok: false, error: 'It is waiting for ' + (ts.attention === 'approval' ? 'an approval' : 'its plan to be approved') + '.' };
         return sleep(500).then(function () {
           target.merged = true;
+          self.relatedChanged();
           cur.transcript.push({ role: 'assistant', text: 'Merged "' + ts.title + '".' });
           cur.session.messageCount++;
           cur.session.updatedAt = Date.now();
@@ -526,36 +609,52 @@
 
       case 'model.complete': {
         if (!Array.isArray(p.messages) || !p.messages.length) fail(ERR.PARAMS, '"messages" must be a non-empty array');
+        p.messages.forEach(function (m) {
+          if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') fail(ERR.PARAMS, 'every message needs a role (user or assistant) and a string content');
+        });
         if (p.maxTokens !== undefined && (typeof p.maxTokens !== 'number' || p.maxTokens > 4000 || p.maxTokens < 1)) fail(ERR.PARAMS, '"maxTokens" must be 1 to 4000');
+        if (p.context !== undefined && p.context !== 'none' && p.context !== 'session') fail(ERR.PARAMS, '"context" must be none or session');
+        // world.model.mode: ok (default), slow, hold (streams a little, then waits for a cancel), nokey, unreachable
+        var mode = (w.model && w.model.mode) || 'ok';
+        if (mode === 'nokey') return sleep(300).then(function () { fail(ERR.UNAVAILABLE, 'No API key is set for ' + w.config.provider + '. Add one in Settings → Model.'); });
+        if (mode === 'unreachable') return sleep(900).then(function () { fail(ERR.OTHER, 'Could not reach the model (' + w.config.provider + '): connect ECONNREFUSED 127.0.0.1:11434'); });
         var rid = p.requestId || 'anon-' + Date.now();
         var last = p.messages[p.messages.length - 1];
-        var answer = 'Playground reply to "' + String(last && last.content).slice(0, 60) + '"' + (p.context === 'session' ? ', with the session (' + cur.transcript.length + ' items) in front' : '') + '. This is canned text streamed word by word.';
-        var job = { cancelled: false };
-        this.models[view.key + '|' + rid] = job;
-        var pieces = answer.split(/(?= )/);
+        var answer = cannedReply(String(last.content), p.context === 'session' ? cur : null, p.messages.length);
+        var job = { cancelled: false, wake: null };
+        var jobKey = view.key + '|' + rid;
+        this.models[jobKey] = job;
+        var pieces = answer.split(/(?=[ \n])/);
         var acc = '';
         var chain = Promise.resolve();
-        pieces.forEach(function (piece) {
+        var holdAt = mode === 'hold' ? Math.min(pieces.length, 34) : -1;
+        pieces.forEach(function (piece, i) {
           chain = chain.then(function () {
             if (job.cancelled) return;
+            if (i === holdAt) return new Promise(function (r) { job.wake = r; });
             acc += piece;
             if (view.subs['model.delta']) {
               self.log(view, 'event', 'model.delta', { requestId: rid, text: piece });
               self.post(view, { jsonrpc: '2.0', method: 'event', params: { name: 'model.delta', data: { requestId: rid, text: piece } } });
             }
-            return sleep(40);
+            return sleep(mode === 'slow' ? 140 : 35);
           });
         });
+        var usage = function () { return { promptTokens: 120 + p.messages.reduce(function (n, m) { return n + Math.ceil(m.content.length / 4); }, 0) + (p.context === 'session' ? cur.context.tokens : 0), completionTokens: Math.ceil(acc.length / 4) }; };
         return chain.then(function () {
-          delete self.models[view.key + '|' + rid];
-          if (job.cancelled) fail(ERR.OTHER, 'Cancelled', { cancelled: true, text: acc });
-          return { text: acc, usage: { promptTokens: 120 + (p.context === 'session' ? cur.context.tokens : 0), completionTokens: pieces.length } };
+          delete self.models[jobKey];
+          // After model.cancel the call resolves with what had arrived (docs/mods.md "model")
+          if (job.cancelled) return { text: acc, usage: usage(), stopped: true };
+          return { text: acc, usage: usage() };
         });
       }
       case 'model.cancel': {
         var cid = str(p, 'requestId', true);
         Object.keys(this.models).forEach(function (k) {
-          if (k.indexOf(view.key + '|') === 0 && (!cid || k === view.key + '|' + cid)) self.models[k].cancelled = true;
+          if (k.indexOf(view.key + '|') !== 0 || (cid && k !== view.key + '|' + cid)) return;
+          var job = self.models[k];
+          job.cancelled = true;
+          if (job.wake) job.wake();
         });
         return null;
       }
@@ -567,7 +666,7 @@
         return { items: Object.keys(map).map(function (n) { return { name: n, count: map[n].count, lastUsedAt: map[n].lastUsedAt }; }).sort(function (a, b) { return b.count - a.count; }) };
       }
 
-      case 'config.get': return clone(w.config);
+      case 'config.get': return this.publicConfig();
       case 'config.set': {
         var patch = p.patch;
         if (!patch || typeof patch !== 'object' || Array.isArray(patch)) fail(ERR.PARAMS, '"patch" must be an object');
@@ -581,22 +680,28 @@
         Object.assign(w.config, patch);
         if (patch.compactThreshold !== undefined) cur.context.threshold = patch.compactThreshold;
         if (patch.autoCompact !== undefined) cur.context.autoCompact = patch.autoCompact;
-        this.emit('config.changed', w.config);
+        this.emit('config.changed', this.publicConfig());
         if (patch.theme && patch.theme !== 'system' && ui.setScheme) ui.setScheme(patch.theme);
         if (ui.worldChanged) ui.worldChanged();
-        return clone(w.config);
+        return this.publicConfig();
       }
 
       case 'schedules.list': return { schedules: clone(w.schedules) };
       case 'schedules.create': {
         var input = p.input;
-        if (!input || typeof input !== 'object') fail(ERR.PARAMS, '"input" must be an object');
-        str(input, 'name'); str(input, 'prompt');
-        checkWhen(input.when);
-        var sch = { id: 'sch-' + Date.now().toString(36), name: input.name, prompt: input.prompt, when: input.when, target: input.target || 'new', cwd: input.cwd || w.config.workingDirectory, enabled: input.enabled !== false, createdAt: Date.now(), createdBy: 'user', nextRunAt: input.enabled === false ? null : nextRun(input.when), runs: 0, describe: describeWhen(input.when) };
-        if (input.sessionId) sch.sessionId = input.sessionId;
+        if (!input || typeof input !== 'object' || Array.isArray(input)) fail(ERR.PARAMS, '"input" must be an object');
+        checkSchedule(input, true);
+        var target = input.target || 'new';
+        var sch = {
+          id: 'sch-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: input.name.trim(), prompt: input.prompt, when: input.when,
+          target: target, cwd: input.cwd || cur.session.cwd, enabled: input.enabled !== false, createdAt: Date.now(), createdBy: 'user', runs: 0,
+        };
+        // "This session" without an id means the session on screen
+        if (target === 'session') sch.sessionId = input.sessionId || cur.session.id;
+        sch.nextRunAt = sch.enabled ? nextRun(sch.when) : null;
+        sch.describe = describeWhen(sch.when);
         w.schedules.push(sch);
-        this.emit('schedules.changed', { schedules: w.schedules });
+        this.schedulesChanged();
         return clone(sch);
       }
       case 'schedules.update':
@@ -607,19 +712,27 @@
         if (!sc) fail(ERR.UNAVAILABLE, 'No schedule ' + schId);
         if (method === 'schedules.remove') {
           w.schedules = w.schedules.filter(function (x) { return x !== sc; });
-        } else if (method === 'schedules.runNow') {
-          sc.lastRunAt = Date.now(); sc.lastStatus = 'ok'; sc.runs++;
-        } else {
-          var sp = p.patch;
-          if (!sp || typeof sp !== 'object') fail(ERR.PARAMS, '"patch" must be an object');
-          Object.keys(sp).forEach(function (key) { if (['name', 'prompt', 'when', 'enabled', 'target'].indexOf(key) < 0) fail(ERR.PARAMS, 'Cannot change "' + key + '"'); });
-          if (sp.when) checkWhen(sp.when);
-          Object.assign(sc, sp);
-          sc.describe = describeWhen(sc.when);
-          sc.nextRunAt = sc.enabled ? nextRun(sc.when) : null;
+          this.schedulesChanged();
+          return null;
         }
-        this.emit('schedules.changed', { schedules: w.schedules });
-        return method === 'schedules.remove' ? null : clone(sc);
+        if (method === 'schedules.runNow') {
+          if (sc.lastStatus === 'running') fail(ERR.OTHER, 'It is already running.');
+          this.fireSchedule(sc);
+          return null;
+        }
+        var sp = p.patch;
+        if (!sp || typeof sp !== 'object' || Array.isArray(sp)) fail(ERR.PARAMS, '"patch" must be an object');
+        Object.keys(sp).forEach(function (key) { if (['name', 'prompt', 'when', 'enabled', 'target'].indexOf(key) < 0) fail(ERR.PARAMS, 'Cannot change "' + key + '"'); });
+        if (sp.enabled !== undefined && typeof sp.enabled !== 'boolean') fail(ERR.PARAMS, '"enabled" must be true or false');
+        checkSchedule(Object.assign({}, sc, sp), sp.when !== undefined || (sp.enabled === true && sc.when.kind === 'at'));
+        if (sp.name !== undefined) sp.name = sp.name.trim();
+        Object.assign(sc, sp);
+        if (sp.target === 'session' && !sc.sessionId) sc.sessionId = cur.session.id;
+        if (sp.target === 'new') delete sc.sessionId;
+        sc.describe = describeWhen(sc.when);
+        sc.nextRunAt = sc.enabled ? nextRun(sc.when) : null;
+        this.schedulesChanged();
+        return clone(sc);
       }
 
       case 'remote.status': return clone(w.remote);
@@ -641,21 +754,98 @@
     fail(ERR.UNKNOWN, 'Unknown method: ' + method);
   };
 
-  function checkWhen(when) {
+  /** The playground's model: a canned Markdown answer that depends a little on the question. */
+  function cannedReply(question, session, turns) {
+    var q = question.replace(/\s+/g, ' ').trim();
+    var head = '> ' + (q.length > 80 ? q.slice(0, 80) + '…' : q) + '\n\n';
+    var ctx = session ? 'I can see the main conversation (' + session.transcript.length + ' items, "' + session.session.title + '"), so this answer takes it into account.' : 'I cannot see the main conversation, so this answer stands on its own.';
+    if (/error|fail|exception|stack/i.test(q)) {
+      return head + 'That error usually means the process tried to read a file that was not there yet. ' + ctx + '\n\nThree things to check:\n\n1. The path is resolved from the **working directory**, not the file.\n2. The build ran: `npm run build` writes `dist/`.\n3. Nothing deleted it in between (a `clean` step).\n\n```sh\nls dist/main && node -e "require(\'./dist/main/agent.js\')"\n```\n\nIf the second command prints nothing, the file is fine and the cause is elsewhere.';
+    }
+    return head + 'Short answer: `--no-verify` skips the pre-commit and commit-msg hooks for that one commit. ' + ctx + '\n\n- It does **not** skip CI, so a lint failure still shows up there.\n- Hooks that run on push (`pre-push`) are not affected.\n- `git commit -n` is the same flag.\n\nUse it for a work-in-progress commit you will squash later, not to get past a failing check.' + (turns > 2 ? '\n\n(This is turn ' + Math.ceil(turns / 2) + ' of the side conversation.)' : '');
+  }
+
+  var CRON_FIELDS = [['minute', 0, 59], ['hour', 0, 23], ['day of the month', 1, 31], ['month', 1, 12], ['day of the week', 0, 7]];
+  /** A five-field cron expression → five arrays of allowed values; throws a bad-params error naming the field. */
+  function parseCron(expr) {
+    var parts = String(expr).trim().split(/\s+/);
+    if (parts.length !== 5) fail(ERR.PARAMS, 'A cron expression has five fields (minute hour day month weekday); this one has ' + parts.length + '.');
+    return parts.map(function (part, i) {
+      var f = CRON_FIELDS[i];
+      var set = {};
+      part.split(',').forEach(function (item) {
+        var m = item.match(/^(\*|(\d+)(?:-(\d+))?)(?:\/(\d+))?$/);
+        if (!m) fail(ERR.PARAMS, 'The ' + f[0] + ' field "' + item + '" is not a number, a range, a list or *.');
+        var lo = m[1] === '*' ? f[1] : Number(m[2]);
+        var hi = m[1] === '*' ? f[2] : m[3] !== undefined ? Number(m[3]) : m[4] ? f[2] : lo;
+        var step = m[4] ? Number(m[4]) : 1;
+        if (lo < f[1] || hi > f[2] || lo > hi || step < 1) fail(ERR.PARAMS, 'The ' + f[0] + ' field "' + item + '" is out of range (' + f[1] + ' to ' + f[2] + ').');
+        for (var v = lo; v <= hi; v += step) set[i === 4 && v === 7 ? 0 : v] = true;
+      });
+      return set;
+    });
+  }
+  function cronNext(expr, from) {
+    var f = parseCron(expr);
+    var d = new Date(from);
+    d.setSeconds(0, 0);
+    d.setMinutes(d.getMinutes() + 1);
+    for (var i = 0; i < 366 * 24 * 60; i++) {
+      if (f[3][d.getMonth() + 1] && f[2][d.getDate()] && f[4][d.getDay()] && f[1][d.getHours()] && f[0][d.getMinutes()]) return d.getTime();
+      d.setMinutes(d.getMinutes() + 1);
+    }
+    return null;
+  }
+
+  /** What the app refuses when a schedule is created or changed (the mod is meant to catch most of it first). */
+  function checkSchedule(input, checkTime) {
+    if (typeof input.name !== 'string' || !input.name.trim()) fail(ERR.PARAMS, 'Give the task a name.');
+    if (input.name.length > 120) fail(ERR.PARAMS, 'The name is longer than 120 characters.');
+    if (typeof input.prompt !== 'string' || !input.prompt.trim()) fail(ERR.PARAMS, 'The prompt is empty.');
+    if (input.target !== undefined && input.target !== 'new' && input.target !== 'session') fail(ERR.PARAMS, '"target" must be new or session');
+    var when = input.when;
     if (!when || typeof when !== 'object') fail(ERR.PARAMS, '"when" is required');
-    if (when.kind === 'at') { if (isNaN(Date.parse(when.at))) fail(ERR.PARAMS, '"when.at" must be an ISO date-time'); }
-    else if (when.kind === 'every') { if (typeof when.minutes !== 'number' || when.minutes < 5) fail(ERR.PARAMS, '"when.minutes" must be at least 5'); }
-    else if (when.kind === 'cron') { if (typeof when.expr !== 'string' || when.expr.trim().split(/\s+/).length !== 5) fail(ERR.PARAMS, '"when.expr" must have five fields'); }
-    else fail(ERR.PARAMS, '"when.kind" must be at, every or cron');
+    if (when.kind === 'at') {
+      var t = typeof when.at === 'string' && /T\d\d:\d\d/.test(when.at) ? Date.parse(when.at) : NaN;
+      if (isNaN(t)) fail(ERR.PARAMS, '"when.at" must be an ISO date-time with an offset');
+      if (checkTime && t < Date.now() + 30000) fail(ERR.PARAMS, 'That time has passed. Pick one in the future.');
+    } else if (when.kind === 'every') {
+      if (typeof when.minutes !== 'number' || !isFinite(when.minutes) || Math.round(when.minutes) !== when.minutes) fail(ERR.PARAMS, '"when.minutes" must be a whole number');
+      if (when.minutes < 5) fail(ERR.PARAMS, 'The shortest rhythm is every 5 minutes.');
+      if (when.minutes > 366 * 24 * 60) fail(ERR.PARAMS, 'The longest rhythm is once a year.');
+    } else if (when.kind === 'cron') {
+      if (typeof when.expr !== 'string') fail(ERR.PARAMS, '"when.expr" must be a string');
+      if (cronNext(when.expr, Date.now()) === null) fail(ERR.PARAMS, 'That cron expression never matches a date.');
+    } else fail(ERR.PARAMS, '"when.kind" must be at, every or cron');
   }
   function nextRun(when) {
-    if (when.kind === 'at') return Date.parse(when.at);
+    if (when.kind === 'at') { var t = Date.parse(when.at); return t > Date.now() ? t : null; }
     if (when.kind === 'every') return Date.now() + when.minutes * 60000;
-    return Date.now() + 3600000;
+    return cronNext(when.expr, Date.now());
   }
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  function hhmm(h, m) { return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
+  /** "every 30 minutes", "weekdays at 09:00", "once on Nov 6 at 09:00" (src/shared/schedules.ts) */
   function describeWhen(when) {
-    if (when.kind === 'at') return 'once on ' + new Date(Date.parse(when.at)).toLocaleString();
-    if (when.kind === 'every') return 'every ' + when.minutes + ' minutes';
+    if (when.kind === 'at') {
+      var d = new Date(Date.parse(when.at));
+      return 'once on ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at ' + hhmm(d.getHours(), d.getMinutes());
+    }
+    if (when.kind === 'every') {
+      var n = when.minutes;
+      if (n % 1440 === 0) return n === 1440 ? 'every day' : 'every ' + n / 1440 + ' days';
+      if (n % 60 === 0) return n === 60 ? 'every hour' : 'every ' + n / 60 + ' hours';
+      return 'every ' + n + ' minutes';
+    }
+    var p = String(when.expr).trim().split(/\s+/);
+    if (/^\d+$/.test(p[0]) && /^\d+$/.test(p[1]) && p[2] === '*' && p[3] === '*') {
+      var at = ' at ' + hhmm(Number(p[1]), Number(p[0]));
+      if (p[4] === '*') return 'every day' + at;
+      if (p[4] === '1-5') return 'weekdays' + at;
+      if (p[4] === '0,6' || p[4] === '6,0') return 'weekends' + at;
+      if (/^[0-7]$/.test(p[4])) return DAYS[Number(p[4]) % 7] + 's' + at;
+    }
+    if (/^\*\/\d+$/.test(p[0]) && p.slice(1).every(function (x) { return x === '*'; })) return 'every ' + p[0].slice(2) + ' minutes';
     return 'cron ' + when.expr;
   }
 
@@ -716,5 +906,7 @@
   PlaygroundHost.METHOD_PERMS = METHOD_PERMS;
   PlaygroundHost.EVENT_PERMS = EVENT_PERMS;
   PlaygroundHost.markdown = markdown;
+  PlaygroundHost.describeWhen = describeWhen;
+  PlaygroundHost.cronNext = function (expr, from) { return cronNext(expr, from === undefined ? Date.now() : from); };
   root.PlaygroundHost = PlaygroundHost;
 })(typeof self !== 'undefined' ? self : this);

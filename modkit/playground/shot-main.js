@@ -23,6 +23,20 @@ async function shoot(job) {
       if (Date.now() - t0 > 15000) { result.timedOut = true; break; }
       await wait(100);
     }
+    if (job.evalJs) {
+      // Mod frames are sandboxed (an opaque origin): reach them through the main process, not the page
+      const frames = win.webContents.mainFrame.framesInSubtree.filter((f) => f !== win.webContents.mainFrame);
+      for (const f of frames) {
+        try { await f.executeJavaScript(job.evalJs, true); } catch (e) { result.error = 'eval: ' + String((e && e.message) || e); }
+      }
+      await wait(job.wait || 0);
+      const t1 = Date.now();
+      for (;;) {
+        const quiet = await win.webContents.executeJavaScript('Date.now() - window.__pg.lastTraffic > 500');
+        if (quiet || Date.now() - t1 > 8000) break;
+        await wait(100);
+      }
+    }
     if (!job.height) {
       const h = await win.webContents.executeJavaScript('Math.ceil(document.body.getBoundingClientRect().height)');
       win.setContentSize(job.width, Math.max(40, h));

@@ -92,6 +92,17 @@ const ICONS = {
   gauge: `<path d="M2.25 11.75a5.75 5.75 0 1 1 11.5 0"/><path d="M8 11.75l2.75-3.25"/>${dot(8, 11.75, 1.1)}`,
   message: '<path d="M4.25 2.75h7.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5H7.5l-3.25 2.5v-2.5c-.83 0-1.5-.67-1.5-1.5v-5.5c0-.83.67-1.5 1.5-1.5z"/>',
   blocks: '<rect x="2.25" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="9" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="2.25" y="9" width="4.75" height="4.75" rx="1.25"/><circle cx="11.375" cy="11.375" r="2.375"/>',
+  // settings
+  // Settings navigation: a gauge (context), a puzzle piece (mods), a clock (scheduled), a phone (remote control),
+  // an archive box (history), a palette (appearance); and the API key's "hide" eye
+  puzzle:
+    '<path d="M3 4.75c0-.41.34-.75.75-.75H6a1.25 1.25 0 1 1 2.5 0h2.25c.41 0 .75.34.75.75V7a1.25 1.25 0 1 1 0 2.5v2.75c0 .41-.34.75-.75.75H8.5a1.25 1.25 0 1 0-2.5 0H3.75a.75.75 0 0 1-.75-.75V9.5a1.25 1.25 0 1 0 0-2.5V4.75z"/>',
+  smartphone: '<rect x="4.25" y="1.75" width="7.5" height="12.5" rx="1.75"/><path d="M7.25 12h1.5"/>',
+  archive: '<rect x="1.75" y="2.75" width="12.5" height="3.25" rx="1"/><path d="M2.75 6v6.25c0 .55.45 1 1 1h8.5c.55 0 1-.45 1-1V6M6.5 8.75h3"/>',
+  palette:
+    '<path d="M8 1.75a6.25 6.25 0 0 0 0 12.5c.83 0 1.25-.5 1.25-1.13 0-.33-.13-.6-.32-.84-.2-.24-.33-.51-.33-.86 0-.69.56-1.17 1.25-1.17h1.4a3.5 3.5 0 0 0 3-3.5C14.25 4.16 11.45 1.75 8 1.75z"/>' +
+    dot(5, 7, 0.9) + dot(7, 4.5, 0.9) + dot(10.25, 5, 0.9),
+  'eye-off': '<path d="M6.3 3.95A6.4 6.4 0 0 1 8 3.75C12 3.75 14.25 8 14.25 8a11 11 0 0 1-1.6 2.15M4.2 4.95C2.6 6.1 1.75 8 1.75 8S4 12.25 8 12.25c1.1 0 2.05-.3 2.9-.8M6.6 6.6a2 2 0 0 0 2.8 2.8M2.25 2.25l11.5 11.5"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

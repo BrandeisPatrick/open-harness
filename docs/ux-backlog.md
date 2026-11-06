@@ -38,6 +38,10 @@ MCP servers · context meter, auto-compaction and `/compact` · project instruct
 | 22 | **Mod protocol 2**: tools a mod provides to the model, a background page per mod, seats in the transcript and the status line | Mods that extend the agent, not only the window | next |
 | 23 | **History, further**: thinking blocks restored on reload; search over messages a rewind removed | The log already holds both | later |
 | 24 | **Remote control over HTTPS**, tried on real phone browsers | Plain HTTP is for networks you trust | later |
+| 25 | **Sub-sessions in Auto mode**: decide whether starting one should still ask | Auto runs everything the guard does not flag, yet `session_spawn` shows a card | next |
+| 26 | **Many mod tabs**: let the pane's tab strip scroll or fold into a menu | Past icon-only, tabs at the end fall out of view | next |
+| 27 | **Provider wording**: "Gateway" instead of "Portkey" for any OpenAI-compatible endpoint; a long model name is cut in the sidebar footer | The label names one product among many | next |
+| 28 | **Test rig captures through the main process** (`invalidate` + `capturePage`), and `browser_screenshot` in a hidden window | Screenshots of the hidden test window can be stale or tiled; the built-in browser's screenshot fails there | later |
 
 Out of scope: hosted features (cloud sessions, remote control), Anthropic-specific fonts and branding, usage billing.
 

@@ -122,7 +122,7 @@ const isDreamReq = (p) => (p.messages || []).some((m) => m.role === 'user' && ty
     await app.waitFor(`window.__oc_debug.settings.state().open && window.__oc_debug.settings.state().section === 'dreaming'`, 10_000, 'Settings at Dreaming');
     check('page: the row opens Settings → Dreaming', true);
     const run = await app.evaluate(`(() => { const b = document.querySelector('#dream-run'); return b && { label: b.getAttribute('aria-label'), tip: b.dataset.tip, svg: !!b.querySelector('svg'), text: b.innerText.trim() }; })()`);
-    check('page: the run control is an icon button with a play glyph, a tooltip and an aria-label', run && run.label === 'Dream now' && run.tip === 'Dream now' && run.svg && run.text === '', run);
+    check('page: the run control is an icon button with a play glyph, a tooltip and an aria-label', run && run.label === 'Run a dream' && run.tip === 'Run a dream' && run.svg && run.text === '', run);
     const page = await app.evaluate(`document.querySelector('section.sp-section[data-section="dreaming"]').innerText`);
     check('page: daily, mode, what to look for, privacy and cost', /Dream every day/.test(page) && /Auto/.test(page) && /Approve/.test(page) && /Plan/.test(page) && /Skills/.test(page) && /Mods/.test(page) && /Memory/.test(page) && /sends parts of your past conversations/.test(page) && /uses tokens/.test(page), page.slice(0, 600));
     check('page: the mode line says what Approve does', /each suggestion waits for you to apply or dismiss it/.test(page));

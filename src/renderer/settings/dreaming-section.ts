@@ -104,13 +104,13 @@ export function dreamingSection(ctx: Ctx): Section {
     const r = state?.running;
     runBtn.innerHTML = icon(r ? 'square' : 'play', 16);
     runBtn.classList.toggle('running', Boolean(r));
-    const label = r ? 'Stop the dream' : 'Dream now';
+    const label = r ? 'Stop the dream' : 'Run a dream';
     runBtn.setAttribute('aria-label', label);
     runBtn.dataset.tip = label;
     runBtn.title = label;
     if (r) runText.textContent = `Dreaming about ${tildePath(r.cwd)}…${r.queued ? ` ${r.queued} more project${r.queued === 1 ? '' : 's'} after it.` : ''}`;
     else if (state?.lastCheck) runText.textContent = `Last looked ${formatWhenAt(state.lastCheck.at).replace(/^(Today|Yesterday|Tomorrow)/, (m) => m.toLowerCase())}${state.lastCheck.found ? '' : ': nothing new'}.`;
-    else runText.textContent = 'Dream now about the projects with new sessions.';
+    else runText.textContent = '';
   }
 
   function dreamEl(d: Dream): HTMLElement {
@@ -166,7 +166,7 @@ export function dreamingSection(ctx: Ctx): Section {
     listEl.innerHTML = '';
     const grp = group('Dreams');
     const dreams = state?.dreams ?? [];
-    if (!dreams.length) grp.append(note('No dreams yet. Turn on “Dream every day”, or dream now with the play button or /dream in a session.'));
+    if (!dreams.length) grp.append(note('No dreams yet. Turn on “Dream every day”, press the run button above, or type /dream in a session.'));
     for (const d of dreams) grp.append(dreamEl(d));
     listEl.append(grp);
     ctx.refreshSearch();

@@ -71,7 +71,7 @@ dialog.dialog.settings-dialog {
 .sp-row.full { flex-direction: column; align-items: stretch; gap: 10px; }
 .sp-row.full .sp-row-control { max-width: none; justify-content: stretch; }
 .sp-row.full .sp-row-control > :not(.sp-saved) { flex: 1 1 auto; min-width: 0; }
-.sp-row.full .sp-saved { position: absolute; right: 0; top: -28px; }
+.sp-row.full .sp-saved { right: 0; top: -28px; bottom: auto; }
 .sp-row.clickable:not(.owned) { cursor: default; }
 .sp-row.flash { animation: sp-flash 1.4s ease-out; }
 @keyframes sp-flash { 0%, 30% { background: var(--accent-soft); } 100% { background: transparent; } }
@@ -98,9 +98,9 @@ dialog.dialog.settings-dialog {
 .sp-row.invalid .sp-input:focus { box-shadow: 0 0 0 2px var(--danger-soft); }
 
 .sp-saved {
-  position: absolute; right: calc(100% + 10px); top: 50%; display: inline-flex; align-items: center; gap: 4px;
+  position: absolute; right: 0; bottom: calc(100% + 1px); display: inline-flex; align-items: center; gap: 4px;
   font-size: var(--fs-small); line-height: var(--lh-small); color: var(--success); white-space: nowrap; pointer-events: none;
-  opacity: 0; transform: translateY(-50%); transition: opacity 0.2s;
+  opacity: 0; transition: opacity 0.2s;
 }
 .sp-saved.show { opacity: 1; transition: opacity 0.08s; }
 

@@ -213,6 +213,11 @@ export class Agent {
   private specTokens = 2500;
   /** Usage of the most recent model call, for the context estimate. */
   private lastUsage: Usage | null = null;
+  /**
+   * Reported over estimated size of the last request: models count tool schemas and the like differently than four
+   * characters per token, so an estimate (after a prune or a fold, before the next reply) is scaled by it.
+   */
+  private estimateScale = 1;
   /** Set when an automatic compaction failed during this run, so it is not retried every turn. */
   private autoCompactFailed = false;
   /** Message count right after the last compaction of this run: no second one until the conversation grew again */
@@ -625,7 +630,7 @@ export class Agent {
     const mark = s.lastPrompt;
     let tokens: number;
     if (mark && mark.at <= s.messages.length) tokens = mark.tokens + estimateTokens(s.messages.slice(mark.at));
-    else tokens = estimateTokens([{ role: 'system', content: this.prompt(cfg, this.getSkills(cfg.workingDirectory)) }, ...s.messages]) + this.specTokens;
+    else tokens = Math.round((estimateTokens([{ role: 'system', content: this.prompt(cfg, this.getSkills(cfg.workingDirectory)) }, ...s.messages]) + this.specTokens) * this.estimateScale);
     return { tokens, limit, threshold: compactThreshold(cfg), autoCompact: cfg.autoCompact !== false };
   }
 
@@ -718,7 +723,10 @@ export class Agent {
   private markPrompt(): void {
     const u = this.lastUsage;
     if (!u || !u.promptTokens) return;
-    this.session.lastPrompt = { tokens: u.promptTokens + u.completionTokens, at: this.session.messages.length };
+    const s = this.session;
+    s.lastPrompt = { tokens: u.promptTokens + u.completionTokens, at: s.messages.length };
+    const estimated = this.baseTokens(this.sessionConfig()) + estimateTokens(s.messages);
+    if (estimated > 0) this.estimateScale = Math.min(2, Math.max(0.67, s.lastPrompt.tokens / estimated));
     this.emitContext();
   }
 
@@ -789,7 +797,7 @@ export class Agent {
     if (!r.results && !r.images) return 0;
     // The reported size of the last request covered the messages that just got shorter.
     const mark = s.lastPrompt;
-    if (mark && mark.at <= s.messages.length) mark.tokens = Math.max(0, mark.tokens - (estimateTokens(s.messages.slice(0, mark.at)) - estimateTokens(r.messages.slice(0, mark.at))));
+    if (mark && mark.at <= s.messages.length) mark.tokens = Math.max(0, Math.round(mark.tokens - (estimateTokens(s.messages.slice(0, mark.at)) - estimateTokens(r.messages.slice(0, mark.at))) * this.estimateScale));
     this.store.replaceAll(s, r.messages, 'prune');
     this.store.save(s, false);
     if (notice) {

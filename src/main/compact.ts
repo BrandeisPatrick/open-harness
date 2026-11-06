@@ -407,7 +407,7 @@ This session was compacted: the earlier conversation was replaced by the brief b
 ${summary.trim()}`;
   if (request?.trim()) out += `\n\n${REQUEST_HEADING}\n${request.trim()}`;
   const lines = [...(files?.edited ?? []).map((p) => `- edited: ${p}`), ...(files?.read ?? []).map((p) => `- read: ${p}`)];
-  if (lines.length) out += `\n\n${FILES_HEADING}\nRe-read these before relying on their contents:\n${lines.slice(0, 40).join('\n')}`;
+  if (lines.length) out += `\n\n${FILES_HEADING}\nFiles read or changed in the folded part (re-read one only when you need its exact contents again):\n${lines.slice(0, 40).join('\n')}`;
   return out;
 }
 

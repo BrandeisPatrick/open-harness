@@ -154,7 +154,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('G: the next model call sees the system prompt, the brief and the kept tail', after.stream === true && after.messages.map((m) => m.role).join(',') === 'system,user,user,assistant,tool' && after.messages[1].content.startsWith('[Context compacted]') && /Build the widget; it is blue\./.test(after.messages[1].content) && after.messages[2].content === 'Build the widget please', after.messages.map((m) => m.role));
   const cs = events.filter((e) => e.type === 'compact_start');
   const ce = events.filter((e) => e.type === 'compact_end');
-  check('G: compact events', cs.length === 1 && cs[0].reason === 'auto' && ce.length === 1 && ce[0].compaction && ce[0].compaction.reason === 'auto' && ce[0].compaction.messages === 2 && ce[0].compaction.kept === 3 && ce[0].compaction.stage === 'summary' && ce[0].compaction.tokensBefore >= 14000 && ce[0].compaction.tokensAfter < ce[0].compaction.tokensBefore / 2, ce[0]);
+  check('G: compact events', cs.length === 1 && cs[0].reason === 'auto' && ce.length === 1 && ce[0].compaction && ce[0].compaction.reason === 'auto' && ce[0].compaction.messages === 2 && ce[0].compaction.kept === 3 && ce[0].compaction.stage === 'summary' && ce[0].compaction.tokensBefore >= 14000 && ce[0].compaction.tokensAfter < ce[0].compaction.tokensBefore * 0.7, ce[0]);
   check('G: session stores the compaction with folded messages', agent.session.compactions.length === 1 && agent.session.compactions[0].folded.length === 2 && agent.session.messages.length === 5 && toMeta(agent.session).compactions === 1);
   const items = toTranscript(agent.session);
   check('G: transcript: folded turn, divider, then the kept turn and the reply', items.map((i) => i.role).join(',') === 'user,assistant,compaction,user,tool,assistant' && items[2].compaction.summary === state.summary && !items[2].compaction.folded, items.map((i) => i.role));
@@ -162,7 +162,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('G: run ended done with the reply after compaction', events.find((e) => e.type === 'run_end').reason === 'done' && events.some((e) => e.type === 'text_delta' && /after compaction/.test(e.text)));
   const endIdx = events.findIndex((e) => e.type === 'compact_end');
   const ctxAfterCompact = events.slice(endIdx).find((e) => e.type === 'context');
-  check('G: context event right after compaction shows a small context', ctxAfterCompact && ctxAfterCompact.context.tokens < 8000 && ctxAfterCompact.context.limit === 16384, ctxAfterCompact && ctxAfterCompact.context);
+  // Changed on purpose: the estimate after a fold is scaled by reported/estimated of the last request (the mock reports
+  // 14000 for a much smaller conversation, so the scale is at its cap of 2), and the kept tail counts too.
+  check('G: context event right after compaction shows a smaller context, under the threshold', ctxAfterCompact && ctxAfterCompact.context.tokens < 16384 * 0.8 && ctxAfterCompact.context.tokens < ce[0].compaction.tokensBefore && ctxAfterCompact.context.limit === 16384, ctxAfterCompact && ctxAfterCompact.context);
   check('G: title prompt uses the folded first message', /Remember: the widget is blue/.test(titlePrompt(agent.session)));
   const forked = store.fork(agent.session.id);
   check('G: fork copies compactions', forked.compactions.length === 1 && forked.messages.length === 5);

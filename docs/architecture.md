@@ -15,7 +15,7 @@ sessions.ts    Session, SessionStore (the only place messages change), toMeta, t
 
 Feature setups, in this order, before the window opens: `setupSettings` (settings-service.ts), `setupHistory` (history.ts),
 `setupContext` (context-service.ts), `setupImages`, `setupMods`, `setupSchedules`, `setupSubagents`, `setupRemote`,
-`setupPower` (each in its own file).
+`setupPower`, `setupDreaming` (each in its own file).
 
 ## App (src/main/app.ts)
 
@@ -35,7 +35,7 @@ export interface App {
   readonly runtime: SessionRuntime;
   readonly events: { on(cb: (sessionId: string, ev: AgentEvent) => void): Disposer };  // every event of every session, in order
   readonly tools: { register(tool: Tool): Disposer; list(): Tool[] };
-  readonly prompt: { add(id: string, section: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string, opts?: { optional?: boolean }): Disposer };
+  readonly prompt: { add(id: string, section: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string, opts?: { optional?: boolean; restricted?: boolean }): Disposer };
   readonly commands: { register(cmd: Command): Disposer; list(): CommandInfo[] };
   provide(name: string, service: unknown): Disposer;
   service<T>(name: string): T | undefined;
@@ -55,6 +55,13 @@ export interface App {
   explains it with `{ optional: true }`. Both are left out of a request when the tool set is trimmed
   (`AppConfig.toolSet`: `auto` trims under a 32k-token window, `all` never, `essential` always; `essentialToolsOnly`
   in agent.ts), and the model is told what is off. The scheduling, session and mod tools are registered this way.
+- **A session with a tool set of its own** (`Session.tools`, a list of names; a dream's session): its agent is offered
+  exactly the built-in and registered tools it names, in every permission mode, and never an MCP tool; the system prompt
+  names those tools instead of describing the shell and the browser, leaves out the mode text, the skills list, MCP and
+  the instructions files, and gets only the prompt sections added with `{ restricted: true }` (which no other session
+  gets). A tool registered with `scoped: true` is offered to no session whose tool set does not name it.
+- `runtime.claimPlans(fn)` lets a feature decide a plan of its own (a dream's, `PlanInfo.kind: 'dream'`): the runtime
+  marks the plan decided and, when `fn` returns true, neither switches the permission mode nor starts a build run.
 - `AppHost` (the concrete class) adds `invokeRpc`, `showSession`, `promptFor`, `runQuit`, `setWindow`, `mcp`,
   `terminal`, `artifacts`. Features should use `App` only. `createApp(opts)` works without Electron (tests).
 
@@ -68,7 +75,8 @@ send(id, text, attachments?, opts?: { origin?: MessageOrigin; from?: string }): 
 stop(id): void;  stopAll(): void;  isRunning(id): boolean;  running(): string[];   // MAX_RUNNING = 6
 status(id): SessionStatus;  live(id): LiveState;  meta(id): SessionMeta;  list(): SessionMeta[];  // metas carry status
 respondApproval(id, ok, always?, scope?): boolean;   // finds the agent holding the card; mode switch / project rule for that session's folder
-respondPlan(sessionId, planId, decision): void;       // marks the plan; build decisions switch the mode and start the build
+respondPlan(sessionId, planId, decision): void;       // marks the plan; build decisions switch the mode and start the build (unless a claimPlans handler takes it)
+claimPlans(fn: (sessionId, plan, decision) => boolean): Disposer;
 findApproval(id) / findQueued(id): Agent | undefined;  forget(id): void;  planDecided(id): void;
 onEvent(cb: (sessionId, ev) => void): Disposer;  onStatus(cb: (sessionId, status) => void): Disposer;  onListChanged(cb): Disposer;
 emit(id, ev): void;                          // an event no run produced (a merge note appended between runs)
@@ -117,8 +125,26 @@ after the switch reply. The renderer buffers the session's events between the tw
   whenever the window's copy changes, `'sessions' (metas)` after each list refresh.
 - `rpc.ts`: typed `rpc(method, ...args)` and `onPush(channel, cb)`.
 - `transcript-items.ts`: `registerTranscriptItem(role, render: (item) => HTMLElement | null)`, used by
-  `renderTranscript` for roles it does not know; `appendTranscriptItem(item)` appends one live.
+  `renderTranscript` for roles it does not know; `appendTranscriptItem(item)` appends one live. Dreaming registers
+  `proposal` (a `propose_*` call, `{ role: 'proposal', proposalId, … }` from `toTranscript`), drawn from the dreams the
+  window keeps (dreaming.ts).
 - `renderer.ts`: events of the session on screen go to `handleEvent` as before; others update the sidebar status
   (spinner, `.status-dot.attention`, `.status-dot.unread` inside `.trail`). `showSession(id)` renders transcript +
   LiveState. Hook a feature up under its marker in the "Feature wiring" block above `// ---------- Init ----------`
-  (`// [feature:mods]`, `settings`, `sidebar`, `tasks`, `images`, `history`, `schedules`, `subagents`, `remote`).
+  (`// [feature:mods]`, `settings`, `sidebar`, `tasks`, `images`, `history`, `schedules`, `subagents`, `remote`, `dreaming`).
+
+## Dreaming (src/main/dreaming.ts, src/main/dreaming/)
+
+```
+digest.ts   a session's turns from its history log (sessionTurns), the dream's first message (buildDigest), history_read's text
+apply.ts    proposals as files: checkSkill / checkMemory / checkMod, applyProposal, revertProposal, the allowed places
+tools.ts    history_read, history_search, propose_skill, propose_memory, propose_mod, withdraw_proposal (scoped)
+service.ts  Dreaming: projects(), start(trigger, cwd?), one dream at a time, the modes, the plan, tick() for the daily dream
+store.ts    dreaming.json (atomic): dreams with proposals, what applying replaced, cursors, the daily mark
+names.ts    the defaults and the proposal tool names (src/shared is types only; the window keeps its own copy)
+```
+
+A dream is a session with `origin: 'dream'`, `Session.dream = { id, waiting }` (the sidebar reads `SessionMeta.dream`) and
+`Session.tools` set to the reading and proposal tools, so it stays a dream after a restart. Services: `app.service<Dreaming>('dreaming')`;
+it reads logs through `HistoryService.read`. RPC: `dreaming.get|set|run|stop|list|apply|dismiss|applyAll|revert`, push
+`dreaming:changed`. Nothing for mods through the bridge yet.

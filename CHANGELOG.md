@@ -18,6 +18,15 @@ Chatting with an agent means reading a lot of text, so the window now gives the 
 - **Rename from the conversation.** `/rename <new name>`, or `/rename` alone to edit the title in the top bar; or ask the agent to "call this session …" (`session_rename`, no approval needed). A name another session already has is allowed, and you are told that it makes lookup by that name ambiguous.
 - `/sessions <name>` and `session_list` with a query list every session that matches, best first, with its folder and last activity.
 
+### Looks
+
+- **Looks for the conversation and the chat bar.** A mod can now restyle just the transcript or just the chat bar (`contributes.looks`, see [docs/mods.md](docs/mods.md#looks)). The app scopes a look to its region, so it cannot reach the rest of the window, and keeps a few attributes on the region (a run in progress, light or dark, the permission mode, the mod's own settings) so a look can come alive without any script.
+- **Settings → Appearance → Looks**: pick a conversation look, a chat bar look and a background, or a whole set from one mod in a single choice.
+- **Hyperspace**, a bundled space-opera set to turn on in Settings → Mods: a starfield behind the app that jumps to lightspeed while the agent works and brakes with a flash when it is done, a holographic conversation, and a cockpit chat bar. Five glow colours, and a calm setting for less motion.
+- **Backgrounds can follow the pointer** (the `pointer` event), for parallax.
+- A mod's stylesheet can no longer `@import` another one, and its relative `url()`s point at the mod's own files.
+- Choosing a background from a mod in Settings → Appearance works again.
+
 ## 0.2.0
 
 The app is now called **Open Harness** (it was OpenAgent). On the first launch your sessions, settings and artifacts are moved from the old data folder to the new one (`~/Library/Application Support/Open Harness`). `OPENAGENT.md` files and `.openagent/skills` folders are still read. The repository is now `BrandeisPatrick/open-harness`; old links redirect.

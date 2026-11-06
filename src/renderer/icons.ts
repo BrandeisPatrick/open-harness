@@ -134,8 +134,29 @@ export function hydrateIcons(root: ParentNode = document): void {
   });
 }
 
-/** The Open Harness mark (prompt chevron and cursor on the accent tile), drawn from build/icon.svg's proportions. */
+// The Silo Harness S on build/icon.svg's 9x12 LED board: the top half, and the bottom half is it turned 180 degrees.
+const S_TOP = ['.#######.', '#########', '###...###', '###......', '###......', '########.'];
+const S_ROWS = [...S_TOP, ...S_TOP.slice().reverse().map((r) => [...r].reverse().join(''))];
+
+/**
+ * The Silo Harness mark: the S in --mark-ink on a tile in --mark. From 32 px it is build/icon.svg's LED board (lit dots
+ * that vary a little in size and brightness, unlit dots faint); below that the dots only blur, so it is a solid S of cells.
+ */
 export function brandMark(size = 40): string {
-  // The open ring from build/icon.svg at 40 px: an O with a gap at the top right and the agent as the point in it.
-  return `<svg class="brand-mark" width="${size}" height="${size}" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="var(--accent)"/><path d="M20 11 A9 9 0 1 0 29 20" fill="none" stroke="#fbf5ec" stroke-width="3.1" stroke-linecap="round"/><circle cx="27.4" cy="12.9" r="2.4" fill="#fbf5ec"/></svg>`;
+  const p = 2.2, x0 = 20 - (9 * p) / 2, y0 = 20 - (12 * p) / 2;
+  let s = '';
+  if (size >= 32) {
+    S_ROWS.forEach((row, r) => [...row].forEach((ch, c) => {
+      const cx = (x0 + (c + 0.5) * p).toFixed(2), cy = (y0 + (r + 0.5) * p).toFixed(2);
+      if (ch !== '#') { s += `<circle cx="${cx}" cy="${cy}" r="0.4" fill-opacity="0.22"/>`; return; }
+      const t = (c / 8 + r / 11) / 2, wobble = ((c * 7 + r * 13) % 5) / 4 - 0.5;
+      const rad = p * (0.5 - 0.07 * Math.abs(t - 0.5) * 2 + 0.03 * wobble);
+      s += `<circle cx="${cx}" cy="${cy}" r="${rad.toFixed(2)}" fill-opacity="${(1 - 0.14 * t + 0.06 * wobble).toFixed(2)}"/>`;
+    }));
+  } else {
+    S_ROWS.forEach((row, r) => {
+      for (const m of row.matchAll(/#+/g)) s += `<rect x="${(x0 + (m.index ?? 0) * p).toFixed(2)}" y="${(y0 + r * p).toFixed(2)}" width="${(m[0].length * p).toFixed(2)}" height="${p}"/>`;
+    });
+  }
+  return `<svg class="brand-mark" width="${size}" height="${size}" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="var(--mark)"/><g fill="var(--mark-ink)">${s}</g></svg>`;
 }

@@ -1,0 +1,14 @@
+{
+  "protocol": 1,
+  "id": "theme-paper",
+  "name": "Paper theme",
+  "version": "1.0.0",
+  "description": "The warm look of Open Harness 0.4.0: paper-coloured surfaces and the terracotta accent on buttons, switches and marks, in light and dark.",
+  "author": "Open Harness",
+  "license": "MIT",
+  "icon": "eye",
+  "permissions": [],
+  "contributes": {
+    "styles": ["theme.css"]
+  }
+}

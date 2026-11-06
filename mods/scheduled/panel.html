@@ -17,7 +17,7 @@
 
   /* ---------- the first time ---------- */
   .intro { display: flex; gap: 14px; margin: 4px 0 16px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--r-card); background: var(--bg-000); box-shadow: var(--shadow-sm); }
-  .intro .mark { display: flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+  .intro .mark { display: flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--bg-300); color: var(--text-200); }
   .intro .mark .h-icon { width: 18px; height: 18px; }
   .intro h2 { margin: 0 0 6px; font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 500; }
   .intro p { color: var(--text-200); }
@@ -60,8 +60,6 @@
   .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 8px 8px 12px; border: 1px solid var(--danger-line); border-radius: var(--r-card); background: var(--danger-soft); }
   .confirm span { flex: 1 1 200px; min-width: 0; color: var(--text-100); }
   .confirm .btns { display: flex; gap: 6px; margin-left: auto; }
-  .h-btn.danger { background: var(--danger); border-color: transparent; color: #fff; }
-  .h-btn.danger:hover { background: color-mix(in srgb, var(--danger) 88%, black); }
   .row-error, .form-error { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; color: var(--danger); font-size: var(--fs-small); line-height: var(--lh-small); }
   .row-error .h-icon, .form-error .h-icon { width: 14px; height: 14px; margin-top: 1px; }
   .problem { padding: 24px 0; text-align: center; }
@@ -91,8 +89,8 @@
   .choices { display: flex; flex-direction: column; gap: 6px; }
   .choice { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--bg-000); cursor: pointer; transition: border-color 0.12s, background-color 0.12s; }
   .choice:hover { background: var(--surface-hover); }
-  .choice:has(input:checked) { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line); }
-  .choice input { margin: 2px 0 0; accent-color: var(--accent); }
+  .choice:has(input:checked) { border-color: var(--text-400); box-shadow: 0 0 0 1px var(--text-400); }
+  .choice input { margin: 2px 0 0; accent-color: var(--switch-on); }
   .choice b { display: block; font-weight: 500; color: var(--text-100); }
   .choice .h-muted { display: block; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }

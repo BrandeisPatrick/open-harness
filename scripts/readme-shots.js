@@ -443,12 +443,12 @@ const svg = \`<svg xmlns="http://www.w3.org/2000/svg" width="\${W}" height="\${H
 <text x="\${L - 26}" y="24" font-size="13" font-weight="600" fill="#29261b">Requests per minute, Nov 5 (UTC)</text>
 <g font-size="10.5" fill="#6f6b60">
 <line x1="\${L - 26}" x2="\${L - 8}" y1="40" y2="40" stroke="#a8a49a" stroke-width="2" stroke-dasharray="4 3"/><text x="\${L - 3}" y="43.5">Without the limiter</text>
-<line x1="\${L + 112}" x2="\${L + 130}" y1="40" y2="40" stroke="#d97757" stroke-width="2.5"/><text x="\${L + 135}" y="43.5">With the limiter (100 a minute per client)</text>
+<line x1="\${L + 112}" x2="\${L + 130}" y1="40" y2="40" stroke="#277de2" stroke-width="2.5"/><text x="\${L + 135}" y="43.5">With the limiter (100 a minute per client)</text>
 </g>
 <g font-size="10" fill="#8a867b">\${grid.join('')}</g>
-<path d="\${line(after)}L\${x(minutes - 1)},\${y(0)}L\${x(0)},\${y(0)}Z" fill="#d97757" fill-opacity="0.10"/>
+<path d="\${line(after)}L\${x(minutes - 1)},\${y(0)}L\${x(0)},\${y(0)}Z" fill="#277de2" fill-opacity="0.10"/>
 <path d="\${line(before)}" fill="none" stroke="#a8a49a" stroke-width="1.75" stroke-dasharray="4 3" stroke-linejoin="round"/>
-<path d="\${line(after)}" fill="none" stroke="#d97757" stroke-width="2.25" stroke-linejoin="round"/>
+<path d="\${line(after)}" fill="none" stroke="#277de2" stroke-width="2.25" stroke-linejoin="round"/>
 </svg>
 \`;
 fs.writeFileSync(out, svg);
@@ -972,6 +972,8 @@ async function main() {
     await ev(`(() => { if (!document.querySelector('#settings').open) document.querySelector('#settings-btn').click(); })()`);
     await app.waitFor(`document.querySelector('#settings').open && Boolean(document.querySelector('#sp-nav-mods'))`, 10_000, 'Settings');
     await app.click('#sp-nav-mods');
+    // The Mods tab (the general mods), where a rail panel of yours is listed
+    await app.click('#sp-modtab-mods');
     await app.waitFor(`Boolean(document.querySelector('#sp-row-mod-word-count .sp-mod-expand'))`, 10_000, 'the Word count row');
     await app.click('#sp-row-mod-word-count .sp-mod-expand');
     await sleep(500);

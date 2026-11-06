@@ -198,7 +198,7 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
         if (typeof l.id !== 'string' || !NAME_RE.test(l.id)) no(`${at}.id: ${l.id === undefined ? 'missing' : JSON.stringify(l.id) + ' is not valid'}; use lower-case letters, digits and -, e.g. "main"`);
         else if (lookIds.has(l.id)) no(`${at}.id: "${l.id}" is used by another look of this mod`);
         else lookIds.add(l.id);
-        if (typeof l.title !== 'string' || !l.title.trim()) no(`${at}.title: missing; add the name shown in Settings, Appearance`);
+        if (typeof l.title !== 'string' || !l.title.trim()) no(`${at}.title: missing; add the name shown in Settings, Mods`);
         if (l.description !== undefined && typeof l.description !== 'string') no(`${at}.description: must be a string`);
         const files: string[] = [];
         if (!Array.isArray(l.styles) || !l.styles.length) no(`${at}.styles: must be a non-empty list of CSS files in the mod, e.g. ["look.css"]`);

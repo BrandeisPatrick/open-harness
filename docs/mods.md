@@ -63,7 +63,9 @@ The app watches these folders. A new folder with a valid `mod.json` shows up in 
 
 Turning a mod on grants the permissions its manifest lists at that moment. Later edits to its pages reload it without asking again. An edit that adds a permission, or adds a `styles`, `looks` or `background` contribution it did not have, pauses the mod until you approve the change.
 
-`Settings → Mods → Safe mode` turns every user and project mod off at once.
+Settings → Mods has a tab for each kind of mod, by what its manifest contributes: **Mods** (views in the rail, the side pane or above the composer, and slash commands), **Backgrounds** (a view in the `background` seat), **Chat bar** (a look for `composer`), **Conversation** (a look for `conversation`) and **Themes** (`styles`). A mod of several kinds is in each of those tabs, and one that is only of the special kinds is not in the Mods tab. Each special tab has its picker at the top (the one background, chat bar look or conversation look in use, with that mod's settings under it; the themes with their switches, in the order they apply), then the mods of that kind. `openSettings('mods', { tab: 'backgrounds' })` opens a tab; the tab ids are `mods`, `backgrounds`, `chat-bar`, `conversation` and `themes`.
+
+`Settings → Mods → Safe mode` (on the Mods tab) turns every user and project mod off at once.
 
 ## mod.json
 
@@ -98,7 +100,7 @@ A view is one HTML page in one seat.
 | `rail` | a section in the right-hand rail, between the chat and the side pane | sized to its content up to `maxHeight` (default 360); `order` sorts sections, lower first (bundled ones use 10 to 90); the user can collapse a section |
 | `tab` | a tab in the side pane, next to Browser, Diff and Terminal | fills the pane; it is not sized to its content, so make the page `height: 100%` and scroll inside it (the `--h-inset-*` padding is for rail sections) |
 | `composer` | a strip directly above the composer | one row, sized to its content up to 120 px |
-| `background` | behind the whole window | takes no clicks, but can follow the pointer (the `pointer` event); only one background is active, chosen in Settings → Appearance → Looks; the app's surfaces turn translucent over it |
+| `background` | behind the whole window | takes no clicks, but can follow the pointer (the `pointer` event); only one background is active, chosen in Settings → Mods → Backgrounds (with Your picture and Dim); the app's surfaces turn translucent over it |
 
 View fields: `id` (unique in the mod), `title`, `entry` (a file in the mod), `seat`, and optionally `order`, `maxHeight`, `icon`.
 
@@ -110,7 +112,7 @@ Reserved for later protocol versions: `transcript` (cards after a turn), `status
 "styles": ["theme.css"]
 ```
 
-The CSS is added to the app's own page while the mod is on, so it can change colours, type, spacing and the look of the composer or sidebar. Prefer overriding the design tokens (`--bg-100`, `--text-100`, `--accent`, `--r-composer`, … on `:root`) to restyling individual elements: tokens keep working when the app changes. Because a stylesheet can restyle anything, including approval cards, a mod that contributes styles says so when you turn it on.
+The CSS is added to the app's own page while the mod is on, so it can change colours, type, spacing and the look of the composer or sidebar. Prefer overriding the design tokens (`--bg-100`, `--text-100`, `--accent`, `--r-composer`, … on `:root`) to restyling individual elements: tokens keep working when the app changes. The bundled themes are the examples to copy: `mods/theme-midnight` (cool blue-black) and `mods/theme-paper` (the warm paper and terracotta of 0.4.0). The app's own look is neutral, so a theme brings colour back through the tokens for each role: `--button-fill`, `--button-fill-hover` and `--button-text` (the button that confirms), `--switch-on`, `--spinner`, `--badge-bg` and `--badge-ink` (the icon on a card), `--mark` and `--mark-ink` (the mark beside the model name), `--segment-on` (the selected segment), `--side-hover`, `--side-active` and `--tree-line` (the sidebar's rows). Because a stylesheet can restyle anything, including approval cards, a mod that contributes styles says so when you turn it on. Themes apply in the order Settings → Mods → Themes lists them (built-in, yours, the project's, each by id), so where two set the same thing the later one wins.
 
 `@import`, `@charset`, `@namespace` and `@page` are removed: a stylesheet cannot pull in another one. A relative `url()` (an image, a font) points at the mod's own files, resolved from the stylesheet's folder; `https:` addresses load only as the app's page allows, which is not at all. Comments are removed too, so do not rely on them surviving.
 
@@ -118,7 +120,7 @@ The CSS is added to the app's own page while the mod is on, so it can change col
 
 *Added in Open Harness 0.3 (the release after 0.2.0). An older app ignores `contributes.looks`, so the protocol version stays 1.*
 
-A look is a stylesheet for one region of the window. Unlike `styles`, which apply to the whole page, a look is contained: the app wraps it so that its selectors reach only its region, and only one look per region is active at a time, chosen in Settings → Appearance → Looks.
+A look is a stylesheet for one region of the window. Unlike `styles`, which apply to the whole page, a look is contained: the app wraps it so that its selectors reach only its region, and only one look per region is active at a time, chosen in Settings → Mods → Chat bar or Settings → Mods → Conversation.
 
 ```json
 "looks": [
@@ -200,7 +202,7 @@ A minimal look, with a choice in Settings:
 :scope[data-running="true"] .tool-status.spin { animation: teal-breathe 1.2s ease-in-out infinite; }
 ```
 
-**Sets.** A mod that contributes at least two of a conversation look, a chat bar look and a background is offered as a set in Settings → Appearance → Looks → Set, which applies all its parts in one choice (its first look for each region and its first background). The Set row shows Custom when the three do not come from one set. A bundled mod with looks starts off, like a theme; `mods/hyperspace` is the example to copy.
+**Sets.** A mod that contributes at least two of a conversation look, a chat bar look and a background is offered as a set: its card in Settings → Mods has "Use the whole set", which applies all its parts in one choice (its first look for each region and its first background), and "Stop using the set" while they are in use. A bundled mod with looks starts off, like a theme; `mods/hyperspace` is the example to copy.
 
 ### Commands
 
@@ -235,7 +237,7 @@ Every mod origin serves the kit under `/@harness/`:
 | `/@harness/harness.js` | the `harness` object (a classic script: `<script src="/@harness/harness.js"></script>`) |
 | `/@harness/harness.css` | the app's design tokens for light and dark, a transparent page, and small classes so a panel looks native |
 
-The stylesheet follows the app's theme by itself, including a theme mod's colours. Its classes: `h-row` (a label/value line), `h-label`, `h-value`, `h-muted`, `h-title` (a small heading), `h-list` and `h-item` (clickable rows), `h-btn` (`.primary`, `.ghost`, `.sm`), `h-input`, `h-switch`, `h-chip`, `h-bar` with `h-bar-seg` children (a segmented meter), `h-bar-mark` (a tick on the meter), `h-dot` (a colour swatch), `h-chev` (a disclosure chevron), `h-icon` (`.sm`), `h-segmented` (buttons with `aria-pressed`), `h-empty` (an empty state), `h-spin` (a spinner), `h-mono`, and `h-md` (Markdown: put the html of `harness.ui.markdown()` inside an element with this class and it looks like a reply in the chat, with headings, lists, tables, quotes, inline code and code blocks in the app's highlight colours; `.compact` sizes it for a rail section. Inside `h-md`, `harness.js` makes a code block's Copy button copy the block and flip to "Copied", and opens links in the browser with `harness.ui.openExternal`). `h-chip` takes `.accent`, `.success`, `.danger`; `h-btn` also `.icon`. Tokens: `--bg-000 … --bg-400`, `--text-100`, `--text-200`, `--text-400`, `--border`, `--border-subtle`, `--accent`, `--danger`, `--success`, `--warn`, `--code-bg`, `--code-hover`, `--bubble` (the user's message bubble), `--tok-kw`, `--tok-str`, `--tok-com`, `--tok-num`, `--tok-pun` (syntax colours), `--font`, `--mono`, the type scale `--fs-ui`/`--lh-ui` (14/20 px: rows, buttons, inputs), `--fs-small`/`--lh-small` (13/18: headings in the rail, notes, counts), `--fs-micro`/`--lh-micro` (12/16: captions, badges), `--fs-body`/`--lh-body` (15/21: text to read), `--fs-code`/`--lh-code` (13/20: code), `--fs-title`/`--lh-title` and `--fs-head`/`--lh-head` (headings), `--r-control`, `--r-card`, and `--h-inset-x`, `--h-inset-top`, `--h-inset-bottom` for the page's own padding.
+The stylesheet follows the app's theme by itself, including a theme mod's colours. Its classes: `h-row` (a label/value line), `h-label`, `h-value`, `h-muted`, `h-title` (a small heading), `h-list` and `h-item` (clickable rows), `h-btn` (`.primary`, a grey fill for the button that confirms; `.danger`, red text and hairline; `.ghost`; `.sm`), `h-input`, `h-switch`, `h-chip`, `h-bar` with `h-bar-seg` children (a segmented meter), `h-bar-mark` (a tick on the meter), `h-dot` (a colour swatch), `h-chev` (a disclosure chevron), `h-icon` (`.sm`), `h-segmented` (buttons with `aria-pressed`), `h-empty` (an empty state), `h-spin` (a spinner), `h-mono`, and `h-md` (Markdown: put the html of `harness.ui.markdown()` inside an element with this class and it looks like a reply in the chat, with headings, lists, tables, quotes, inline code and code blocks in the app's highlight colours; `.compact` sizes it for a rail section. Inside `h-md`, `harness.js` makes a code block's Copy button copy the block and flip to "Copied", and opens links in the browser with `harness.ui.openExternal`). `h-chip` takes `.accent`, `.success`, `.danger`; `h-btn` also `.icon`. Tokens: `--bg-000 … --bg-400`, `--text-100`, `--text-200`, `--text-400`, `--border`, `--border-subtle`, `--accent` (blue: links, the focus ring, highlights), `--danger`, `--success`, `--warn` (amber, as text), `--attention` (amber, a dot for something waiting), `--switch-on` (a switch that is on), `--button-fill`, `--button-fill-hover`, `--button-text` (the fill and label of `h-btn.primary`, grey in the app's own theme), `--spinner` (the arc of `h-spin`), `--segment-on` (the pressed segment), `--code-bg`, `--code-hover`, `--bubble` (the user's message bubble), `--tok-kw`, `--tok-str`, `--tok-com`, `--tok-num`, `--tok-pun` (syntax colours), `--font`, `--mono`, the type scale `--fs-ui`/`--lh-ui` (14/20 px: rows, buttons, inputs), `--fs-small`/`--lh-small` (13/18: headings in the rail, notes, counts), `--fs-micro`/`--lh-micro` (12/16: captions, badges), `--fs-body`/`--lh-body` (15/21: text to read), `--fs-code`/`--lh-code` (13/20: code), `--fs-title`/`--lh-title` and `--fs-head`/`--lh-head` (headings), `--r-control`, `--r-card`, and `--h-inset-x`, `--h-inset-top`, `--h-inset-bottom` for the page's own padding.
 
 Rail and composer views are sized to their content automatically. Use the app's scale: rows at 14 px on a 32 px pitch (`h-item`), dense rows and tables at 13 px on 24 px, secondary text at 13 px, nothing under 12 px; 8 px gaps, no page padding beyond what `harness.css` gives.
 
@@ -360,7 +362,7 @@ Method names are the call names above (`ui.setBadge`, `storage.get`, `session.tr
 
 Ask for it: "make a mod that shows the git branch and how many files changed". The agent loads the `create-mod` skill, writes the folder, and checks it with the `mod_check` tool, which reports manifest problems and any errors the page threw. A card in the chat offers to turn the new mod on; after that the agent's edits reload it as they land, and `mod_check` gives it the page's errors to fix.
 
-By hand: Settings → Mods → New mod writes a starter folder (a view in the seat you pick, or a conversation or chat bar look) and opens it. `mod_check` is also what the Settings page shows under a mod's Problems.
+By hand: Settings → Mods → New mod writes a starter folder (a view in the seat you pick, a conversation or chat bar look, or a theme; each tab starts the form at its own kind) and opens it. `mod_check` is also what the Settings page shows under a mod's Problems.
 
 ## Installing and sharing
 

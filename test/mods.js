@@ -1006,6 +1006,10 @@ const resetHome = () => {
     check('… whose stylesheet shows the hooks', /data-running/.test(lookCss) && /data-set-tint/.test(lookCss) && /:scope/.test(lookCss));
     const bar2 = rpc(g, 'mods.create', { id: 'bar-starter', name: 'Bar starter', look: 'composer', scope: 'user' });
     check('mods.create with a chat bar look', bar2.manifest.contributes.looks[0].target === 'composer' && fs.existsSync(path.join(g.roots.user, 'bar-starter', 'look.css')));
+    const theme2 = rpc(g, 'mods.create', { id: 'theme-starter', name: 'Theme starter', theme: true, scope: 'user' });
+    const themeCss = fs.readFileSync(path.join(g.roots.user, 'theme-starter', 'theme.css'), 'utf8');
+    check('mods.create with a theme: a valid mod with one stylesheet and no views, off', theme2.state === 'off' && theme2.problems.length === 0 && theme2.manifest.contributes.styles.join() === 'theme.css' && !theme2.manifest.contributes.views && theme2.wantsStyles === true, theme2.problems);
+    check('… whose stylesheet overrides tokens for light and dark', /:root \{/.test(themeCss) && /data-theme="dark"/.test(themeCss) && /--accent/.test(themeCss));
     let createErr = '';
     try {
       rpc(g, 'mods.create', { id: 'bad-starter', name: 'x', look: 'sidebar', scope: 'user' });

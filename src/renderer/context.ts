@@ -100,7 +100,7 @@ function ensureStyles(): void {
 .ctx-slice-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--text-400); }
 .ctx-slice.muted .ctx-slice-dot { background: transparent; box-shadow: inset 0 0 0 1px var(--text-400); }
 .ctx-slice-dot[data-key="messages"], .ctx-slice-dot[data-key="summary"] { background: var(--accent); }
-.ctx-slice-dot[data-key="toolResults"] { background: var(--git-mod); }
+.ctx-slice-dot[data-key="toolResults"] { background: var(--warn); }
 .ctx-slice-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ctx-slice-tokens { flex: none; font-variant-numeric: tabular-nums; }
 .ctx-basis { margin-top: 8px; font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-400); }

@@ -243,7 +243,7 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
       const root = scope === 'project' ? path.join(projectConfigDir(app.config().workingDirectory), 'mods') : userRoot();
       const id = String(input.id ?? '');
       if (registry.list().some((m) => m.id === id && (m.scope === scope || (scope === 'user' && m.scope === 'bundled')))) throw new ManageError(`A mod with the id "${id}" already exists.`);
-      createMod(root, { id, name: input.name, seat: input.seat as ModSeat, look: input.look as ModLookTarget | undefined });
+      createMod(root, { id, name: input.name, seat: input.seat as ModSeat, look: input.look as ModLookTarget | undefined, theme: input.theme === true });
       registry.scan();
       const made = registry.list().find((m) => m.id === id && m.scope === scope);
       if (!made) throw new Error('The starter mod was written but could not be read back.');

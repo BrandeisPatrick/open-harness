@@ -66,7 +66,7 @@ Required: `protocol` (1), `id`, `name`, `version` ("0.1.0"). Optional: `descript
 - `background`: behind the whole window, takes no clicks. The `pointer` event `{ x, y }` (fractions of the window) lets it follow the pointer.
 
 ## Looks
-A look restyles one region, and the user picks it in Settings → Appearance → Looks (one per region). Use a look, not `styles`, when the request is about how the conversation or the chat bar looks.
+A look restyles one region, and the user picks it in Settings → Mods → Chat bar or Conversation (one per region). Use a look, not `styles`, when the request is about how the conversation or the chat bar looks.
 - `conversation`: the app wraps the CSS in `@scope (#messages) { … }`; `composer`: in `@scope (#chatbar) { … }`. Selectors reach only that region; `:scope` is its root. Set tokens on `:scope` to retheme the region: `:scope { --accent: #2b9; }`.
 - State on the root, no script needed: `data-running="true|false"`, `data-scheme="light|dark"`, `data-mode`, and `data-set-<key>` for each of the mod's `settings` (key in lower case). Branch on them: `:scope[data-running="true"] .tool-status.spin { … }`.
 - Rely only on the stable hooks in docs/mods.md (Looks): `.msg.user .bubble`, `.msg.assistant .md`, `.tool`, `.tool-verb`, `.code-block`, `.task-list`, `#composer`, `#input`, `#send-btn`, `#model-btn`, `#mode-btn`, and so on.
@@ -114,7 +114,7 @@ Ask only for the permissions the page uses. A call without its permission reject
 - Handle "nothing to show": no session open, an empty transcript, a call that rejects. Show an `h-empty` line instead of a blank or broken panel.
 - Inline `<script>` and `<style>` are fine. Keep everything in one page unless it grows.
 - Adding a permission, styles, a look or a background to a mod that is on pauses it until the user approves.
-- A look applies only once the user picks it in Settings → Appearance → Looks; tell them so after turning it on.
+- A look applies only once the user picks it in Settings → Mods → Chat bar or Conversation; tell them so after turning it on.
 
 ## The loop
 1. Write `mod.json` and the page(s) in the right folder.

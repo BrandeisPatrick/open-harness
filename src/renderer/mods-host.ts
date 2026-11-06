@@ -14,6 +14,7 @@ import { closeMenu, openMenu, type MenuSection } from './popover.js';
 import { appendTranscriptItem, registerTranscriptItem } from './transcript-items.js';
 import { homeDir } from './home.js';
 import { modeOf } from './modes.js';
+import { MOD_TABS, modTabs } from './settings/model.js';
 import {
   ERR,
   HELLO_TIMEOUT_MS,
@@ -56,7 +57,7 @@ export interface ModsHostDeps {
   toast(text: string, kind: 'info' | 'error'): void;
   /** Puts text into the composer at the caret */
   insertText(text: string): void;
-  openSettings(section?: string): void;
+  openSettings(section?: string, opts?: { tab?: string }): void;
   switchSession(id: string): Promise<void>;
   newSession(): Promise<void>;
   openLightbox(src: string, name?: string, caption?: string): void;
@@ -1481,9 +1482,16 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     if (!o || o.decided) return;
     o.decided = true;
     const name = o.info.manifest?.name ?? o.info.id;
-    const text = how === 'later' ? `${name} stays off. Turn it on any time in Settings → Mods.` : how === 'on' ? `${name} is on` : `${name} was turned on in Settings`;
+    // The mod's place in Settings: the tab of its kind (a background lands on Backgrounds, where it is picked)
+    const tabs = modTabs(o.info);
+    const tab = tabs.find((t) => t !== 'mods' && t !== 'themes') ?? tabs[0];
+    const where = `Settings → Mods${tab === 'mods' ? '' : ` → ${MOD_TABS.find((t) => t.id === tab)!.title}`}`;
+    const picks = tab !== 'mods' && tab !== 'themes';
+    const text = how === 'later' ? `${name} stays off. Turn it on any time in` : how === 'on' ? (picks ? `${name} is on. Pick it in` : `${name} is on`) : `${name} was turned on in Settings`;
+    const link = how === 'later' || (how === 'on' && picks) ? ` <button type="button" class="link-btn mod-offer-where" data-tab="${escapeHtml(tab)}">${escapeHtml(where)}</button>` : '';
     o.el.classList.add('done');
-    o.el.innerHTML = `<div class="mod-offer-decided"><span class="${how === 'later' ? 'no' : 'ok'}">${icon(how === 'later' ? 'x' : 'check', 14)}</span><span>${escapeHtml(text)}</span></div>`;
+    o.el.innerHTML = `<div class="mod-offer-decided"><span class="${how === 'later' ? 'no' : 'ok'}">${icon(how === 'later' ? 'x' : 'check', 14)}</span><span>${escapeHtml(text)}${link}</span></div>`;
+    o.el.querySelector<HTMLButtonElement>('.mod-offer-where')?.addEventListener('click', () => deps.openSettings('mods', { tab }));
   }
 
   function showOffer(info: ModInfo): void {

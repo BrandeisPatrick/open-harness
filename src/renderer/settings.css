@@ -6,12 +6,18 @@ dialog.dialog.settings-dialog {
   --sp-selected: color-mix(in srgb, var(--text-100) 7%, transparent);
   --sp-hover: color-mix(in srgb, var(--text-100) 4%, transparent);
 }
+/* In dark the selected row reads lighter than the controls around it */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) dialog.dialog.settings-dialog { --sp-selected: color-mix(in srgb, var(--text-100) 15%, transparent); --sp-hover: color-mix(in srgb, var(--text-100) 6%, transparent); }
+}
+:root[data-theme="dark"] dialog.dialog.settings-dialog { --sp-selected: color-mix(in srgb, var(--text-100) 15%, transparent); --sp-hover: color-mix(in srgb, var(--text-100) 6%, transparent); }
 .sp { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .sp-head { display: flex; align-items: center; justify-content: space-between; flex: none; height: 45px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--border-subtle); }
 .sp-head h2 { margin: 0; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 500; }
 .sp-main { display: flex; flex: 1 1 auto; min-height: 0; }
 
-.sp-side { display: flex; flex-direction: column; gap: 10px; flex: none; width: 210px; padding: 12px 10px; overflow-y: auto; border-right: 1px solid var(--border-subtle); }
+/* The navigation sits on the page colour, the section on the dialog's (one white in light; two greys in dark) */
+.sp-side { display: flex; flex-direction: column; gap: 10px; flex: none; width: 210px; padding: 12px 10px; overflow-y: auto; border-right: 1px solid var(--border-subtle); background: var(--bg-100); }
 .sp-search { flex: none; height: 32px; border-radius: var(--r-card); border-color: var(--border); background: var(--field-bg); }
 .sp-search .icon { color: var(--text-400); }
 .sp-search input { font-size: var(--fs-ui); }
@@ -81,15 +87,15 @@ dialog.dialog.settings-dialog {
 /* The provider pill only helps when rows of both providers can show, which is while searching */
 .sp-content:not(.searching) .sp-row[data-provider] .sp-pill { display: none; }
 .sp-owned {
-  display: inline-flex; align-items: center; flex: none; height: 18px; padding: 0 7px; border: 1px solid var(--accent-line); border-radius: 999px;
-  font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--accent); background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; flex: none; height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-200); background: transparent; cursor: pointer;
 }
-.sp-owned:hover { background: var(--accent-soft); }
+.sp-owned:hover { background: var(--hover); color: var(--text-100); }
 .sp-row.owned .sp-row-control { opacity: 0.55; }
 
 .sp-chip { display: inline-flex; align-items: center; flex: none; height: 18px; padding: 0 7px; border-radius: 999px; font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-200); background: var(--sp-selected); white-space: nowrap; }
 .sp-chip.ok { color: var(--success); background: var(--success-soft); }
-.sp-chip.warn { color: color-mix(in srgb, var(--git-mod) 75%, var(--text-100)); background: color-mix(in srgb, var(--git-mod) 14%, transparent); }
+.sp-chip.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .sp-chip.danger { color: var(--danger); background: var(--danger-soft); }
 
 .sp-problem { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--danger); overflow-wrap: anywhere; }
@@ -117,7 +123,7 @@ dialog.dialog.settings-dialog {
 .sp-input.mono { font-family: var(--mono); font-size: var(--fs-code); }
 textarea.sp-input { height: auto; min-height: 92px; padding: 8px 10px; line-height: var(--lh-ui); resize: vertical; font-family: var(--font); font-size: var(--fs-ui); }
 .sp-input::placeholder { color: var(--text-400); }
-.sp-input:hover { border-color: rgba(115, 114, 108, 0.45); }
+.sp-input:hover { border-color: color-mix(in srgb, var(--text-400) 45%, transparent); }
 .sp-input:focus { border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--field-ring); }
 .sp-input:disabled { opacity: 0.6; cursor: not-allowed; }
 .sp-text.has-eye .sp-input { padding-right: 32px; }
@@ -140,7 +146,7 @@ textarea.sp-input { height: auto; min-height: 92px; padding: 8px 10px; line-heig
 .btn.busy { opacity: 0.6; }
 .btn.active { background: var(--sp-selected); }
 .sp-file-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
-.sp-range { width: 160px; accent-color: var(--accent); }
+.sp-range { width: 160px; accent-color: var(--switch-on); }
 .sp-range-value { width: 36px; text-align: right; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); font-variant-numeric: tabular-nums; }
 .sp-mono-list { font-family: var(--mono); font-size: var(--fs-code); }
 
@@ -202,7 +208,7 @@ textarea.sp-input { height: auto; min-height: 92px; padding: 8px 10px; line-heig
 .sp-perm-list li { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-200); }
 .sp-perm-list li .icon { flex: none; margin-top: 2px; color: var(--text-400); }
 .sp-perm-list li.granted .icon { color: var(--success); }
-.sp-perm-list li.wanted .icon { color: var(--git-mod); }
+.sp-perm-list li.wanted .icon { color: var(--warn); }
 .sp-perm-list li .sp-chip { margin-left: 2px; }
 .sp-problem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .sp-problem-list li { display: flex; flex-direction: column; gap: 2px; }
@@ -228,3 +234,10 @@ textarea.sp-input { height: auto; min-height: 92px; padding: 8px 10px; line-heig
 @media (prefers-reduced-motion: reduce) {
   .sp-row.flash { animation: none; }
 }
+
+/* ---------- Settings → Mods: the tab strip, each tab's head, and the cards of the tab's kind ---------- */
+.sp-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 12px 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+.sp-content:not(.searching) .sp-tab-head:not(.current),
+.sp-content:not(.searching) .sp-tab-out { display: none; }
+.sp-tab-head > .sp-row:first-child, .sp-tab-head > .sp-note:first-child { border-top: none; }
+.sp-mod-set { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }

@@ -108,6 +108,62 @@ const { check, done } = require('./support/check.js');
     check('modChip: a warning alone is not a problem', m.modChip({ state: 'on', problems: [{ kind: 'manifest', message: 'x', warning: true }] }) === null && m.modChip({ state: 'on', problems: [{ kind: 'runtime', message: 'x' }] }).label === 'Problem');
     check('grantSheet: looks get the restyle warning', /restyle the whole app/.test(m.grantSheet({ state: 'off', manifest: { name: 'L', contributes: { looks: [lk('a', 'A', 'conversation')] } }, wants: [], wantsStyles: false, granted: [] }).warnings[0] || ''));
   }
+
+  // --- kinds of mod and the tabs of Settings → Mods ---
+  {
+    check('five tabs, Mods first, each with its kind and the New form preset', m.MOD_TABS.map((t) => `${t.id}:${t.kind}:${t.newKind}`).join() === 'mods:general:rail,backgrounds:background:background,chat-bar:composer:look:composer,conversation:conversation:look:conversation,themes:theme:theme');
+    check('tab ids are recognised', m.isModTab('backgrounds') && m.isModTab('chat-bar') && !m.isModTab('chatbar') && !m.isModTab('general'));
+    // Every combination of the five kinds a manifest can contribute
+    const parts = {
+      general: [{ views: [{ id: 'r', title: 'R', seat: 'rail' }] }, { views: [{ id: 't', title: 'T', seat: 'tab' }] }, { views: [{ id: 'c', title: 'C', seat: 'composer' }] }, { commands: [{ name: 'go', description: 'Go' }] }],
+      background: [{ views: [{ id: 'b', title: 'B', seat: 'background' }] }],
+      composer: [{ looks: [{ id: 'k', title: 'K', target: 'composer', styles: ['k.css'] }] }],
+      conversation: [{ looks: [{ id: 'v', title: 'V', target: 'conversation', styles: ['v.css'] }] }],
+      theme: [{ styles: ['theme.css'] }],
+    };
+    const order = ['general', 'background', 'composer', 'conversation', 'theme'];
+    const merge = (a, b) => ({ views: [...(a.views || []), ...(b.views || [])], looks: [...(a.looks || []), ...(b.looks || [])], commands: [...(a.commands || []), ...(b.commands || [])], styles: [...(a.styles || []), ...(b.styles || [])] });
+    let bad = [];
+    let combos = 0;
+    for (let mask = 1; mask < 32; mask++) {
+      const want = order.filter((_, i) => mask & (1 << i));
+      // each general way on its own, and every way together
+      const variants = want.includes('general') ? [...parts.general.map((g) => [g]), parts.general] : [[]];
+      for (const gen of variants) {
+        let c = {};
+        for (const g of gen) c = merge(c, g);
+        for (const k of want) if (k !== 'general') c = merge(c, parts[k][0]);
+        const got = m.modKinds({ name: 'x', contributes: c });
+        combos++;
+        if (got.join() !== want.join()) bad.push({ want, got, c });
+      }
+    }
+    check(`modKinds: every combination of kinds, in tab order (${combos} manifests)`, bad.length === 0, bad.slice(0, 3));
+    check('modKinds: a mod that contributes nothing, or has no manifest, is general', m.modKinds({ name: 'x' }).join() === 'general' && m.modKinds({ name: 'x', contributes: { settings: [{ key: 'a', type: 'boolean', title: 'A' }] } }).join() === 'general' && m.modKinds(null).join() === 'general' && m.modKinds({ name: 'x', contributes: { views: [], looks: [], styles: [], commands: [] } }).join() === 'general');
+    check('modKinds: two backgrounds are still one kind', m.modKinds({ name: 'x', contributes: { views: [{ id: 'a', seat: 'background' }, { id: 'b', seat: 'background' }] } }).join() === 'background');
+    const mk = (key, contributes, state = 'on', scope = 'bundled') => ({ key, id: key, scope, state, manifest: { name: key[0].toUpperCase() + key.slice(1), contributes }, problems: [], settings: {} });
+    const list = [
+      mk('hyperspace', { looks: [{ id: 'holo', title: 'Holo', target: 'conversation', styles: ['a.css'] }, { id: 'cockpit', title: 'Cockpit', target: 'composer', styles: ['b.css'] }], views: [{ id: 'starfield', title: 'Starfield', seat: 'background' }] }),
+      mk('plan', { views: [{ id: 'p', title: 'Plan', seat: 'rail' }] }),
+      mk('backgrounds', { views: [{ id: 'aurora', title: 'Aurora', seat: 'background' }] }),
+      mk('midnight', { styles: ['theme.css'] }, 'off'),
+      mk('paper', { styles: ['theme.css'] }, 'on', 'user'),
+      mk('combo', { views: [{ id: 'r', title: 'R', seat: 'rail' }], styles: ['x.css'] }, 'on', 'user'),
+    ];
+    const keys = (tab) => m.modsForTab(list, tab).map((x) => x.key).join();
+    check('modsForTab: Mods lists the general ones only (Hyperspace is not there)', keys('mods') === 'plan,combo', keys('mods'));
+    check('modsForTab: Backgrounds, Chat bar, Conversation, Themes', keys('backgrounds') === 'hyperspace,backgrounds' && keys('chat-bar') === 'hyperspace' && keys('conversation') === 'hyperspace' && keys('themes') === 'midnight,paper,combo', [keys('backgrounds'), keys('chat-bar'), keys('conversation'), keys('themes')]);
+    check('modTabs: Hyperspace is on three tabs; a rail panel with styles on two', m.modTabs(list[0]).join() === 'backgrounds,chat-bar,conversation' && m.modTabs(list[5]).join() === 'mods,themes');
+    check('themeMods: in list order (the order the styles apply)', m.themeMods(list).map((x) => x.key).join() === 'midnight,paper,combo');
+    check('tabOfKind', m.tabOfKind('composer') === 'chat-bar' && m.tabOfKind('general') === 'mods' && m.tabOfKind('theme') === 'themes');
+    check('backgroundChoices: from mods that are on', JSON.stringify(m.backgroundChoices(list)) === JSON.stringify([{ value: 'hyperspace/starfield', label: 'Hyperspace: Starfield' }, { value: 'backgrounds/aurora', label: 'Backgrounds: Aurora' }]));
+    const L = { looks: { conversation: null, composer: 'hyperspace/cockpit' }, background: 'backgrounds/aurora', backgroundImage: null };
+    check('choiceWords: what Appearance shows for each kind', m.choiceWords(list, L, 'background') === 'Backgrounds: Aurora' && m.choiceWords(list, L, 'composer') === 'Hyperspace: Cockpit' && m.choiceWords(list, L, 'conversation') === 'Default' && m.choiceWords(list, L, 'theme') === 'Paper, Combo', [m.choiceWords(list, L, 'background'), m.choiceWords(list, L, 'theme')]);
+    check('choiceWords: your picture, nothing, a choice whose mod is gone', m.choiceWords(list, { ...L, background: null, backgroundImage: '/p.png' }, 'background') === 'Your picture' && m.choiceWords(list, { ...L, background: null }, 'background') === 'None' && m.choiceWords(list, { ...L, background: 'gone/x' }, 'background') === 'gone/x (off)' && m.choiceWords([], null, 'theme') === 'None');
+    check('offModsOfTab: the off mods of a tab', m.offModsOfTab(list, 'themes').join() === 'Midnight' && m.offModsOfTab(list, 'backgrounds').length === 0);
+    check('a section and a tab as one target', m.sectionForTarget('mods:backgrounds') === 'mods' && m.tabForTarget('mods:backgrounds') === 'backgrounds' && m.tabForTarget('mods/chat-bar') === 'chat-bar' && m.tabForTarget('mods') === null && m.sectionForTarget('mods:nope') === null && m.tabForTarget('mods:nope') === null);
+    check('refMod', m.refMod('hyperspace/holo') === 'hyperspace' && m.refMod('a@/x/y/holo') === 'a@/x/y');
+  }
   done();
 })().catch((err) => {
   console.error('CRASH', err);

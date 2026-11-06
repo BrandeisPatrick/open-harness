@@ -300,8 +300,8 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
 
   // ---------- For the agent ----------
 
-  disposers.push(app.tools.register(modCheckTool(registry)));
-  disposers.push(app.prompt.add('mods', () => modsPrompt(registry.list())));
+  disposers.push(app.tools.register({ ...modCheckTool(registry), optional: true }));
+  disposers.push(app.prompt.add('mods', () => modsPrompt(registry.list()), { optional: true }));
   disposers.push(app.provide('skill-usage', usage));
   disposers.push(app.events.on((sessionId, ev) => usage.handle(sessionId, ev)));
 
@@ -343,7 +343,7 @@ export function checkLayout(patch: unknown, backgroundsDir: string): Partial<Mod
   if ('railWidth' in patch) {
     const w = Number(patch.railWidth);
     if (!Number.isFinite(w)) throw new Error('railWidth must be a number.');
-    out.railWidth = Math.round(Math.min(720, Math.max(200, w)));
+    out.railWidth = Math.round(Math.min(480, Math.max(240, w)));
   }
   if ('collapsed' in patch) {
     if (!Array.isArray(patch.collapsed) || patch.collapsed.some((c) => typeof c !== 'string')) throw new Error('collapsed must be a list of "<mod key>/<view id>".');

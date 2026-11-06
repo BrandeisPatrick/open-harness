@@ -45,6 +45,7 @@ export function defaultConfig(): AppConfig {
     keepAwake: 'running',
     compactThreshold: 0.8,
     pruneToolResults: true,
+    toolSet: 'auto',
     historyTrashDays: 30,
     mods: {
       enabled: {},

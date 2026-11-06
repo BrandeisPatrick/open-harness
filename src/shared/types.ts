@@ -173,6 +173,12 @@ export interface AppConfig {
   compactThreshold: number;
   /** Before summarising, shorten old tool results the model no longer needs word for word */
   pruneToolResults: boolean;
+  /**
+   * Which tools the model is offered. Every tool's definition is sent with every request, so a small context window
+   * cannot afford them all. essential: files, shell, browser, terminal, tasks, artifacts, images. all: also scheduled
+   * tasks, sub-sessions and mod authoring. auto: all when the window is at least 32k tokens, essential below that.
+   */
+  toolSet: 'auto' | 'all' | 'essential';
   /** Days a deleted session stays in the trash before it is removed for good (0: at once) */
   historyTrashDays: number;
   /** Mods: which are on, their settings, and how the rail and background are arranged */

@@ -29,8 +29,8 @@ export function setupSchedules(app: App, opts: SchedulerOptions = {}): Scheduler
   });
   app.rpc.handle('schedules.runNow', (id) => svc.runNow(id));
 
-  for (const tool of scheduleTools(svc, now)) app.tools.register(tool);
-  app.prompt.add('schedules', () => PROMPT_SECTION);
+  for (const tool of scheduleTools(svc, now)) app.tools.register({ ...tool, optional: true });
+  app.prompt.add('schedules', () => PROMPT_SECTION, { optional: true });
   app.commands.register({
     name: 'schedules',
     description: 'List scheduled tasks and when they run next',

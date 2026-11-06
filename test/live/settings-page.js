@@ -223,10 +223,13 @@ const js = (v) => JSON.stringify(v);
     await app.evaluate(`window.__oc_debug.settings.mock(${js({ app: MOCK.app, history: null })})`);
     await sleep(300);
     check('without history.* the History section and its nav item hide', await app.evaluate(`document.querySelector('#sp-nav-history').hidden && document.querySelector('#sp-sec-history').hidden`));
-    // In this build settings.info does not exist: Configuration files is hidden for real.
+    // The same for Configuration files when settings.info is reported absent; with the real backend it shows.
+    await app.evaluate(`window.__oc_debug.settings.mock(${js({ app: MOCK.app, history: MOCK.history, absent: ['settings.info'] })})`);
+    await sleep(300);
+    check('without settings.info Configuration files hides', await app.evaluate(`document.querySelector('#sp-nav-files').hidden`));
     await app.evaluate(`window.__oc_debug.settings.mock(null)`);
     await sleep(300);
-    check('without settings.info (this build) Configuration files hides', await app.evaluate(`document.querySelector('#sp-nav-files').hidden`));
+    check('with the real backend Configuration files shows', await app.evaluate(`!document.querySelector('#sp-nav-files').hidden`));
     await app.evaluate(`window.__oc_debug.settings.mock(${js({ app: MOCK.app, history: MOCK.history })})`);
 
     // History through the mock: restore one

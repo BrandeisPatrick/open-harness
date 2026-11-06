@@ -68,6 +68,7 @@ import {
   type SetupId,
   type SetupLine,
 } from './setup.js';
+import type { SettingsInfo } from '../shared/settings-info';
 import { bus } from './bus.js';
 import { onPush, rpc } from './rpc.js';
 import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } from './transcript-items.js';
@@ -1109,6 +1110,13 @@ function originLabel(origin: MessageOrigin, from?: string): string | undefined {
     return `from session ${title ?? from ?? 'another session'}`;
   }
   if (origin === 'mod') return from ? `from mod ${from}` : 'from a mod';
+  if (origin === 'schedule') return from ? `scheduled: ${from}` : 'scheduled';
+  if (origin === 'remote') return 'from remote control';
+  // A slash command put this into the conversation; with a session behind it, it is that session's merged summary.
+  if (origin === 'command') {
+    const title = from ? sessions.find((m) => m.id === from)?.title : undefined;
+    return title ? `merged from ${title}` : from ? 'merged' : 'from a command';
+  }
   return `from ${origin}`;
 }
 
@@ -3550,6 +3558,7 @@ const SHORTCUTS: [string, string[], string[]?][] = [
   ['Toggle browser', ['⌘', '⇧', 'B']],
   ['Toggle diff', ['⌘', '⇧', 'D']],
   ['Toggle terminal', ['⌘', '⇧', 'T']],
+  ['Toggle the mods rail', ['⌘', '⇧', 'E']],
   ['New terminal tab', ['⌘', 'T']],
   ['Settings', ['⌘', ',']],
   ['Cycle permission mode', ['⇧', 'Tab']],
@@ -3728,6 +3737,30 @@ function openSettings(section?: string): void {
 }
 $('settings-btn').onclick = () => openSettings();
 (window.__oc_debug as unknown as Record<string, unknown>).settings = settingsPage.debug;
+
+// A project's settings.json is never applied without the user's say-so. Say once that it is waiting, and where to
+// review it, the way a project's MCP servers are announced.
+const settingsNoticed = new Set<string>();
+function noticeProjectSettings(info: SettingsInfo | null | undefined): void {
+  const f = info?.files?.find((x) => x.scope === 'project');
+  if (!f || !f.exists || f.trusted || f.error || !f.keys.length) return;
+  const key = `${f.path}|${f.changed ? 'changed' : 'new'}|${f.keys.join(',')}`;
+  if (settingsNoticed.has(key)) return;
+  settingsNoticed.add(key);
+  const env = f.keys.filter((k) => k.startsWith('env.')).length;
+  const fields = f.keys.filter((k) => !k.startsWith('env.'));
+  const sets = [fields.slice(0, 4).join(', ') + (fields.length > 4 ? ` and ${fields.length - 4} more` : ''), env ? `${env} environment variable${env === 1 ? '' : 's'}` : ''].filter(Boolean).join(', plus ');
+  addSystemMessage(
+    f.changed
+      ? `This project's settings.json changed since you approved it (it sets ${sets}), so it is no longer applied. Review it in Settings → Configuration files.`
+      : `This project has a settings.json that sets ${sets}. It is not applied until you approve it: Settings → Configuration files.`,
+    'notice',
+  );
+}
+onPush('settings:changed', noticeProjectSettings);
+void rpc('settings.info')
+  .then(noticeProjectSettings)
+  .catch(() => undefined);
 
 // [feature:sidebar]
 sidebarView = createSidebar({

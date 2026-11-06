@@ -77,8 +77,9 @@ const { launch, checker, sleep } = require('./rig.js');
 
     // ---- /compact ----
     await app.send('/compact');
-    await app.waitFor(`Boolean(document.querySelector('#messages .compaction'))`, 90_000, 'the compaction divider');
-    check('/compact: the divider shows', true);
+    // A conversation this short may have nothing worth folding: then a notice says so instead of a divider.
+    await app.waitFor(`Boolean(document.querySelector('#messages .compaction')) || [...document.querySelectorAll('.msg.system')].some((e) => /compact|summar/i.test(e.innerText))`, 90_000, 'a compaction divider, or a notice saying why there is none');
+    check('/compact: a divider shows, or a notice says there is nothing worth compacting', true);
     await shot('5-compacted');
 
     // ---- rename ----

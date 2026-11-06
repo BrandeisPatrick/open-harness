@@ -6,7 +6,7 @@ import { escapeHtml, h } from '../dom.js';
 import { icon } from '../icons.js';
 import { MODES } from '../modes.js';
 import { onPush } from '../rpc.js';
-import { COMPACT_AT, KEEP_AWAKE, nearestCompactStep, parseInteger, parseText, parseUrl } from './model.js';
+import { COMPACT_AT, KEEP_AWAKE, nearestCompactStep, parseInteger, parseText, parseUrl, TOOL_SET } from './model.js';
 import { button, group, iconButton, row, sectionTitle, tildePath } from './ui.js';
 import type { Ctx, Section } from './ctx.js';
 
@@ -264,6 +264,14 @@ export function contextSection(ctx: Ctx): Section {
         width: 120,
         choices: COMPACT_AT.map((v) => ({ value: v, label: `${Math.round(v * 100)}%` })),
         read: (v) => nearestCompactStep(v),
+      }),
+      ctx.segField({
+        id: 'toolSet',
+        title: 'Tools offered to the model',
+        desc: 'Every tool is described to the model in every request. Essential keeps files, shell, browser, terminal, tasks, artifacts and images; All adds scheduled tasks, sub-sessions and mod authoring. Automatic offers all of them when the context window is at least 32k tokens.',
+        keywords: 'tools schedule sub-session subagent mods small window local model overhead',
+        field: 'toolSet',
+        choices: TOOL_SET,
       }),
       ctx.switchField({ id: 'pruneToolResults', title: 'Trim old tool output', desc: 'Before summarising, shorten old tool results the model no longer needs word for word.', keywords: 'prune shorten compaction', field: 'pruneToolResults' }),
       ctx.switchField({ id: 'sendScreenshotsToModel', title: 'Send browser screenshots to the model', desc: 'Attach browser screenshots to the conversation as images. Needs a vision-capable model.', keywords: 'vision images browser', field: 'sendScreenshotsToModel' }),

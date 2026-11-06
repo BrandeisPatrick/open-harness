@@ -67,6 +67,23 @@ const MIN_COMPACT_MESSAGES = 2;
 
 const CHANGING_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'terminal_run']);
 
+/** Below this window the optional tool families are left out unless the user asks for all tools. */
+export const FULL_TOOLS_WINDOW = 32_000;
+
+/**
+ * Whether only the essential tools are offered. Every tool definition is sent with every request: with a 16k window
+ * the optional families (scheduled tasks, sub-sessions, mod authoring) would take a fifth of it before a word is said.
+ */
+export function essentialToolsOnly(cfg: AppConfig): boolean {
+  if (cfg.toolSet === 'essential') return true;
+  if (cfg.toolSet === 'all') return false;
+  return contextLimit(cfg) < FULL_TOOLS_WINDOW;
+}
+
+/** Tells the model what is missing, so it can say so instead of improvising. */
+const ESSENTIAL_NOTE =
+  'To save context for this model\'s small window, the tools for scheduled tasks, sub-sessions and writing mods are turned off. If the user asks for one of those, say that all tools can be turned on in Settings → Context ("Tools offered to the model").';
+
 /** The context window the configured model has, in tokens. */
 export function contextLimit(cfg: AppConfig): number {
   if (cfg.provider === 'ollama') return contextSize(cfg.ollama.numCtx);
@@ -188,7 +205,7 @@ export interface AgentOptions {
   /** Extra tools offered next to the built-in and MCP ones (app.tools) */
   tools?: () => Tool[];
   /** Extra system-prompt text (app.prompt sections, already joined) */
-  prompt?: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string;
+  prompt?: (info: { cwd: string; mode: PermissionMode; sessionId: string; essential?: boolean }) => string;
 }
 
 export class Agent {
@@ -281,7 +298,9 @@ export class Agent {
   private promptExtra(cfg: AppConfig): string {
     if (!this.opts.prompt) return '';
     try {
-      return this.opts.prompt({ cwd: cfg.workingDirectory, mode: cfg.permissionMode, sessionId: this.session.id });
+      const essential = essentialToolsOnly(cfg);
+      const text = this.opts.prompt({ cwd: cfg.workingDirectory, mode: cfg.permissionMode, sessionId: this.session.id, essential });
+      return essential ? `${text}${text ? '\n\n' : ''}${ESSENTIAL_NOTE}` : text;
     } catch (err) {
       console.warn('[agent] a prompt section failed:', errorMessage(err));
       return '';
@@ -296,7 +315,8 @@ export class Agent {
   private toolsFor(cfg: AppConfig): Tool[] {
     const mcpTools = this.mcp?.tools() ?? [];
     const plan = cfg.permissionMode === 'plan';
-    const extraTools = this.opts.tools?.() ?? [];
+    const essential = essentialToolsOnly(cfg);
+    const extraTools = (this.opts.tools?.() ?? []).filter((t) => !(essential && t.optional));
     return [...allTools(cfg.permissionMode), ...(plan ? extraTools.filter((t) => t.readOnly) : extraTools), ...(plan ? mcpTools.filter((t) => t.mcp?.readOnly) : mcpTools)];
   }
 

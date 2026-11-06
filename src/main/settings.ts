@@ -77,6 +77,7 @@ const SCALARS: Record<string, Check> = {
   pruneToolResults: bool,
   notifications: bool,
   keepAwake: oneOf('off', 'running', 'always'),
+  toolSet: oneOf('auto', 'all', 'essential'),
   historyTrashDays: nonNegative,
 };
 

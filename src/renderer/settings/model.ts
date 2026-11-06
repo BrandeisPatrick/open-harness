@@ -139,6 +139,12 @@ export function patchFor(path: string, value: unknown): Partial<AppConfig> {
 
 // ---------- Choices ----------
 
+export const TOOL_SET: { value: AppConfig['toolSet']; label: string }[] = [
+  { value: 'auto', label: 'Automatic' },
+  { value: 'all', label: 'All' },
+  { value: 'essential', label: 'Essential' },
+];
+
 export const KEEP_AWAKE: { value: AppConfig['keepAwake']; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'running', label: 'While running' },

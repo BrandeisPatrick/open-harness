@@ -10,7 +10,7 @@
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "node test/run.js",
-    "test:live": "node test/live/smoke.js",
+    "test:live": "node test/live/run.js",
     "brand-dev": "scripts/brand-dev.sh",
     "package": "npm run build && electron-builder --mac --dir -c.mac.identity=null",
     "dist": "npm run build && electron-builder --mac -c.mac.identity=null",

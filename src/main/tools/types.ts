@@ -64,6 +64,8 @@ export interface Tool {
   parameters: Record<string, unknown>;
   /** A tool registered through app.tools is offered in plan mode only when it is read-only */
   readOnly?: boolean;
+  /** Not essential: left out when the tool set is trimmed for a small context window (see AppConfig.toolSet) */
+  optional?: boolean;
   /** Set for tools an MCP server provides: which server, its own tool name and the annotations the approval rules use */
   mcp?: { server: string; scope: 'user' | 'project'; tool: string; readOnly: boolean; destructive: boolean };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -35,13 +35,15 @@ export function setupSubagents(app: App, opts: SubagentsOptions = {}): Subagents
   app.rpc.handle('sessions.related', (id) => svc.related(String(id)));
   app.rpc.handle('sessions.message', (fromId, toId, text) => svc.message(String(fromId), String(toId), String(text ?? '')));
 
-  for (const tool of subagentTools(svc)) app.tools.register(tool);
-  app.prompt.add('sessions', ({ sessionId }) => {
+  for (const tool of subagentTools(svc)) app.tools.register({ ...tool, optional: true });
+  // How to use the session tools: left out with them when the tool set is trimmed for a small window.
+  app.prompt.add('sessions', () => PROMPT_SECTION, { optional: true });
+  // What a sub-session must know about itself, whatever tools it has (the user can start one with /spawn).
+  app.prompt.add('sub-session', ({ sessionId }) => {
     const me = app.store.get(sessionId);
     const parent = me?.parentId ? app.store.get(me.parentId) : undefined;
-    if (!me || me.origin !== 'spawn' || !parent) return PROMPT_SECTION;
+    if (!me || me.origin !== 'spawn' || !parent) return '';
     const lines = [
-      PROMPT_SECTION,
       `This session is itself a sub-session of "${parent.title}" (${parent.id}). The last reply of each of your turns is reported to it automatically, so end every turn with a clear, self-contained report: what you did, what you found or answered (with the numbers and names), and the files you changed. Use session_send to it only for a question you cannot go on without.`,
     ];
     if (svc.depth(me.id) >= MAX_DEPTH) lines.push('It is nested as deep as allowed, so it cannot start sub-sessions of its own.');

@@ -44,7 +44,8 @@ export interface App {
   /** Extra tools offered to the model next to the built-in and MCP ones */
   readonly tools: { register(tool: Tool): Disposer; list(): Tool[] };
   /** Extra system-prompt sections; an empty string adds nothing */
-  readonly prompt: { add(id: string, section: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string): Disposer };
+  /** `optional` sections belong to optional tools and are left out with them (see AppConfig.toolSet) */
+  readonly prompt: { add(id: string, section: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string, opts?: { optional?: boolean }): Disposer };
   /** Slash commands that are not skills */
   readonly commands: { register(cmd: Command): Disposer; list(): CommandInfo[] };
   /** Named services features expose to each other, e.g. app.service<HistoryService>('history') */
@@ -141,6 +142,7 @@ export class AppHost implements App {
   private readonly handlers = new Map<string, AnyFn>();
   private readonly toolList: Tool[] = [];
   private readonly sections = new Map<string, SectionFn>();
+  private readonly optionalSections = new Set<string>();
   private readonly commandMap = new Map<string, Command>();
   private readonly services = new Map<string, unknown>();
   private readonly quitFns: (() => void | Promise<void>)[] = [];
@@ -172,11 +174,15 @@ export class AppHost implements App {
       list: () => [...this.toolList],
     };
     this.prompt = {
-      add: (id, section) => {
+      add: (id, section, opts) => {
         if (this.sections.has(id)) throw new Error(`A prompt section ${id} is already registered.`);
         this.sections.set(id, section);
+        if (opts?.optional) this.optionalSections.add(id);
         return () => {
-          if (this.sections.get(id) === section) this.sections.delete(id);
+          if (this.sections.get(id) === section) {
+            this.sections.delete(id);
+            this.optionalSections.delete(id);
+          }
         };
       },
     };
@@ -367,9 +373,10 @@ export class AppHost implements App {
   // ---------- Registries ----------
 
   /** The registered prompt sections for one request, joined (failures are logged and left out). */
-  promptFor(info: { cwd: string; mode: PermissionMode; sessionId: string }): string {
+  promptFor(info: { cwd: string; mode: PermissionMode; sessionId: string; essential?: boolean }): string {
     const out: string[] = [];
     for (const [id, fn] of this.sections) {
+      if (info.essential && this.optionalSections.has(id)) continue;
       try {
         const text = fn(info);
         if (typeof text === 'string' && text.trim()) out.push(text.trim());

@@ -845,7 +845,7 @@ const resetHome = () => {
     f.host.picked = null;
     check('cancelled: layout unchanged', (await rpc(f, 'mods.chooseBackgroundImage')).backgroundImage === layout.backgroundImage);
     const lay = rpc(f, 'mods.setLayout', { railWidth: 5000, collapsed: ['beta/main', 'beta/main'], railOpen: false, junk: 1 });
-    check('setLayout validates and clamps', lay.railWidth === 720 && lay.collapsed.length === 1 && lay.railOpen === false && !('junk' in lay));
+    check('setLayout validates and clamps', lay.railWidth === 480 && lay.collapsed.length === 1 && lay.railOpen === false && !('junk' in lay));
     let layErr = '';
     try {
       checkLayout({ backgroundImage: '/etc/passwd' }, path.join(f.userData, 'backgrounds'));

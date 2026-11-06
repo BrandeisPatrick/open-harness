@@ -195,6 +195,8 @@ export interface ModTranscriptItem {
   /** tool: its arguments as JSON text */
   args?: string;
   ok?: boolean;
+  /** user: how many images were attached (the images themselves are not passed to mods) */
+  images?: number;
 }
 
 export interface OutputItem {

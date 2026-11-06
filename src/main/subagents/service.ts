@@ -241,13 +241,9 @@ export class Subagents {
     this.emit(sessionId, { type: 'session_changed', session: toMeta(s) });
   }
 
-  /**
-   * Hands an event to a session's stream (app.events listeners and the window) the way its agent would. The runtime
-   * has no public seam for an event that no run produced, so this reaches its dispatch; see the report.
-   */
+  /** Hands an event to a session's stream (app.events listeners and the window) the way its agent would. */
   private emit(sessionId: string, ev: AgentEvent): void {
-    const rt = this.app.runtime as unknown as { dispatch?: (id: string, ev: AgentEvent) => void };
-    if (typeof rt.dispatch === 'function') rt.dispatch.call(this.app.runtime, sessionId, ev);
+    this.app.runtime.emit(sessionId, ev);
   }
 
   /** The window's session list (mergedInto changed). */

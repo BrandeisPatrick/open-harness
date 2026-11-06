@@ -349,6 +349,14 @@ export class SessionRuntime {
     return l;
   }
 
+  /**
+   * Puts an event on a session's stream (app.events listeners, the window) when no run of that session produced it:
+   * a merge note appended between runs, for example.
+   */
+  emit(id: string, ev: AgentEvent): void {
+    this.dispatch(id, ev);
+  }
+
   /** Notes what the event changes in the session's LiveState and status, then hands it on. */
   private dispatch(id: string, ev: AgentEvent): void {
     const l = this.liveOf(id);

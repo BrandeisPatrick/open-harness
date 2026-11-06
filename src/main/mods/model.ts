@@ -113,7 +113,14 @@ export async function completeOnce(
       });
       return signal.aborted ? { text, stopped: true } : { text, usage };
     }
-    const { client, model } = makeClient(cfg);
+    let made: ReturnType<typeof makeClient>;
+    try {
+      made = makeClient(cfg);
+    } catch (err) {
+      // No key or no model chosen: nothing to call yet, which is not the provider failing.
+      throw new ModelCallError(err instanceof Error ? err.message : String(err), 4004);
+    }
+    const { client, model } = made;
     let usage: { promptTokens: number; completionTokens: number } | undefined;
     const run = async (includeUsage: boolean) => {
       const stream = await client.chat.completions.create(

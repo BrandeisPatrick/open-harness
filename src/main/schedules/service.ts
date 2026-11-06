@@ -117,6 +117,15 @@ export function createScheduler(app: App, opts: SchedulerOptions = {}): Schedule
   };
 
   /** Sends one run, or records why it could not (skipped, session gone, send refused) in lastStatus. */
+  /** The session the window shows, when there is one. */
+  const onScreen = (): string | undefined => {
+    try {
+      return app.runtime.foregroundId() || undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
   function fire(s: Schedule, at: number): void {
     if (going(s)) {
       s.lastStatus = 'skipped';
@@ -197,7 +206,9 @@ export function createScheduler(app: App, opts: SchedulerOptions = {}): Schedule
     const when = normalizeWhen(input.when, t);
     const target = input.target ?? (isRecurring(when) ? 'new' : 'session');
     if (target !== 'new' && target !== 'session') throw new ScheduleError('bad_input', `target must be "new" or "session", not "${target}".`);
-    if (target === 'session' && !input.sessionId) throw new ScheduleError('bad_input', 'a schedule that runs in an existing session needs that session.');
+    // No session named: the one on screen (a mod without session access, or the window, cannot always name it).
+    const sessionId = target === 'session' ? input.sessionId || onScreen() : undefined;
+    if (target === 'session' && !sessionId) throw new ScheduleError('bad_input', 'a schedule that runs in an existing session needs that session.');
     const enabled = input.enabled !== false;
     return {
       id: newId(),
@@ -205,7 +216,7 @@ export function createScheduler(app: App, opts: SchedulerOptions = {}): Schedule
       prompt,
       when,
       target,
-      ...(target === 'session' ? { sessionId: input.sessionId } : {}),
+      ...(target === 'session' ? { sessionId } : {}),
       cwd: input.cwd || app.config().workingDirectory,
       enabled,
       createdAt: t,
@@ -231,6 +242,7 @@ export function createScheduler(app: App, opts: SchedulerOptions = {}): Schedule
       next.target = patch.target;
     }
     if (patch.sessionId !== undefined) next.sessionId = patch.sessionId;
+    if (next.target === 'session' && !next.sessionId) next.sessionId = onScreen();
     if (next.target === 'session' && !next.sessionId) throw new ScheduleError('bad_input', 'a schedule that runs in an existing session needs that session.');
     if (next.target === 'new') delete next.sessionId;
     const whenChanged = patch.when !== undefined;

@@ -40,6 +40,7 @@ export interface ScheduleInput {
   prompt: string;
   when: ScheduleWhen;
   target?: 'new' | 'session';
+  /** With target 'session' and no id: the session on screen */
   sessionId?: string;
   cwd?: string;
   enabled?: boolean;

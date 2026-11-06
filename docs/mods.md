@@ -95,7 +95,7 @@ A view is one HTML page in one seat.
 | Seat | Where | Notes |
 | --- | --- | --- |
 | `rail` | a section in the right-hand rail, between the chat and the side pane | sized to its content up to `maxHeight` (default 360); `order` sorts sections, lower first (bundled ones use 10 to 90); the user can collapse a section |
-| `tab` | a tab in the side pane, next to Browser, Diff and Terminal | fills the pane |
+| `tab` | a tab in the side pane, next to Browser, Diff and Terminal | fills the pane; it is not sized to its content, so make the page `height: 100%` and scroll inside it (the `--h-inset-*` padding is for rail sections) |
 | `composer` | a strip directly above the composer | one row, sized to its content up to 120 px |
 | `background` | behind the whole window | takes no clicks; only one background is active, chosen in Settings → Mods; the app's surfaces turn translucent over it |
 
@@ -173,7 +173,7 @@ Rail and composer views are sized to their content automatically. Keep them comp
 | `harness.storage.get(key, fallback)`, `.set(key, value)`, `.remove(key)`, `.keys()` | this mod's own JSON storage, kept across sessions; `get` resolves with the value (or `fallback` when nothing is stored), `keys` with an array; `harness.storage.session` is the same per session. A value may be up to 256 KB, a mod's storage 5 MB |
 | `harness.settings.get()` | the values of the mod's settings; event `settings.changed` |
 
-Events: `theme.changed`, `settings.changed`, `visibility.changed` `{ visible }`, `command` `{ name, args }`, and `session.switched` `{ id }` when another session comes on screen (it carries nothing but the id, so a view without `session:read` can still reset itself).
+Events: `theme.changed`, `settings.changed`, `visibility.changed` `{ visible }`, `command` `{ name, args }`, and `session.switched` `{ id }` when another session comes on screen (it carries nothing but the id, so a view without `session:read` can still reset itself). When it arrives, `harness.storage.session` and every `harness.session.*` call already refer to the new session.
 
 ### session:read
 
@@ -206,7 +206,7 @@ Events: `session.changed` (another session came on screen, or this one's title o
 
 ### model
 
-`harness.model.complete({ messages, system, maxTokens, context }, onDelta)` → `{ text, usage }`. One reply from the configured model, with no tools. `messages` is `[{ role: 'user' | 'assistant', content }]`; `context: 'session'` puts the open session's conversation in front of them (read-only: nothing is added to the session); `onDelta(text)` receives the reply as it streams. `harness.model.cancel()` stops the call in progress, which then resolves with what had arrived and `stopped: true`. This spends tokens, which the permission says when the mod is turned on.
+`harness.model.complete({ messages, system, maxTokens, context }, onDelta)` → `{ text, usage }`. One reply from the configured model, with no tools. `messages` is `[{ role: 'user' | 'assistant', content }]`; `context: 'session'` puts the open session's conversation in front of them (read-only: nothing is added to the session); `onDelta(text)` receives the reply as it streams. `harness.model.cancel()` stops the call in progress, which then resolves with what had arrived and `stopped: true`. When no key or model is set up the call rejects with `unavailable`; when the provider cannot be reached or refuses, with `error` and the provider's message; after two minutes, with `timeout`. A mod may have two calls in flight. This spends tokens, which the permission says when the mod is turned on.
 
 ### skills:read
 
@@ -214,13 +214,13 @@ Events: `session.changed` (another session came on screen, or this one's title o
 
 ### config:read and config:write
 
-`harness.config.get()` → `{ provider, model, workingDirectory, home, permissionMode, theme, autoCompact, compactThreshold, keepAwake, notifications, background, contextLimit }` (`workingDirectory` is the folder of the session on screen, `home` the user's home folder for showing paths as `~/…`). Keys and other secrets are never included. Event `config.changed`.
+`harness.config.get()` → `{ provider, model, workingDirectory, home, permissionMode, theme, autoCompact, compactThreshold, keepAwake, notifications, background, contextLimit }` (`workingDirectory` is the folder of the session on screen, `home` the user's home folder for showing paths as `~/…`). Keys and other secrets are never included. Event `config.changed`, which is also sent when `workingDirectory` changes because a session in another folder came on screen.
 
 `harness.config.set(patch)` changes `theme`, `autoCompact`, `compactThreshold`, `keepAwake`, `notifications` or `background`, and nothing else (any other key is refused as bad params): a mod cannot change the permission mode, the provider, or what is trusted.
 
 ### schedules
 
-`harness.schedules.list()`, `.create(input)`, `.update(id, patch)`, `.remove(id)`, `.runNow(id)`; event `schedules.changed`.
+`harness.schedules.list()`, `.create(input)`, `.update(id, patch)`, `.remove(id)`, `.runNow(id)`; event `schedules.changed`. A schedule with `target: 'session'` and no `sessionId` runs in the session on screen when it is created.
 
 ### remote
 

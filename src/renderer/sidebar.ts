@@ -174,8 +174,8 @@ export function createSidebar(d: SidebarDeps): SidebarView {
     return fake ? { ...d.status(id), ...fake } : d.status(id);
   };
 
-  /** Which optional methods this build has (null until probed) */
-  const has = { search: null as boolean | null, export: false, merge: false };
+  /** What the menus and the search can offer (search: null until the first query has been tried) */
+  const has = { search: null as boolean | null, export: false, merge: true };
   let rename: { id: string; value: string; fresh: boolean } | null = null;
   let menuFor = '';
   let rows: Row[] = [];
@@ -718,7 +718,6 @@ export function createSidebar(d: SidebarDeps): SidebarView {
   void probe(() => rpc('schedules.list')).then((ok) => (scheduledRow.hidden = !ok));
   void probe(() => rpc('mods.list')).then((ok) => (customizeRow.hidden = !ok));
   void probe(() => rpc('history.stats')).then((ok) => (has.export = ok));
-  void probe(() => rpc('sessions.related', '\u0000probe')).then((ok) => (has.merge = ok));
 
   // A session brought on screen (a fork from the menu, a notification, a search result) is shown where it sits; the
   // first one at start-up is not, so a collapsed family stays collapsed across launches.

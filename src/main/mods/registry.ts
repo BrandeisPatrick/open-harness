@@ -14,6 +14,9 @@ const REV_MAX_DEPTH = 12;
 const DEBOUNCE_MS = 150;
 const MISSING_ROOT_POLL_MS = 1500;
 
+/** A path inside an asar archive (the packaged app's own files) */
+const inArchive = (dir: string): boolean => /\.asar(?:[\\/]|$)/.test(dir);
+
 export interface RegistryOptions {
   /** <appRoot>/mods */
   bundledRoot: string;
@@ -104,6 +107,8 @@ export class ModRegistry {
   private offered = new Set<string>();
   private scanned = false;
   private watchers = new Map<string, fs.FSWatcher>();
+  /** Roots whose watch failed and was reported: the poll keeps trying them, without saying so again */
+  private unwatched = new Set<string>();
   private poll: NodeJS.Timeout | null = null;
   private timer: NodeJS.Timeout | null = null;
   private watching = false;
@@ -317,7 +322,8 @@ export class ModRegistry {
 
   private attachMissing(): void {
     for (const { dir } of this.roots()) {
-      if (this.watchers.has(dir)) continue;
+      // The built-in mods of a packaged app sit inside its archive: nothing there can be watched, and nothing changes.
+      if (this.watchers.has(dir) || inArchive(dir)) continue;
       try {
         if (!fs.statSync(dir).isDirectory()) continue;
       } catch {
@@ -325,6 +331,7 @@ export class ModRegistry {
       }
       try {
         const w = fs.watch(dir, { recursive: true }, () => this.changed());
+        this.unwatched.delete(dir);
         w.on('error', () => {
           w.close();
           if (this.watchers.get(dir) === w) this.watchers.delete(dir);
@@ -333,7 +340,8 @@ export class ModRegistry {
         this.watchers.set(dir, w);
         this.changed(); // it just appeared (or was re-created): its contents count as a change
       } catch (err) {
-        console.warn('[mods] cannot watch', dir, err);
+        if (!this.unwatched.has(dir)) console.warn('[mods] cannot watch', dir, err);
+        this.unwatched.add(dir);
       }
     }
   }

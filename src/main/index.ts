@@ -24,14 +24,15 @@ import { setupPower } from './power';
 
 // The app has been renamed (OpenCoder, then OpenAgent, now Open Harness): on the first launch under a new name the
 // old data folder (settings, sessions, history, artifacts, …) is carried over so nothing is lost. Runs before
-// anything reads the data folder.
+// anything reads the data folder. config.json goes last: it is what marks the old folder as holding data and the new
+// one as set up, so a carry-over that was cut short picks up where it stopped on the next launch.
 (function carryOverDataFolder(): void {
   const next = app.getPath('userData');
   if (fs.existsSync(path.join(next, 'config.json'))) return; // already set up under the new name
   const prev = ['OpenAgent', 'opencoder', 'OpenCoder'].map((n) => path.join(path.dirname(next), n)).find((p) => fs.existsSync(path.join(p, 'config.json')));
   if (!prev) return;
   fs.mkdirSync(next, { recursive: true });
-  for (const entry of ['config.json', 'sessions', 'artifacts', 'history', 'trash', 'schedules.json', 'skill-usage.json', 'mods-data', 'backgrounds', 'remote.json']) {
+  for (const entry of ['sessions', 'artifacts', 'history', 'trash', 'schedules.json', 'skill-usage.json', 'mods-data', 'backgrounds', 'remote.json', 'config.json']) {
     const from = path.join(prev, entry);
     const to = path.join(next, entry);
     if (!fs.existsSync(from) || fs.existsSync(to)) continue;

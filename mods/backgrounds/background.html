@@ -18,7 +18,7 @@
   // One page for the four views of this mod: the view id (harness.info.view.id) picks what is drawn.
   //
   // What keeps it cheap: at most 30 frames a second (each kind sets its own, lower rate: 10 for aurora, whose fields
-  // move a fraction of a pixel a frame, 15 for the others), a timer between frames rather
+  // move a fraction of a pixel a frame, 12 for the others, which drift a few pixels a second), a timer between frames rather
   // than a requestAnimationFrame loop that wakes on every display refresh, a canvas at no more than 1.5 device pixels
   // (aurora draws at a quarter of the window's size: soft colour needs no resolution), nothing at all while the window
   // or the view is hidden, and one still frame when the system asks for reduced motion. Dusk is a CSS gradient and
@@ -144,7 +144,7 @@
 
     // Sparse points, faint lines between near neighbours, all drifting a few pixels a second.
     constellation: {
-      fps: 15,
+      fps: 12,
       maxScale: 1.5,
       wash: true,
       setup() {
@@ -198,7 +198,7 @@
 
     // A quiet dot grid; a soft crest rolls across it diagonally and lifts the dots it passes.
     grid: {
-      fps: 15,
+      fps: 12,
       maxScale: 1.5,
       wash: true,
       setup() {},

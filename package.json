@@ -47,6 +47,7 @@
       "skills/**",
       "remote/**",
       "modkit/**",
+      "!modkit/playground/**",
       "mods/**",
       "package.json"
     ],

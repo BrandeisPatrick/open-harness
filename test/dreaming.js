@@ -13,7 +13,7 @@ const { setupSubagents } = require(path.join(projectDir, 'dist/main/subagents.js
 const { setupDreaming, latestOccurrence, nextOccurrence } = require(path.join(projectDir, 'dist/main/dreaming.js'));
 const { buildDigest, sessionTurns, CLIP, tokensOf } = require(path.join(projectDir, 'dist/main/dreaming/digest.js'));
 const { PROPOSAL_TOOLS, PROPOSAL_ID_RE } = require(path.join(projectDir, 'dist/main/dreaming/names.js'));
-const { secretIn, memoryAfter } = require(path.join(projectDir, 'dist/main/dreaming/apply.js'));
+const { secretIn, memoryAfter, allowedTarget } = require(path.join(projectDir, 'dist/main/dreaming/apply.js'));
 const { normalizeDreaming } = require(path.join(projectDir, 'dist/main/config.js'));
 const { parseSkill } = require(path.join(projectDir, 'dist/main/skills.js'));
 const { toTranscript } = require(path.join(projectDir, 'dist/main/sessions.js'));
@@ -423,6 +423,26 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
   check('11: state in its own file under userData', saved.version === 1 && Array.isArray(saved.dreams) && typeof saved.cursors[proj] === 'number');
   check('11: no temp files left', !fs.readdirSync(userData).some((f) => f.startsWith('dreaming.json.tmp')));
+
+  // ---- 12: a dream does not write through a link that leaves the project or the config folder ----
+  {
+    const elsewhere = path.join(tmp, 'elsewhere');
+    fs.mkdirSync(path.join(elsewhere, 'victim'), { recursive: true });
+    fs.writeFileSync(path.join(elsewhere, 'rc'), 'export A=1\n');
+    const linked = path.join(tmp, 'linked-project');
+    fs.mkdirSync(path.join(linked, '.open-harness'), { recursive: true });
+    fs.symlinkSync(elsewhere, path.join(linked, '.open-harness', 'mods'));
+    fs.symlinkSync(path.join(elsewhere, 'rc'), path.join(linked, 'AGENTS.md'));
+    fs.mkdirSync(path.join(linked, 'docs'));
+    fs.writeFileSync(path.join(linked, 'docs', 'CLAUDE.md'), '- a line\n');
+    fs.symlinkSync(path.join(linked, 'docs', 'CLAUDE.md'), path.join(linked, 'CLAUDE.md'));
+    const roots = { cwd: linked, configDir: home, appRoot: projectDir };
+    check('12: a mod folder that is a link out of the project is refused', !allowedTarget(path.join(linked, '.open-harness', 'mods', 'victim'), roots) && !allowedTarget(path.join(linked, '.open-harness', 'mods', 'new-mod', 'mod.json'), roots));
+    check('12: an instructions file that is a link out of the project is refused', !allowedTarget(path.join(linked, 'AGENTS.md'), roots));
+    check('12: a link that stays inside the project is fine', allowedTarget(path.join(linked, 'CLAUDE.md'), roots));
+    check('12: ordinary targets are allowed, existing or not', allowedTarget(path.join(linked, '.open-harness', 'skills', 'new-skill', 'SKILL.md'), roots) && allowedTarget(path.join(home, 'skills', 'x', 'SKILL.md'), roots) && allowedTarget(path.join(linked, 'OPENHARNESS.md'), roots));
+    check('12: anything else is refused', !allowedTarget(path.join(linked, 'src', 'index.js'), roots) && !allowedTarget(path.join(home, 'settings.json'), roots) && !allowedTarget(path.join(linked, '.open-harness', 'mods'), roots));
+  }
   svc.dispose();
   done();
 })().catch((err) => {

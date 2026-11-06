@@ -46,13 +46,35 @@ export function instructionsFile(scope: ProposalScope, r: Roots): { path: string
   return { path: path.join(r.cwd, name), label: name };
 }
 
-/** Whether `target` is somewhere a proposal may write: inside a skill or mod folder, or one of the instructions files. */
+/** Where a path really is once links are followed: its deepest existing ancestor resolved, plus what does not exist yet. */
+function realPath(p: string): string {
+  let cur = path.resolve(p);
+  const rest: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(cur), ...rest);
+    } catch {
+      const up = path.dirname(cur);
+      if (up === cur) return path.resolve(p);
+      rest.unshift(path.basename(cur));
+      cur = up;
+    }
+  }
+}
+
+/**
+ * Whether `target` is somewhere a proposal may write: inside a skill or mod folder, or one of the instructions files,
+ * and really there. A project can ship `.open-harness/mods` or its instructions file as a link to anywhere on the
+ * disk; a dream does not write (or delete) through one that leaves the project, or the config folder for the user's.
+ */
 export function allowedTarget(target: string, r: Roots): boolean {
   const abs = path.resolve(target);
   const dirs = [skillsDir('project', r), skillsDir('user', r), modsDir('project', r), modsDir('user', r)].map((d) => path.resolve(d));
-  if (dirs.some((d) => abs !== d && isInside(d, abs))) return true;
   const files = [...INSTRUCTION_FILES.map((n) => path.join(r.cwd, n)), path.join(r.configDir, 'OPENHARNESS.md')].map((f) => path.resolve(f));
-  return files.includes(abs);
+  if (!dirs.some((d) => abs !== d && isInside(d, abs)) && !files.includes(abs)) return false;
+  const config = path.resolve(r.configDir);
+  const root = isInside(config, abs) ? config : path.resolve(r.cwd);
+  return isInside(realPath(root), realPath(abs));
 }
 
 function isFile(p: string): boolean {

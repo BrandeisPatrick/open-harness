@@ -53,7 +53,7 @@ Save the two files, turn the mod on in Settings → Mods (or on the card that ap
 
 | Scope | Folder | Starts |
 | --- | --- | --- |
-| bundled | `mods/` inside the app | on (you can turn one off) |
+| bundled | `mods/` inside the app | on (you can turn one off); a bundled mod that restyles the app (a theme, the compact chat bar) starts off |
 | user | `~/.openagent/mods/<id>/` | off until you turn it on once |
 | project | `<project>/.openagent/mods/<id>/` | off until you turn it on for that project |
 

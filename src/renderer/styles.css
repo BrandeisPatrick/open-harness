@@ -167,7 +167,7 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
-::selection { background: rgba(217, 119, 87, 0.25); }
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
 button, input, textarea, select { font: inherit; color: inherit; letter-spacing: inherit; }
 button { background: none; border: none; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
 button:disabled { cursor: default; }
@@ -645,7 +645,7 @@ img.shot { display: block; max-width: 100%; border-radius: var(--r-card); border
 .chip.bypass { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
 .chip.auto .chev, .chip.plan .chev, .chip.bypass .chev { color: inherit; opacity: 0.7; }
 .chip:active { background: var(--pressed); }
-.chip.auto:hover, .chip.auto[aria-expanded="true"] { background: rgba(217, 119, 87, 0.2); color: var(--accent); }
+.chip.auto:hover, .chip.auto[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
 .chip.plan:hover, .chip.plan[aria-expanded="true"] { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
 .chip.bypass:hover, .chip.bypass[aria-expanded="true"] { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
 .send {

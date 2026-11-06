@@ -196,6 +196,7 @@
 
   var running = []; // requestIds of model.complete calls in progress
   var deltaRoutes = {};
+  var deltaOff = null; // one model.delta subscription shared by every call in progress
   function routeDelta(d) {
     if (d && deltaRoutes[d.requestId]) deltaRoutes[d.requestId](d.text);
   }
@@ -209,12 +210,12 @@
       try { onDelta(text); } catch (e) { report(e); }
     };
     running.push(id);
-    var off = on('model.delta', routeDelta);
+    if (!deltaOff) deltaOff = on('model.delta', routeDelta);
     function done() {
       delete deltaRoutes[id];
       var i = running.indexOf(id);
       if (i >= 0) running.splice(i, 1);
-      off();
+      if (!running.length && deltaOff) { deltaOff(); deltaOff = null; }
     }
     return call('model.complete', request, { noTimeout: true }).then(
       function (r) { done(); return r; },
@@ -353,7 +354,8 @@
   });
   window.addEventListener('unhandledrejection', function (ev) {
     var r = ev && ev.reason;
-    report(r instanceof Error ? r : new Error('Unhandled rejection: ' + (r && r.message ? r.message : String(r))));
+    var isError = r && typeof r === 'object' && typeof r.message === 'string' && typeof r.stack === 'string';
+    report(isError ? r : new Error('Unhandled rejection: ' + (r && r.message ? r.message : String(r))));
   });
 
   // Theme follows the app from the first moment: subscribe before hello resolves (the call waits for it).

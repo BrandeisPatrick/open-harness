@@ -2,7 +2,7 @@
 // (Interface only for now; the core refactor on the runtime-refactor branch provides the implementation.)
 
 import type { BrowserWindow } from 'electron';
-import type { AgentEvent, AppConfig, CommandInfo, CommandResult, ImageAttachment, LiveState, MessageOrigin, PermissionMode, SendResult, SessionMeta, SessionOrigin, SessionStatus } from '../shared/types';
+import type { AgentEvent, AppConfig, ApprovalScope, CommandInfo, CommandResult, ImageAttachment, LiveState, MessageOrigin, PermissionMode, SendResult, SessionMeta, SessionOrigin, SessionStatus } from '../shared/types';
 import type { RpcEvents, RpcMethods } from '../shared/rpc';
 import type { Agent } from './agent';
 import type { Session, SessionStore } from './sessions';
@@ -26,6 +26,13 @@ export interface SessionRuntime {
   live(id: string): LiveState;
   /** Every session's meta, with its status */
   list(): SessionMeta[];
+  /**
+   * Answers an approval card, whichever session holds it, with everything the answer implies (a mode switch, a saved
+   * project rule). False when no session has that card any more.
+   */
+  respondApproval(id: string, ok: boolean, always?: boolean, scope?: ApprovalScope): boolean;
+  /** Decides a proposed plan of a session; the build decisions switch the permission mode and start the build run */
+  respondPlan(sessionId: string, planId: string, decision: 'build-ask' | 'build-acceptEdits' | 'keep'): void;
 }
 
 export interface App {

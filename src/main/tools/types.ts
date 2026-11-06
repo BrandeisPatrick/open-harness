@@ -3,6 +3,7 @@ import type { ArtifactInput } from '../artifacts';
 import type { BrowserController } from '../browser';
 import type { Skill } from '../skills';
 import type { TerminalManager } from '../terminal';
+import type { App } from '../app';
 
 /** Outcome of asking for permission: denied actions carry the message the model should read. */
 export type ApprovalResult = { ok: true } | { ok: false; message: string };
@@ -19,7 +20,12 @@ export interface ToolContext {
    * Ask for permission to run a side-effecting action. `detail` is what the user sees (the command, or a preview
    * of the change); `target` is the absolute file path for write/edit tools so the guard can check it.
    */
-  approve(toolName: string, detail: string, target?: string): Promise<ApprovalResult>;
+  /**
+   * `opts.custom` is for actions that are neither a command nor an edit (creating a schedule, starting a sub-session):
+   * refused in plan mode, asked in ask / accept-edits / auto, and run in bypass unless `alwaysAsk`. Its card has only
+   * Allow and Deny.
+   */
+  approve(toolName: string, detail: string, target?: string, opts?: { custom?: boolean; alwaysAsk?: boolean }): Promise<ApprovalResult>;
   /** Call before changing a file so the Diff pane can show (and revert) the change */
   beforeChange(absPath: string): void;
   /** Plan mode: hand the proposed plan to the user */
@@ -30,6 +36,12 @@ export interface ToolContext {
   signal?: AbortSignal;
   /** update_tasks: replace the session's task list and show it */
   setTasks(tasks: TaskItem[]): void;
+  /** The session the tool runs in */
+  sessionId?: string;
+  /** The app container (absent in bare tests): how registered tools reach their feature's services */
+  app?: App;
+  /** Whether the session is the one on screen (the built-in browser belongs to that one) */
+  foreground?(): boolean;
 }
 
 export interface ToolResult {
@@ -45,6 +57,8 @@ export interface Tool {
   parameters: Record<string, unknown>;
   /** Set for tools an MCP server provides: which server, its own tool name and the annotations the approval rules use */
   mcp?: { server: string; scope: 'user' | 'project'; tool: string; readOnly: boolean; destructive: boolean };
+  /** A registered tool is offered in plan mode only when it changes nothing */
+  readOnly?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   run(args: any, ctx: ToolContext): Promise<ToolResult>;
 }

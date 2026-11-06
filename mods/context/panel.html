@@ -91,11 +91,8 @@
   }
   const colour = (key) => `var(--c-${/^(system|instructions|skills|tools|mcpTools|summary|messages|toolResults)$/.test(key) ? key : 'other'})`;
 
-  function compactable() {
-    if (!ctx) return false;
-    const body = (ctx.slices || []).filter((s) => s.key === 'messages' || s.key === 'toolResults').reduce((n, s) => n + (s.tokens || 0), 0);
-    return (ctx.messages || 0) >= 2 && body > 0;
-  }
+  // The app says whether compacting now could free anything (false while a run is going or for a short conversation)
+  const compactable = () => !!(ctx && ctx.compactable === true);
 
   function render() {
     const ok = !!(ctx && ctx.limit > 0);

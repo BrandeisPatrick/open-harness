@@ -569,6 +569,23 @@ async function readyPage(hello = HELLO) {
     }
   }
 
+  // --- the bundled mods follow the protocol as it now stands ------------------------------------------------
+  {
+    const src = (folder) => fs.readFileSync(path.join(ROOT, 'mods', folder, 'panel.html'), 'utf8');
+    const skills = src('skills');
+    check('skills: follows session.switched instead of polling', /harness\.on\('session\.switched'/.test(skills) && !/setInterval/.test(skills));
+    const sub = src('sub-sessions');
+    check('sub-sessions: follows related.changed instead of the 4-second poll', /harness\.on\('related\.changed'/.test(sub) && !/setTimeout\(load/.test(sub) && !/setInterval/.test(sub));
+    check('sub-sessions: still refreshes once on visibility.changed', /harness\.on\('visibility\.changed'/.test(sub));
+    const ctx = src('context');
+    check('context: Compact now uses compactable from the app', /ctx\.compactable/.test(ctx) && !/key === 'messages' \|\| s\.key === 'toolResults'/.test(ctx));
+    const env = src('environment');
+    check('environment: shortens paths with home from config.get', /config\.home/.test(env) && !/\\\/Users\\\//.test(env));
+    check('environment: reads the config again when the session switches', /harness\.on\('session\.switched'/.test(env));
+    const tasks = src('tasks');
+    check('tasks: no paused spinner; a still half-filled circle when no run is going', !/paused/.test(tasks) && /running \? '<span class="h-spin sm"><\/span>' : ICON\.half/.test(tasks));
+  }
+
   // --- the manifest rules themselves -----------------------------------------------------------------------
   {
     const good = { protocol: 1, id: 'word-count', name: 'Word count', version: '0.1.0', permissions: ['session:read'], contributes: { views: [{ id: 'main', title: 'W', entry: 'panel.html', seat: 'rail' }] } };

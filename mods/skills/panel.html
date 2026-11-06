@@ -89,10 +89,9 @@
   }));
 
   harness.on('skills.used', () => loadUsage());
-  // skills:read alone does not receive session.changed, so "This session" catches up when the panel is shown again
-  // and every 15 s while it is the scope on screen.
+  // session.switched needs no permission, so "This session" follows the user to another session without session:read
+  harness.on('session.switched', () => { if (scope === 'session') loadUsage(); });
   harness.on('visibility.changed', (v) => { if (v && v.visible) loadUsage(); });
-  setInterval(() => { if (scope === 'session' && !document.hidden) loadUsage(); }, 15000);
   harness.ready.then(async () => {
     scope = (await harness.storage.get('scope', 'session')) === 'all' ? 'all' : 'session';
     load();

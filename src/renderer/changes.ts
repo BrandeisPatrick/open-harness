@@ -189,7 +189,7 @@ export function createChangesPane(o: ChangesPaneOptions): ChangesPane {
     const api = o.source();
     const token = ++listToken;
     if (!api) {
-      unavailable = 'Change tracking needs the updated app. Restart Open Harness to turn it on.';
+      unavailable = 'Change tracking needs the updated app. Restart Silo Harness to turn it on.';
       entries = [];
       setCount(0);
       renderList();

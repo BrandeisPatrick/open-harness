@@ -1,0 +1,439 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://brandeispatrick.github.io/silo-harness/settings.schema.json",
+  "title": "Silo Harness settings.json",
+  "description": "Settings for Silo Harness: ~/.silo-harness/settings.json (yours) and <project>/.silo-harness/settings.json (a project's, applied once you trust it). See https://github.com/BrandeisPatrick/silo-harness/blob/main/docs/configure.md",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The schema this file follows (for editors)."
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variables set for the app before the rest of the file is read; keys can live here.",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "workingDirectory": {
+      "type": "string",
+      "description": "Your own settings.json only: the folder the app opens in."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The provider in use: \"ollama\", \"portkey\", or the name of an entry in \"providers\"."
+    },
+    "permissionMode": {
+      "type": "string",
+      "enum": [
+        "ask",
+        "acceptEdits",
+        "auto",
+        "plan",
+        "bypass"
+      ],
+      "description": "The permission mode a session starts in."
+    },
+    "maxTurns": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How many tool calls one request may make before it stops and asks you to continue."
+    },
+    "sendScreenshotsToModel": {
+      "type": "boolean",
+      "description": "Attach browser screenshots to the conversation as images (needs a vision model)."
+    },
+    "systemPromptExtra": {
+      "type": "string",
+      "description": "Added to every request: house rules, coding style, project context."
+    },
+    "theme": {
+      "type": "string",
+      "enum": [
+        "system",
+        "light",
+        "dark"
+      ],
+      "description": "The window theme."
+    },
+    "autoTitles": {
+      "type": "boolean",
+      "description": "Name a session from its first exchange."
+    },
+    "autoCompact": {
+      "type": "boolean",
+      "description": "Summarise the conversation on its own when it nears the context window."
+    },
+    "compactThreshold": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 0.95,
+      "description": "How full the context window gets before the conversation is summarised."
+    },
+    "pruneToolResults": {
+      "type": "boolean",
+      "description": "Before summarising, shorten old tool results."
+    },
+    "notifications": {
+      "type": "boolean",
+      "description": "Notify when a run finishes or needs approval while the app is in the background."
+    },
+    "keepAwake": {
+      "type": "string",
+      "enum": [
+        "off",
+        "running",
+        "always"
+      ],
+      "description": "Keep the Mac awake: never, while a session runs, or whenever the app is open."
+    },
+    "toolSet": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "all",
+        "essential"
+      ],
+      "description": "Which tools the model is offered."
+    },
+    "toolActivity": {
+      "type": "string",
+      "enum": [
+        "summary",
+        "all"
+      ],
+      "description": "Fold each run of tool calls into one line, or show every call."
+    },
+    "historyTrashDays": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Days a deleted session stays in the trash."
+    },
+    "ollama": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseURL": {
+          "type": "string",
+          "description": "The Ollama server's OpenAI-compatible endpoint, e.g. http://localhost:11434/v1."
+        },
+        "model": {
+          "type": "string",
+          "description": "The Ollama model tag, e.g. qwen3:8b."
+        },
+        "numCtx": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Tokens of context Ollama is asked for (num_ctx)."
+        },
+        "think": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "description": "Thinking mode for models that can reason."
+        }
+      }
+    },
+    "portkey": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseURL": {
+          "type": "string",
+          "description": "The gateway endpoint (Portkey, or any OpenAI-compatible gateway). Not allowed in a project file."
+        },
+        "apiKey": {
+          "type": "string",
+          "description": "The gateway key (x-portkey-api-key); falls back to PORTKEY_API_KEY. Not allowed in a project file."
+        },
+        "model": {
+          "type": "string",
+          "description": "The model id, e.g. @openai/gpt-4o-mini."
+        },
+        "virtualKey": {
+          "type": "string",
+          "description": "x-portkey-virtual-key"
+        },
+        "provider": {
+          "type": "string",
+          "description": "x-portkey-provider"
+        },
+        "providerApiKey": {
+          "type": "string",
+          "description": "The upstream provider's key, sent as Authorization: Bearer. Not allowed in a project file."
+        },
+        "configId": {
+          "type": "string",
+          "description": "x-portkey-config"
+        },
+        "contextWindow": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The model's context window in tokens."
+        }
+      }
+    },
+    "dreaming": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "daily": {
+          "type": "boolean",
+          "description": "Dream once a day."
+        },
+        "time": {
+          "type": "string",
+          "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d$",
+          "description": "When, as \"HH:MM\" (24-hour)."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "approve",
+            "plan"
+          ],
+          "description": "How suggestions are applied."
+        },
+        "skills": {
+          "type": "boolean",
+          "description": "Look for skills."
+        },
+        "mods": {
+          "type": "boolean",
+          "description": "Look for mods."
+        },
+        "memory": {
+          "type": "boolean",
+          "description": "Look for memory lines."
+        }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "description": "Named providers. \"provider\" selects one by its name. The names \"ollama\" and \"portkey\" are taken by the built-in blocks.",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,47}$",
+        "not": {
+          "enum": [
+            "ollama",
+            "portkey"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "openrouter",
+              "portkey",
+              "openai",
+              "anthropic",
+              "groq",
+              "deepseek",
+              "together",
+              "ollama",
+              "lmstudio",
+              "openai-compatible"
+            ],
+            "description": "The kind of service. Each type knows its base URL, its usual key variable and any headers."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "How the window names it (default: the type's name)."
+          },
+          "baseURL": {
+            "type": "string",
+            "pattern": "^https?://",
+            "description": "The OpenAI-compatible endpoint; overrides the type's. Required for openai-compatible. In a project's settings.json only for services that take no key (ollama, lmstudio, or openai-compatible without a key)."
+          },
+          "apiKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The key itself. Only in your own settings.json or config.json, never in a project's file; prefer apiKeyEnv."
+          },
+          "apiKeyEnv": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "description": "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY. Ignored in a project's settings.json, which may not choose whose key is sent."
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The model to run, as the service names it."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Models to offer in the model picker."
+          },
+          "headers": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Extra request headers; ${VAR} is expanded in the values (not in a project's settings.json)."
+          },
+          "contextWindow": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The model's context window in tokens (default 128000); drives the context meter and auto-compaction."
+          },
+          "maxOutput": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Most tokens one reply may have, sent as max_tokens (default: the service decides)."
+          },
+          "virtualKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "portkey: a virtual key (x-portkey-virtual-key)."
+          },
+          "config": {
+            "type": "string",
+            "minLength": 1,
+            "description": "portkey: a config id for routing, fallbacks and caching (x-portkey-config)."
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "description": "portkey: a provider slug (x-portkey-provider), e.g. openai."
+          },
+          "numCtx": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "ollama: the context size asked for (num_ctx)."
+          },
+          "think": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "on",
+              "off"
+            ],
+            "description": "ollama: thinking mode for models that can reason."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "openai-compatible"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "type",
+                "baseURL"
+              ]
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "virtualKey"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "portkey"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "config"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "portkey"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "provider"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "portkey"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "numCtx"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "ollama"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "think"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "ollama"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

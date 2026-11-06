@@ -297,25 +297,25 @@ export function agentApproval(name: string, detail: string): AgentApproval | nul
   switch (name) {
     case 'session_spawn': {
       const t = named(/^Start sub-session "(.*)"$/);
-      return { title: t ? `Allow Open Harness to start the sub-session ${quote(t)}?` : 'Allow Open Harness to start a sub-session?', subject: t ? `start sub-session ${quote(short(t, 60))}` : 'start a sub-session', icon: 'sub-session' };
+      return { title: t ? `Allow Silo Harness to start the sub-session ${quote(t)}?` : 'Allow Silo Harness to start a sub-session?', subject: t ? `start sub-session ${quote(short(t, 60))}` : 'start a sub-session', icon: 'sub-session' };
     }
     case 'session_send': {
       const t = named(/^Send to session "(.*)" \([^()]+\):$/);
-      return { title: t ? `Allow Open Harness to send a message to ${quote(t)}?` : 'Allow Open Harness to send a message to another session?', subject: t ? `message ${quote(short(t, 60))}` : 'send a message', icon: 'message' };
+      return { title: t ? `Allow Silo Harness to send a message to ${quote(t)}?` : 'Allow Silo Harness to send a message to another session?', subject: t ? `message ${quote(short(t, 60))}` : 'send a message', icon: 'message' };
     }
     case 'session_merge': {
-      return { title: 'Allow Open Harness to merge this session?', subject: 'merge a session', icon: 'git-merge' };
+      return { title: 'Allow Silo Harness to merge this session?', subject: 'merge a session', icon: 'git-merge' };
     }
     case 'schedule_create': {
       const t = named(/^Create schedule "(.*)"$/);
-      return { title: t ? `Allow Open Harness to schedule ${quote(t)}?` : 'Allow Open Harness to create a schedule?', subject: t ? `schedule ${quote(short(t, 60))}` : 'create a schedule', icon: 'clock' };
+      return { title: t ? `Allow Silo Harness to schedule ${quote(t)}?` : 'Allow Silo Harness to create a schedule?', subject: t ? `schedule ${quote(short(t, 60))}` : 'create a schedule', icon: 'clock' };
     }
     case 'schedule_update': {
       const t = named(/^Change schedule "(.*)" \([^()]+\)$/);
-      return { title: t ? `Allow Open Harness to change the schedule ${quote(t)}?` : 'Allow Open Harness to change a schedule?', subject: t ? `change schedule ${quote(short(t, 60))}` : 'change a schedule', icon: 'clock' };
+      return { title: t ? `Allow Silo Harness to change the schedule ${quote(t)}?` : 'Allow Silo Harness to change a schedule?', subject: t ? `change schedule ${quote(short(t, 60))}` : 'change a schedule', icon: 'clock' };
     }
     case 'schedule_delete':
-      return { title: 'Allow Open Harness to delete a schedule?', subject: 'delete a schedule', icon: 'trash' };
+      return { title: 'Allow Silo Harness to delete a schedule?', subject: 'delete a schedule', icon: 'trash' };
     default:
       return null;
   }

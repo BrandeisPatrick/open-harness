@@ -52,7 +52,7 @@ for (const { url } of refs) {
 check('every local href, src and srcset resolves to a file under docs/', missing.length === 0 && refs.length > 10, missing);
 const anchors = refs.filter((r) => r.url.startsWith('#') && r.url.length > 1).map((r) => r.url.slice(1));
 check('every in-page link names an id on the page', anchors.every((id) => new RegExp(`\\sid="${id}"`).test(html)), anchors);
-check('links to Markdown files go to their page on GitHub (Pages does not render them)', refs.filter((r) => /\.md(?:#|$)/.test(r.url)).every((r) => /^https:\/\/github\.com\/BrandeisPatrick\/open-harness\/blob\//.test(r.url)));
+check('links to Markdown files go to their page on GitHub (Pages does not render them)', refs.filter((r) => /\.md(?:#|$)/.test(r.url)).every((r) => /^https:\/\/github\.com\/BrandeisPatrick\/silo-harness\/blob\//.test(r.url)));
 check('docs/.nojekyll is there', fs.existsSync(path.join(DOCS, '.nojekyll')));
 
 // ---- pictures ----

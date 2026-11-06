@@ -30,7 +30,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const mock = await startMock();
   const { state } = mock;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-history-'));
-  process.env.OPEN_HARNESS_CONFIG_DIR = path.join(tmp, 'home-config');
+  process.env.SILO_HARNESS_CONFIG_DIR = path.join(tmp, 'home-config');
   const project = path.join(tmp, 'project');
   fs.mkdirSync(project);
   const baseConfig = {

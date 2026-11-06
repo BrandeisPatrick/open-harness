@@ -9,11 +9,17 @@ function startMock() {
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       const payload = body ? JSON.parse(body) : {};
-      state.requests.push({ url: req.url, payload });
+      state.requests.push({ url: req.url, payload, headers: req.headers });
       const json = (status, obj) => {
         res.writeHead(status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(obj));
       };
+      // A service that checks its key: with `apiKey` set, the OpenAI-compatible routes want exactly that bearer token.
+      if (state.apiKey && req.url.startsWith('/v1/') && req.headers.authorization !== `Bearer ${state.apiKey}`) {
+        return json(401, { error: { message: 'Invalid API key (mock)', type: 'authentication_error' } });
+      }
+      // The models list most OpenAI-compatible services have (GET /v1/models)
+      if (req.url === '/v1/models' && req.method === 'GET') return json(200, { object: 'list', data: (state.models ?? ['mock-model']).map((id) => ({ id, object: 'model', created: 0, owned_by: 'mock' })) });
       if (req.url === '/api/show') return json(200, { capabilities: ['completion', 'tools'] });
       // The local models, for the model menu: whatever `ollamaModels` lists (none unless a test sets it)
       if (req.url === '/api/tags' && state.ollamaModels) return json(200, { models: state.ollamaModels.map((name) => ({ name, model: name })) });

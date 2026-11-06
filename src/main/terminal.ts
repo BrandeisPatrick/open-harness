@@ -93,28 +93,32 @@ function programName(command: string): string {
 }
 
 /** The zsh startup shim: runs the user's own startup files, then adds the prompt/command hooks. */
-const ZSHENV = `# Open Harness terminal: zsh startup shim. It loads your own startup files and adds shell integration
+// The variables carry the new names (SILO_HARNESS_…); the old ones (OPEN_HARNESS_…) are set alongside for one release,
+// for a user's startup file that reads them.
+const ZSHENV = `# Silo Harness terminal: zsh startup shim. It loads your own startup files and adds shell integration
 # (prompt and command markers) so the app can tell when a command finished. Nothing is stored here.
+SILO_HARNESS_ZDOTDIR="\${ZDOTDIR}"
 OPEN_HARNESS_ZDOTDIR="\${ZDOTDIR}"
-if [[ -f "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshenv" ]]; then
-  ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
-  . "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshenv"
+if [[ -f "\${SILO_HARNESS_USER_ZDOTDIR}/.zshenv" ]]; then
+  ZDOTDIR="\${SILO_HARNESS_USER_ZDOTDIR}"
+  . "\${SILO_HARNESS_USER_ZDOTDIR}/.zshenv"
+  SILO_HARNESS_USER_ZDOTDIR="\${ZDOTDIR}"
   OPEN_HARNESS_USER_ZDOTDIR="\${ZDOTDIR}"
-  ZDOTDIR="\${OPEN_HARNESS_ZDOTDIR}"
+  ZDOTDIR="\${SILO_HARNESS_ZDOTDIR}"
 fi
 `;
-const ZPROFILE = `if [[ -f "\${OPEN_HARNESS_USER_ZDOTDIR}/.zprofile" ]]; then
-  ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
-  . "\${OPEN_HARNESS_USER_ZDOTDIR}/.zprofile"
-  ZDOTDIR="\${OPEN_HARNESS_ZDOTDIR}"
+const ZPROFILE = `if [[ -f "\${SILO_HARNESS_USER_ZDOTDIR}/.zprofile" ]]; then
+  ZDOTDIR="\${SILO_HARNESS_USER_ZDOTDIR}"
+  . "\${SILO_HARNESS_USER_ZDOTDIR}/.zprofile"
+  ZDOTDIR="\${SILO_HARNESS_ZDOTDIR}"
 fi
 `;
-const ZSHRC = `if [[ -f "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshrc" ]]; then
-  ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
-  . "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshrc"
-  ZDOTDIR="\${OPEN_HARNESS_ZDOTDIR}"
+const ZSHRC = `if [[ -f "\${SILO_HARNESS_USER_ZDOTDIR}/.zshrc" ]]; then
+  ZDOTDIR="\${SILO_HARNESS_USER_ZDOTDIR}"
+  . "\${SILO_HARNESS_USER_ZDOTDIR}/.zshrc"
+  ZDOTDIR="\${SILO_HARNESS_ZDOTDIR}"
 fi
-if [[ -o interactive && "\${OPEN_HARNESS_TERMINAL}" == "1" ]]; then
+if [[ -o interactive && "\${SILO_HARNESS_TERMINAL:-\${OPEN_HARNESS_TERMINAL}}" == "1" ]]; then
   typeset -g __oc_ran=0
   __oc_preexec() {
     __oc_ran=1
@@ -134,7 +138,7 @@ if [[ -o interactive && "\${OPEN_HARNESS_TERMINAL}" == "1" ]]; then
   add-zsh-hook precmd __oc_precmd
 fi
 # Hand ZDOTDIR back so .zlogin and nested shells use your own files.
-ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
+ZDOTDIR="\${SILO_HARNESS_USER_ZDOTDIR}"
 `;
 
 export class TerminalManager extends EventEmitter {
@@ -309,13 +313,16 @@ export class TerminalManager extends EventEmitter {
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RUN_AS_NODE') env[k] = v;
     env.TERM = 'xterm-256color';
     env.COLORTERM = 'truecolor';
-    env.TERM_PROGRAM = 'Open Harness';
+    env.TERM_PROGRAM = 'Silo Harness';
+    // The new name, and the old one for one release (a startup file may test it)
+    env.SILO_HARNESS_TERMINAL = '1';
     env.OPEN_HARNESS_TERMINAL = '1';
     env.LANG ||= 'en_US.UTF-8';
     if (shell === 'zsh') {
       const dir = this.ensureShim();
-      env.OPEN_HARNESS_USER_ZDOTDIR = process.env.ZDOTDIR || os.homedir();
-      env.OPEN_HARNESS_ZDOTDIR = dir;
+      const user = process.env.ZDOTDIR || os.homedir();
+      env.SILO_HARNESS_USER_ZDOTDIR = env.OPEN_HARNESS_USER_ZDOTDIR = user;
+      env.SILO_HARNESS_ZDOTDIR = env.OPEN_HARNESS_ZDOTDIR = dir;
       env.ZDOTDIR = dir;
     }
     return env;

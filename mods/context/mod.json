@@ -4,7 +4,7 @@
   "name": "Context",
   "version": "1.0.0",
   "description": "What fills the context window, slice by slice, and a way to compact it.",
-  "author": "Open Harness",
+  "author": "Silo Harness",
   "license": "MIT",
   "icon": "gauge",
   "permissions": ["session:read", "session:control"],

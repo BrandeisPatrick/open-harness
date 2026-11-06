@@ -1,6 +1,6 @@
 # UX backlog: closing the gap to Claude Code desktop
 
-What Open Harness still lacks, or does differently, compared with the Claude Code desktop app's day-to-day experience.
+What Silo Harness still lacks, or does differently, compared with the Claude Code desktop app's day-to-day experience.
 Ordered by how often a user would feel the difference. Items are ticked off as they land; each entry says where.
 
 ## Planned releases
@@ -10,7 +10,7 @@ Decided with the user on 2026-11-06; the version rule is in [releasing.md](relea
 | Version | What | State |
 | --- | --- | --- |
 | 0.5.0 | The app in white and grey, like Claude Code: neutral surfaces in both schemes, every button white or grey, blue only where it carries meaning; the warm 0.4.0 palette kept as a "Paper" theme mod. The Mods page with its own tabs (Backgrounds, Chat bar, Conversation, Themes) | released 2026-11-06 |
-| 0.6.0 | Named providers (OpenRouter, Portkey, OpenAI, Anthropic, Ollama, LM Studio, any OpenAI-compatible endpoint) set from `settings.json`, with a JSON schema, a guide written for coding agents, and an `open-harness` command that adds, selects and tests a provider without the window | building |
+| 0.6.0 | Named providers (OpenRouter, Portkey, OpenAI, Anthropic, Ollama, LM Studio, any OpenAI-compatible endpoint) set from `settings.json`, with a JSON schema, a guide written for coding agents, and a `silo` command that adds, selects and tests a provider without the window. The release also brings the new name, Silo Harness: the config and data folders move on first launch, and the old folder, file and variable names are still read | released 2026-11-06 |
 | 0.7.0 | A liquid glass look (translucent, layered materials in the style of macOS 26) for the app and for the website. Reserved: the user said it is not important yet, so it waits until 0.5.0 and 0.6.0 are out | reserved |
 
 ## Done in earlier rounds
@@ -18,7 +18,7 @@ Decided with the user on 2026-11-06; the version rule is in [releasing.md](relea
 Sessions sidebar (day groups, search, rename, fork, delete, generated titles) · transcript with tool rows, diffs,
 thinking blocks, grouped reads · approval cards with keyboard answers and "allow for this session" · permission
 modes incl. plan mode with plan cards · Browser, Diff and Terminal panes · image paste, queued messages, artifacts ·
-MCP servers · context meter, auto-compaction and `/compact` · project instructions (OPENHARNESS.md / AGENTS.md / CLAUDE.md).
+MCP servers · context meter, auto-compaction and `/compact` · project instructions (SILOHARNESS.md / AGENTS.md / CLAUDE.md).
 
 ## Backlog
 
@@ -57,9 +57,9 @@ Out of scope: hosted features (cloud sessions, remote control), Anthropic-specif
 
 ## Tick 3 renderer spec (items 7–9)
 
-Contract: `OpenCoderApi.instructions.append(text)` → `{ path, label }` (main appends a bullet to the project's instructions file, creating `OPENHARNESS.md` when none exists) in `src/shared/types.ts`.
+Contract: `OpenCoderApi.instructions.append(text)` → `{ path, label }` (main appends a bullet to the project's instructions file, creating `SILOHARNESS.md` when none exists) in `src/shared/types.ts`.
 
-- **`#` memory shortcut**: a composer message that starts with `#` (followed by a space or text) is not sent to the model. Instead the existing confirm dialog asks "Add to the project's instructions?" with the text and the target label (from `oc.instructions.append` the first time it is known, else "OPENHARNESS.md"), OK = "Add". On OK call `oc.instructions.append(text without the leading #)`, then show a system notice "Added to OPENHARNESS.md" (the returned label) and clear the composer; on cancel keep the text. Images attached are ignored for this path (notice says so). While a run is going, `#` messages are still handled this way, not queued.
+- **`#` memory shortcut**: a composer message that starts with `#` (followed by a space or text) is not sent to the model. Instead the existing confirm dialog asks "Add to the project's instructions?" with the text and the target label (from `oc.instructions.append` the first time it is known, else "SILOHARNESS.md"), OK = "Add". On OK call `oc.instructions.append(text without the leading #)`, then show a system notice "Added to SILOHARNESS.md" (the returned label) and clear the composer; on cancel keep the text. Images attached are ignored for this path (notice says so). While a run is going, `#` messages are still handled this way, not queued.
 - **Keyboard**: `Esc` twice within 600 ms while no run is going opens the rewind confirm for the latest user message that has a `turn` (nothing happens when there is none); the single `Esc` keeps its meaning (stop a run, close menus). `⌘↑` / `⌘↓` in the composer when the caret is on the first/last line (or the composer is empty) walk through the session's previous user messages (newest first), restoring the draft when walking past the end; the history comes from the rendered user bubbles. `⌘⇧C` copies the last assistant reply's Markdown source (the same text the Copy button copies) and flashes a short "Copied" tooltip on the status area. Add the three to the shortcuts sheet.
 - **Welcome and empty states**: the empty state gains a compact setup strip (`#setup-strip`) above the suggestion chips, shown only when something is missing: Ollama unreachable (reuse the connection check), the configured model not in `listOllamaModels()`, or the working directory still the home folder. Each line has a short action ("Start Ollama", "Pull a model" → shows the `ollama pull qwen3:8b` command with a Copy button, "Choose folder" → the existing cwd picker). It disappears once all three are fine; it is never shown for the Portkey provider except the folder line.
 - **Debug hooks**: `__oc_debug.setup({ ollama: boolean, model: boolean, folder: boolean })` renders the strip directly; `null` restores the real checks.

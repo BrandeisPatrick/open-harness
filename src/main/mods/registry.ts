@@ -22,9 +22,9 @@ export interface RegistryOptions {
   bundledRoot: string;
   /** <configDir>/mods (read on every scan, so a test can move it) */
   userRoot: () => string;
-  /** The project folder (the working directory); its mods are in <project>/.open-harness/mods */
+  /** The project folder (the working directory); its mods are in <project>/.silo-harness/mods */
   projectDir: () => string;
-  /** <project>/.open-harness/mods for a project folder */
+  /** <project>/.silo-harness/mods for a project folder */
   projectRoot: (projectDir: string) => string;
   mods: () => ModsConfig;
   /** The list changed (after a scan that found a difference) */
@@ -123,7 +123,7 @@ export class ModRegistry {
       { scope: 'bundled', dir: this.opts.bundledRoot },
       { scope: 'user', dir: this.opts.userRoot() },
     ];
-    // With the home folder as the working directory the project's .open-harness is the user folder: list those mods once.
+    // With the home folder as the working directory the project's .silo-harness is the user folder: list those mods once.
     const projectRoot = project ? this.opts.projectRoot(project) : '';
     if (projectRoot && path.resolve(projectRoot) !== path.resolve(out[1].dir)) out.push({ scope: 'project', dir: projectRoot });
     return out;

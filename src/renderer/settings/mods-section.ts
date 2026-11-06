@@ -48,7 +48,7 @@ const safeKey = (key: string) => key.replace(/[^a-z0-9-]+/gi, '_');
 
 export function modsSection(ctx: Ctx): Section {
   const el = h('section', {}, sectionTitle('Mods'));
-  el.append(note('Mods add panels, tabs, looks, styles and commands to Open Harness. Built-in mods are on, except the ones that restyle the app; mods of yours and of a project stay off until you turn them on. Backgrounds, chat bar looks, conversation looks and themes have tabs of their own, where you pick the one in use.', 'sp-intro'));
+  el.append(note('Mods add panels, tabs, looks, styles and commands to Silo Harness. Built-in mods are on, except the ones that restyle the app; mods of yours and of a project stay off until you turn them on. Backgrounds, chat bar looks, conversation looks and themes have tabs of their own, where you pick the one in use.', 'sp-intro'));
 
   let mods: ModInfo[] = [];
   const expanded = new Set<string>();
@@ -278,7 +278,7 @@ export function modsSection(ctx: Ctx): Section {
   const bgOwner = ownerBox();
   const pictureName = h('span', { class: 'sp-file-name' });
   const pictureRow = row(
-    { id: 'background-image', title: 'Your picture', desc: 'A PNG, JPEG, WebP or GIF. Open Harness keeps its own copy.', keywords: 'wallpaper image picture choose background' },
+    { id: 'background-image', title: 'Your picture', desc: 'A PNG, JPEG, WebP or GIF. Silo Harness keeps its own copy.', keywords: 'wallpaper image picture choose background' },
     h('span', { class: 'sp-control-group' }, pictureName, button('Choose image…', () => void chooseImage(), { icon: 'image' })),
   );
   const dim = h('input', { type: 'range', min: '0', max: '100', step: '5', class: 'sp-range' });

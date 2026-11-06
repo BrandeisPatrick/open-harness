@@ -34,7 +34,7 @@ async function main() {
       mock: true,
       mode: 'auto',
       size: { width: 1440, height: 900 },
-      env: { HOME: F.HOME, OPEN_HARNESS_CONFIG_DIR: F.CONFIG_DIR },
+      env: { HOME: F.HOME, SILO_HARNESS_CONFIG_DIR: F.CONFIG_DIR },
       config: {
         provider: 'ollama',
         ollama: { baseURL: `http://127.0.0.1:${mock.port}`, model: 'qwen3:8b', numCtx: 32768, think: 'auto' },

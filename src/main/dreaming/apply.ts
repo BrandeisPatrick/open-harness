@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { MemoryProposal, ModProposal, ProposalScope, SkillProposal } from '../../shared/dreaming';
-import { INSTRUCTION_FILES } from '../instructions';
+import { INSTRUCTION_FILES, USER_INSTRUCTION_NAMES, userInstructionsFile } from '../instructions';
+import { OLD_PROJECT_DIR_NAME, PROJECT_DIR_NAME, projectConfigDir } from '../paths';
 import { isInside, readManifest, MOD_ID_RE } from '../mods/manifest';
 import type { Replaced } from './store';
 
@@ -17,7 +18,7 @@ export class DreamError extends Error {}
 export interface Roots {
   /** The dream's project folder */
   cwd: string;
-  /** ~/.open-harness (or OPEN_HARNESS_CONFIG_DIR) */
+  /** ~/.silo-harness (or SILO_HARNESS_CONFIG_DIR) */
   configDir: string;
   /** The app's own folder, with the bundled skills/ and mods/ */
   appRoot: string;
@@ -32,16 +33,16 @@ const MAX_MOD_FILE = 100_000;
 const MAX_MOD_FOLDER_FILES = 200;
 
 export function skillsDir(scope: ProposalScope, r: Roots): string {
-  return scope === 'project' ? path.join(r.cwd, '.open-harness', 'skills') : path.join(r.configDir, 'skills');
+  return scope === 'project' ? path.join(projectConfigDir(r.cwd), 'skills') : path.join(r.configDir, 'skills');
 }
 
 export function modsDir(scope: ProposalScope, r: Roots): string {
-  return scope === 'project' ? path.join(r.cwd, '.open-harness', 'mods') : path.join(r.configDir, 'mods');
+  return scope === 'project' ? path.join(projectConfigDir(r.cwd), 'mods') : path.join(r.configDir, 'mods');
 }
 
-/** The instructions file a memory proposal writes: the project's first existing one (else OPENHARNESS.md), or the user's. */
+/** The instructions file a memory proposal writes: the project's first existing one (else SILOHARNESS.md), or the user's. */
 export function instructionsFile(scope: ProposalScope, r: Roots): { path: string; label: string } {
-  if (scope === 'user') return { path: path.join(r.configDir, 'OPENHARNESS.md'), label: '~/.open-harness/OPENHARNESS.md' };
+  if (scope === 'user') return userInstructionsFile(r.configDir);
   const name = INSTRUCTION_FILES.find((n) => isFile(path.join(r.cwd, n))) ?? INSTRUCTION_FILES[0];
   return { path: path.join(r.cwd, name), label: name };
 }
@@ -64,13 +65,15 @@ function realPath(p: string): string {
 
 /**
  * Whether `target` is somewhere a proposal may write: inside a skill or mod folder, or one of the instructions files,
- * and really there. A project can ship `.open-harness/mods` or its instructions file as a link to anywhere on the
+ * and really there. A project can ship `.silo-harness/mods` (or `.open-harness/mods`) or its instructions file as a link to anywhere on the
  * disk; a dream does not write (or delete) through one that leaves the project, or the config folder for the user's.
  */
 export function allowedTarget(target: string, r: Roots): boolean {
   const abs = path.resolve(target);
-  const dirs = [skillsDir('project', r), skillsDir('user', r), modsDir('project', r), modsDir('user', r)].map((d) => path.resolve(d));
-  const files = [...INSTRUCTION_FILES.map((n) => path.join(r.cwd, n)), path.join(r.configDir, 'OPENHARNESS.md')].map((f) => path.resolve(f));
+  // The project folder under its new name and its old one (.silo-harness, .open-harness), whichever is in use
+  const project = [PROJECT_DIR_NAME, OLD_PROJECT_DIR_NAME].flatMap((n) => ['skills', 'mods'].map((d) => path.join(r.cwd, n, d)));
+  const dirs = [...project, skillsDir('user', r), modsDir('user', r)].map((d) => path.resolve(d));
+  const files = [...INSTRUCTION_FILES.map((n) => path.join(r.cwd, n)), ...USER_INSTRUCTION_NAMES.map((n) => path.join(r.configDir, n))].map((f) => path.resolve(f));
   if (!dirs.some((d) => abs !== d && isInside(d, abs)) && !files.includes(abs)) return false;
   const config = path.resolve(r.configDir);
   const root = isInside(config, abs) ? config : path.resolve(r.cwd);

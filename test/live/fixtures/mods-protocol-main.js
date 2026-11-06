@@ -11,7 +11,7 @@ const path = require('node:path');
 const ROOT = process.env.OA_ROOT;
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'oa-mods-live-')));
 app.setPath('userData', path.join(tmp, 'userData'));
-process.env.OPEN_HARNESS_CONFIG_DIR = path.join(tmp, 'home');
+process.env.SILO_HARNESS_CONFIG_DIR = path.join(tmp, 'home');
 app.dock?.hide();
 
 const { setupMods, serveModRequest, MOD_SCHEME, MOD_SCHEME_PRIVILEGES } = require(path.join(ROOT, 'dist', 'main', 'mods.js'));

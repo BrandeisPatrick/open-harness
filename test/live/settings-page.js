@@ -15,14 +15,14 @@ const now = Date.now();
 const MOCK = {
   info: {
     files: [
-      { scope: 'user', path: '/Users/me/.open-harness/settings.json', exists: true, applied: true, trusted: true, keys: ['maxTurns', 'portkey.model', 'env.GITHUB_TOKEN'], invalid: [{ key: 'theme', message: 'expected "system", "light" or "dark"' }] },
-      { scope: 'project', path: '/Users/me/project/.open-harness/settings.json', exists: true, applied: false, trusted: false, keys: ['permissionMode'], invalid: [] },
+      { scope: 'user', path: '/Users/me/.silo-harness/settings.json', exists: true, applied: true, trusted: true, keys: ['maxTurns', 'portkey.model', 'env.GITHUB_TOKEN'], invalid: [{ key: 'theme', message: 'expected "system", "light" or "dark"' }] },
+      { scope: 'project', path: '/Users/me/project/.silo-harness/settings.json', exists: true, applied: false, trusted: false, keys: ['permissionMode'], invalid: [] },
     ],
     owned: { maxTurns: 'user', 'portkey.model': 'user' },
   },
-  app: { name: 'Open Harness', version: '0.1.0', electron: '45.0.0', chrome: '142.0.0.0', node: '22.20.0', platform: 'darwin', arch: 'arm64', userData: '/Users/me/Library/Application Support/Open Harness', configDir: '/Users/me/.open-harness' },
+  app: { name: 'Silo Harness', version: '0.1.0', electron: '45.0.0', chrome: '142.0.0.0', node: '22.20.0', platform: 'darwin', arch: 'arm64', userData: '/Users/me/Library/Application Support/Silo Harness', configDir: '/Users/me/.open-harness' },
   history: {
-    stats: { sessions: 42, bytes: 18234567, trash: 2, trashBytes: 129000, dir: '/Users/me/Library/Application Support/Open Harness/history' },
+    stats: { sessions: 42, bytes: 18234567, trash: 2, trashBytes: 129000, dir: '/Users/me/Library/Application Support/Silo Harness/history' },
     trash: [
       { id: 't1', title: 'Fix the flaky login test', deletedAt: now - 2 * 86400000, purgeAt: now + 28 * 86400000, messageCount: 14, bytes: 120000 },
       { id: 't2', title: 'Explore the build', deletedAt: now - 3600000, purgeAt: now + 30 * 86400000, messageCount: 3, bytes: 9000 },
@@ -38,8 +38,8 @@ const js = (v) => JSON.stringify(v);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-settings-profile-'));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-settings-project-'));
   // A schedule and a skill so those sections have rows to look at.
-  fs.mkdirSync(path.join(project, '.open-harness', 'skills', 'release-notes'), { recursive: true });
-  fs.writeFileSync(path.join(project, '.open-harness', 'skills', 'release-notes', 'SKILL.md'), '---\nname: release-notes\ndescription: Write release notes from the merged pull requests since the last tag.\n---\nSteps…\n');
+  fs.mkdirSync(path.join(project, '.silo-harness', 'skills', 'release-notes'), { recursive: true });
+  fs.writeFileSync(path.join(project, '.silo-harness', 'skills', 'release-notes', 'SKILL.md'), '---\nname: release-notes\ndescription: Write release notes from the merged pull requests since the last tag.\n---\nSteps…\n');
 
   const open = async (app, section) => {
     await app.evaluate(`(() => { if (!document.querySelector('#settings').open) document.querySelector('#settings-btn').click(); document.querySelector('#sp-nav-${section}')?.click(); })()`);
@@ -141,7 +141,7 @@ const js = (v) => JSON.stringify(v);
     check('a valid value clears the problem and saves', (await cfg(app)).maxTurns === 30 && !(await app.exists('#sp-row-maxTurns.invalid')));
     await open(app, 'model');
     // The Ollama rows show only for Ollama: switch to it to edit one, then back.
-    await app.evaluate(`[...document.querySelectorAll('#sp-row-provider input')].find((i) => i.value === 'ollama').click()`);
+    await app.fill('#provider', 'ollama');
     await sleep(300);
     await app.fill('#ollama-numCtx', 'abc');
     await app.evaluate(`document.querySelector('#ollama-numCtx').blur()`);
@@ -149,7 +149,7 @@ const js = (v) => JSON.stringify(v);
     check('Ollama rows show for Ollama', await app.evaluate(`Boolean(document.querySelector('#sp-row-ollama-numCtx').offsetParent) && !document.querySelector('#sp-row-portkey-apiKey').offsetParent`));
     await app.fill('#ollama-numCtx', String(before.ollama.numCtx));
     await app.evaluate(`document.querySelector('#ollama-numCtx').blur()`);
-    await app.evaluate(`[...document.querySelectorAll('#sp-row-provider input')].find((i) => i.value === 'portkey').click()`);
+    await app.fill('#provider', 'portkey');
     await sleep(300);
     await app.fill('#portkey-contextWindow', 'abc');
     await app.evaluate(`document.querySelector('#portkey-contextWindow').blur()`);

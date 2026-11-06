@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.6.0
+
+Silo Harness (the new name of Open Harness) now works with whichever model service you use, and can be set up from a file or the command line, by you or by a coding agent such as Claude Code.
+
+### Silo Harness
+
+The app is now called **Silo Harness** (it was Open Harness). Nothing you have is lost, and nothing needs to be done by hand:
+
+- **On the first launch** the config folder `~/.open-harness` is renamed `~/.silo-harness`, and a link is left at `~/.open-harness` pointing to it, so your scripts and an older copy of the app still find it. The data folder (sessions, history, settings, artifacts) moves from `~/Library/Application Support/Open Harness` to `~/Library/Application Support/Silo Harness`. Both are renamed in place, not copied. If either cannot be moved, the app says so in its log and goes on: the config folder keeps being used under its old name, and the data folder starts empty with the old one left untouched.
+- **New names, old ones still read.** A project's folder is `.silo-harness/` (skills, mods, settings.json); `.open-harness/` is still read when a project has only that one. The instructions file is `SILOHARNESS.md`, in a project and in `~/.silo-harness`; `OPENHARNESS.md` (and `OPENAGENT.md`, `OPENCODER.md`) are still read when it is absent, and the `#` shortcut and dreams add to the file you already have.
+- **Variables.** `SILO_HARNESS_CONFIG_DIR`, `SILO_HARNESS_USER_DATA` and `SILO_HARNESS_CLI_LINK_DIR`; the `OPEN_HARNESS_…` names still work when the new ones are not set. The terminal sets `SILO_HARNESS_TERMINAL` and, for this release, `OPEN_HARNESS_TERMINAL` too, and `TERM_PROGRAM` is `Silo Harness`.
+- **The command is `silo`** (it was `open-harness`), at `Contents/Resources/bin/silo`. Settings → General → Command line tool → Install links it into `~/.local/bin` and takes away the old `open-harness` link the app made there.
+- **Mods** keep working unchanged: the mod protocol, `mod.json`, the CSS tokens and the bridge are the same. `harness.info.app.name` now says "Silo Harness".
+- **The old app can go.** Once Silo Harness has started once, drag Open Harness to the Trash.
+
+### Any provider
+
+- **Named providers.** `"providers"` in `~/.silo-harness/settings.json` (or config.json) holds any number of entries, each of a type that knows its base URL, its key variable and its headers, so an entry can be two lines: `openrouter`, `portkey`, `openai`, `anthropic` (its OpenAI-compatible endpoint), `groq`, `deepseek`, `together`, `ollama`, `lmstudio`, and `openai-compatible` for anything else. An entry can override the base URL, name the key's variable (`apiKeyEnv`) or hold the key (`apiKey`), choose the model, list models for the picker, add headers, and state the context window and the most tokens a reply may have. `"provider"` picks one by name. See [docs/configure.md](docs/configure.md).
+- **Your 0.4.0 settings keep working as they are.** The Ollama and gateway blocks are the providers `ollama` and `portkey`; nothing is migrated.
+- **Settings → Model** chooses among every provider, then its model: a picker from the entry's list and what the service lists, or a text field. A Test button sends one tiny request and says how long the answer took. A provider a file defines is marked "Set in settings.json", and a button opens the file.
+- **The model button under the chat bar** lists the provider's models and the other providers that are ready to use, and names the provider by its label: the gateway fields are no longer called "Portkey" when they point somewhere else. The setup strip says when the provider in use needs a key or a model.
+- **Plain errors.** A missing key names the variable to set; a refused key, an unknown model or an unreachable address says so, with the provider's name and what to check.
+
+### The command line
+
+- **`silo`**, inside the app at `Contents/Resources/bin/silo`, runs with the app's own Electron and does not need the app to be running: `provider list`, `provider add`, `provider remove`, `provider use`, `provider test`, `config path`, `config get`, `config set`, `config unset` and `doctor`, each with `--json` and `--help` and an exit code that says whether it worked. It writes your settings.json and keeps everything it does not know about; the running app picks the change up within a second.
+- A key is never taken from a command-line argument: `--key-env` names its variable, `--key-stdin` reads it from standard input.
+- **Settings → General → Command line tool** shows where the command is and links it into `~/.local/bin` (no administrator password), and says so when that folder is not on your PATH.
+- **For coding agents**: [docs/configure.md](docs/configure.md) has the exact steps and what never to do, and [settings.schema.json](https://brandeispatrick.github.io/silo-harness/settings.schema.json) describes every field; settings.json accepts a `"$schema"` key.
+
+### Keys
+
+- Keys never reach the window, the logs, the transcript, what mods can read or the command's output: Settings shows "Set (OPENROUTER_API_KEY)" or "Not set".
+- A project's settings.json may no longer carry a key: `apiKey`, `portkey.apiKey`, `portkey.providerApiKey` and `env` variables named like a key are ignored there, with a problem line.
+- Nor may it choose which key is sent, or where: `apiKeyEnv` is ignored in a project's file (the type's usual variable is used), a provider entry for a service that takes a key cannot set its own address there (define it in your own settings.json and select it from the project with `"provider"`), a header cannot hold a `${VAR}`, and the gateway block's `portkey.baseURL` is ignored (its model, virtual key, provider slug and config id still apply).
+
 ## 0.5.0
 
 The window is white and grey now, like Claude Code: neutral surfaces in light and dark, grey buttons, and colour only where it means something. The warm look of 0.4.0 is a bundled theme you can turn back on. Settings → Mods has a tab for each kind of mod, and the app has a new icon.

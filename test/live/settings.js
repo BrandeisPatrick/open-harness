@@ -15,7 +15,7 @@ const { launch, checker, sleep } = require('./rig.js');
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-live-project-'));
   const home = path.join(profile, 'home-config');
   const userFile = path.join(home, 'settings.json');
-  const projectFile = path.join(project, '.open-harness', 'settings.json');
+  const projectFile = path.join(project, '.silo-harness', 'settings.json');
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(userFile, JSON.stringify({ maxTurns: 17, theme: 'dark' }));
   const cfg = () => app.evaluate('window.oc.getConfig()');

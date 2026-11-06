@@ -2,7 +2,7 @@ import type OpenAI from 'openai';
 import type { AppConfig } from '../shared/types';
 import { clip, displayText, type Session } from './sessions';
 import { contextSize, ollamaComplete } from './ollama';
-import { makeClient } from './providers';
+import { isOllama, makeClient, ollamaOf } from './providers';
 import { isCompactPreamble } from './compact';
 
 type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
@@ -60,15 +60,16 @@ export async function generateTitle(cfg: AppConfig, prompt: string): Promise<str
   ];
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   let raw: string;
-  if (cfg.provider === 'ollama') {
-    if (!cfg.ollama.model) return '';
+  if (isOllama(cfg)) {
+    const ol = ollamaOf(cfg);
+    if (!ol.model) return '';
     raw = await ollamaComplete({
-      baseURL: cfg.ollama.baseURL,
-      model: cfg.ollama.model,
+      baseURL: ol.baseURL,
+      model: ol.model,
       messages,
       think: false,
       // num_ctx matches the agent's own requests: a different value would make Ollama reload the model now and again on the next message.
-      options: { num_ctx: contextSize(cfg.ollama.numCtx), num_predict: 32, temperature: 0.2 },
+      options: { num_ctx: contextSize(ol.numCtx), num_predict: 32, temperature: 0.2 },
       signal,
     });
   } else {

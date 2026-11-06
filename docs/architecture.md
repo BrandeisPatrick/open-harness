@@ -15,7 +15,27 @@ sessions.ts    Session, SessionStore (the only place messages change), toMeta, t
 
 Feature setups, in this order, before the window opens: `setupSettings` (settings-service.ts), `setupHistory` (history.ts),
 `setupContext` (context-service.ts), `setupImages`, `setupMods`, `setupSchedules`, `setupSubagents`, `setupRemote`,
-`setupPower`, `setupDreaming` (each in its own file).
+`setupPower`, `setupDreaming`, `setupProviders` (providers-service.ts) (each in its own file).
+
+## Providers (src/main/providers.ts, provider-presets.ts)
+
+Every model service resolves to one shape, `ResolvedProvider` (name, type, label, base URL, key, bearer, headers,
+model, models, context window, max output, Ollama's num_ctx/think, error), and the rest of the app asks for that:
+`resolveProvider(cfg, name?)`, `makeClient(cfg)` (throws the plain error), `isOllama(cfg)` / `ollamaOf(cfg)` (the
+native Ollama path, for the `ollama` block or an entry of type ollama), `activeModel(cfg)`, `listModels`,
+`testProvider`. `cfg.provider` names `ollama`, `portkey` (the two config.json blocks) or a key of `cfg.providers`.
+provider-presets.ts holds the types (base URL, key variable, headers) and `validateProviderEntry`, which the
+settings layer, the JSON Schema and the command share; checks.ts holds the field checks, each carrying its schema
+(`settingsSchema()` in settings.ts writes docs/settings.schema.json, `npm run schema`).
+
+Keys stay in the main process: `windowConfig(cfg, owned)` is the window's copy (keys and header values masked, the
+providers resolved in `providerView`), used by `config:get`/`config:set`/`config:changed`; `acceptFromWindow` puts the
+real keys back on the way in and ignores `providers` (changed by the files, the command and `providers.setModel`).
+`scrubSecrets` takes every resolved key out of a message; the agent's errors and `plainError` go through it.
+
+`bin/silo.js` (the command, shipped as Contents/Resources/bin/silo and run by the app's Electron in
+Node mode) loads dist/main/settings.js, config.js, provider-presets.js and providers.js, none of which load Electron
+(config.ts requires it lazily in `configPath()`), and writes only the user's settings.json.
 
 ## App (src/main/app.ts)
 

@@ -97,8 +97,8 @@ const isDreamReq = (p) => (p.messages || []).some((m) => m.role === 'user' && ty
   const seeded = seed(profile, project);
   const app = await launch({ profile, project, mock: true, mode: 'ask', scale: 1, config: { theme: 'light', dreaming: { daily: false, time: '03:00', mode: 'approve', skills: true, mods: true, memory: true } } });
   const home = path.join(profile, 'home-config');
-  const skillFile = path.join(project, '.open-harness/skills/release-chore/SKILL.md');
-  const memFile = path.join(project, 'OPENHARNESS.md');
+  const skillFile = path.join(project, '.silo-harness/skills/release-chore/SKILL.md');
+  const memFile = path.join(project, 'SILOHARNESS.md');
   const modDir = path.join(home, 'mods/release-status');
   const replies = app.mock.state.replies;
   const call = (n, name, args) => ({ id: `d${n}`, name, args });
@@ -209,7 +209,7 @@ const isDreamReq = (p) => (p.messages || []).some((m) => m.role === 'user' && ty
     await app.send('Release chore once more, as always [new]');
     await app.waitIdle();
     dreamReply({ toolCalls: [call(5, 'propose_memory', { ...memArgs, sessions: ['s-release-1', 's-release-2'] })] });
-    dreamReply({ content: 'Applied: added "Use pnpm, never npm, in this repo." to OPENHARNESS.md.' });
+    dreamReply({ content: 'Applied: added "Use pnpm, never npm, in this repo." to SILOHARNESS.md.' });
     await app.evaluate(`oc.rpc('dreaming.run')`);
     d = await waitDream(app);
     check('auto: the proposal was applied when it was made', d.mode === 'auto' && d.proposals[0]?.state === 'applied' && fs.existsSync(memFile) && /- Use pnpm, never npm/.test(fs.readFileSync(memFile, 'utf8')), d.proposals);
@@ -292,7 +292,7 @@ const isDreamReq = (p) => (p.messages || []).some((m) => m.role === 'user' && ty
     const api = await launch({ profile: profile2, project: project2, mode: 'ask', scale: 1, config: { dreaming: { daily: false, time: '03:00', mode: 'approve', skills: true, mods: true, memory: true } } });
     const home2 = path.join(profile2, 'home-config');
     const before = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true }).sort().join('|') : '');
-    const snap = () => [before(path.join(project2, '.open-harness')), before(path.join(home2, 'skills')), before(path.join(home2, 'mods')), fs.existsSync(path.join(project2, 'OPENHARNESS.md')), fs.existsSync(path.join(home2, 'OPENHARNESS.md'))].join('#');
+    const snap = () => [before(path.join(project2, '.silo-harness')), before(path.join(home2, 'skills')), before(path.join(home2, 'mods')), fs.existsSync(path.join(project2, 'SILOHARNESS.md')), fs.existsSync(path.join(home2, 'SILOHARNESS.md'))].join('#');
     const was = snap();
     try {
       await api.evaluate(`oc.rpc('dreaming.run')`);

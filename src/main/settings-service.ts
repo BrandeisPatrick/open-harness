@@ -14,6 +14,7 @@ import type { App } from './app';
 import { normalizeConfig } from './config';
 import { configDir } from './paths';
 import { settingsLayer, type SettingsLayer } from './settings';
+import { windowConfig } from './providers';
 
 export interface SettingsServiceOptions {
   /** Default: the app's layer, the one config.ts loads and saves through */
@@ -113,6 +114,9 @@ export function setupSettings(app: App, opts: SettingsServiceOptions = {}): Sett
     const configChanged = !same(next, cur);
     if (configChanged) app.updateConfig(() => next);
     if (configChanged || !same(info, before)) app.push('settings:changed', info);
+    // The files changed but the config did not (an env block, which fields are owned): the window's resolved
+    // providers (key set or not, who owns an entry) may still have changed.
+    if (!configChanged && !same(info, before)) app.push('config:changed', windowConfig(app.config(), info.owned));
     return info;
   }
 
@@ -179,7 +183,7 @@ function appInfo(app: App): AppInfo {
     }
   }
   return {
-    name: ea?.getName() ?? 'Open Harness',
+    name: ea?.getName() ?? 'Silo Harness',
     version,
     electron: process.versions.electron ?? '',
     chrome: process.versions.chrome ?? '',

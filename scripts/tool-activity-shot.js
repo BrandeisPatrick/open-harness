@@ -64,7 +64,7 @@ async function main() {
       mock: true,
       mode: 'auto',
       size: { width: 1180, height: 1000 },
-      env: { HOME: F.HOME, OPEN_HARNESS_CONFIG_DIR: F.CONFIG_DIR, npm_config_update_notifier: 'false', npm_config_fund: 'false' },
+      env: { HOME: F.HOME, SILO_HARNESS_CONFIG_DIR: F.CONFIG_DIR, npm_config_update_notifier: 'false', npm_config_fund: 'false' },
       config: {
         provider: 'ollama',
         ollama: { baseURL: `http://127.0.0.1:${mock.port}`, model: 'qwen3:8b', numCtx: 32768, think: 'auto' },

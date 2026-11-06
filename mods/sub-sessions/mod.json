@@ -4,7 +4,7 @@
   "name": "Sub-sessions",
   "version": "1.0.0",
   "description": "The parent, sub-sessions and forks of the session on screen, with a way to merge finished ones back.",
-  "author": "Open Harness",
+  "author": "Silo Harness",
   "license": "MIT",
   "icon": "git-branch",
   "permissions": ["session:read", "session:control"],

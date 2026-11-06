@@ -18,7 +18,7 @@ process.emitWarning = () => {};
     key,
     id: key,
     scope: 'user',
-    dir: `/Users/me/.open-harness/mods/${key}`,
+    dir: `/Users/me/.silo-harness/mods/${key}`,
     manifest: { protocol: 1, id: key, name: key.toUpperCase(), version: '1.0.0', permissions: extra.permissions ?? [], contributes: { views, ...(extra.contributes ?? {}) } },
     state: extra.state ?? 'on',
     granted: extra.granted ?? extra.permissions ?? [],
@@ -80,8 +80,8 @@ process.emitWarning = () => {};
   {
     const m = mod('w', [v('main', 'rail', 'W')], { permissions: ['session:read'] });
     const theme = { scheme: 'dark', tokens: { '--bg-100': '#262624' } };
-    const h = L.buildHello(m, m.manifest.contributes.views[0], { name: 'Open Harness', version: '0.1.0' }, theme, true);
-    check('hello: protocol 1, mod, view, app, grant, theme, settings, visible', h.protocol === 1 && h.mod.id === 'w' && h.mod.name === 'W' && h.mod.scope === 'user' && h.view.seat === 'rail' && h.app.name === 'Open Harness' && h.granted[0] === 'session:read' && h.theme.tokens['--bg-100'] === '#262624' && h.settings.a === 1 && h.visible === true, h);
+    const h = L.buildHello(m, m.manifest.contributes.views[0], { name: 'Silo Harness', version: '0.1.0' }, theme, true);
+    check('hello: protocol 1, mod, view, app, grant, theme, settings, visible', h.protocol === 1 && h.mod.id === 'w' && h.mod.name === 'W' && h.mod.scope === 'user' && h.view.seat === 'rail' && h.app.name === 'Silo Harness' && h.granted[0] === 'session:read' && h.theme.tokens['--bg-100'] === '#262624' && h.settings.a === 1 && h.visible === true, h);
     h.granted.push('model');
     check('hello: a copy, not the live grant', m.granted.length === 1);
   }
@@ -124,13 +124,13 @@ process.emitWarning = () => {};
     const lines = L.askLines(mod('n', [v('m', 'rail', 'N')], { state: 'off', permissions: ['session:read', 'network'] }));
     check('asks: plain words per permission and a strong network line', lines.some((l) => /Read the session on screen/.test(l.text)) && lines.some((l) => l.strong && /internet/.test(l.text) && /send/.test(l.text)), lines);
     const st = L.askLines(mod('s', [], { state: 'off', contributes: { styles: ['t.css'] } }));
-    check('asks: styles get a clear line', st.some((l) => l.strong && /restyle Open Harness/.test(l.text)), st);
+    check('asks: styles get a clear line', st.some((l) => l.strong && /restyle Silo Harness/.test(l.text)), st);
     const bg = L.askLines(mod('b', [v('b', 'background', 'B')], { state: 'off' }));
     check('asks: a background gets a clear line', bg.some((l) => l.strong && /behind the whole window/.test(l.text)), bg);
     const paused = L.askLines(mod('p', [v('m', 'rail', 'P')], { state: 'paused', permissions: ['session:read', 'model'], granted: ['session:read'], wants: ['model'] }));
     check('asks: a paused mod lists only what it wants now', paused.length === 1 && /model/.test(paused[0].text), paused);
     check('asks: nothing at all is said plainly', /Nothing beyond its own panel/.test(L.askLines(mod('z', [v('m', 'rail', 'Z')], { state: 'off' }))[0].text));
-    check('shortDir uses ~ under home only', L.shortDir('/Users/me/.open-harness/mods/x', '/Users/me') === '~/.open-harness/mods/x' && L.shortDir('/Users/meow/x', '/Users/me') === '/Users/meow/x');
+    check('shortDir uses ~ under home only', L.shortDir('/Users/me/.silo-harness/mods/x', '/Users/me') === '~/.silo-harness/mods/x' && L.shortDir('/Users/meow/x', '/Users/me') === '/Users/meow/x');
     const builtin = (n) => ['gauge', 'list'].includes(n);
     check('icons: built-in, an SVG in the mod, or nothing', L.iconSource('gauge', 'mod://a.user', builtin).builtin === 'gauge' && L.iconSource('img/i.svg', 'mod://a.user', builtin).url === 'mod://a.user/img/i.svg' && L.iconSource('../x.svg', 'mod://a.user', builtin) === null && L.iconSource('nope', 'mod://a.user', builtin) === null && L.iconSource('https://e.com/i.svg', 'mod://a.user', builtin) === null);
   }

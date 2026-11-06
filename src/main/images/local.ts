@@ -66,6 +66,6 @@ function refreshCopy(entry: Entry): void {
 }
 
 function dir(): string {
-  if (!copyDir) copyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'open-harness-images-'));
+  if (!copyDir) copyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'silo-harness-images-'));
   return copyDir;
 }

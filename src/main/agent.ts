@@ -3,7 +3,7 @@ import type OpenAI from 'openai';
 import type { ContextBreakdown, ContextSlice } from '../shared/context';
 import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, CompactionInfo, ContextInfo, ImageAttachment, MessageOrigin, PermissionMode, PlanInfo, QueuedMessage, TaskItem } from '../shared/types';
 import { expandMentions } from './mentions';
-import { makeClient, modelCapabilities } from './providers';
+import { isOllama, makeClient, modelCapabilities, ollamaOf, plainError, resolveProvider, scrubSecrets } from './providers';
 import { contextSize, ollamaChat, ollamaComplete, type Usage } from './ollama';
 import { McpManager } from './mcp';
 import {
@@ -86,8 +86,9 @@ const ESSENTIAL_NOTE =
 
 /** The context window the configured model has, in tokens. */
 export function contextLimit(cfg: AppConfig): number {
-  if (cfg.provider === 'ollama') return contextSize(cfg.ollama.numCtx);
-  return Math.max(4096, Number(cfg.portkey.contextWindow) || 128000);
+  const r = resolveProvider(cfg);
+  if (r.type === 'ollama') return contextSize(ollamaOf(cfg).numCtx);
+  return Math.max(4096, Number(r.contextWindow) || 128000);
 }
 
 /** The system prompt in the pieces the context breakdown counts separately; joined in this order they are the prompt. */
@@ -117,7 +118,7 @@ function systemPrompt(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, e
  * files are left out too: what such a session needs of them, its first message carries.
  */
 function ownToolsPromptParts(cfg: AppConfig, extra: string, own: string[]): PromptParts {
-  const base = `You are Open Harness, running on the user's Mac.
+  const base = `You are Silo Harness, running on the user's Mac.
 Working directory: ${cfg.workingDirectory}
 Today: ${new Date().toISOString().slice(0, 10)}
 
@@ -129,7 +130,7 @@ In this session you have only these tools: ${own.join(', ')}. You cannot run com
 
 function systemPromptParts(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = '', own?: string[]): PromptParts {
   if (own) return ownToolsPromptParts(cfg, extra, own);
-  const base = `You are Open Harness, an autonomous coding agent running on the user's Mac.
+  const base = `You are Silo Harness, an autonomous coding agent running on the user's Mac.
 Working directory: ${cfg.workingDirectory}
 Today: ${new Date().toISOString().slice(0, 10)}
 
@@ -178,9 +179,24 @@ function noToolsNotice(model: string): string {
   return `${model} does not support tools, so this run is a plain chat: it can see your message and images but cannot read files, run commands or browse.`;
 }
 
+/**
+ * What a run's error says: a service's refusal or an unreachable address in plain words, naming the provider and
+ * what to check (plainError); anything else as it is. Never with a key.
+ */
+function providerErrorMessage(err: unknown, cfg: AppConfig): string {
+  const e = err as { status?: unknown; name?: unknown };
+  const fromService = typeof e?.status === 'number' || e?.name === 'APIConnectionError' || e?.name === 'APIConnectionTimeoutError';
+  if (!fromService || isContextLengthError(err)) return errorMessage(err);
+  try {
+    return plainError(err, resolveProvider(cfg));
+  } catch {
+    return errorMessage(err);
+  }
+}
+
+/** An error's message, with any key the providers resolved taken out (a service's error may quote it). */
 function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err);
+  return scrubSecrets(err instanceof Error ? err.message : String(err));
 }
 
 /** Folds one chunk's usage into the running counts (gateways may repeat or split the counts across chunks). */
@@ -244,6 +260,8 @@ export class Agent {
   private noStreamUsage = new Set<string>();
   /** Ollama base URL + model → whether the model accepts tools (vision-only models do not); unknown until checked */
   private toolSupport = new Map<string, boolean>();
+  /** max_tokens for the provider in use, when its entry sets maxOutput (set as each run or compaction starts) */
+  private maxOutput: number | undefined;
   /** Per session: MCP servers the user allowed for the rest of the session. */
   private mcpAllowed = new Map<string, Set<string>>();
   /** Tokens the tool specs take on every request (measured at the start of each run). */
@@ -283,8 +301,8 @@ export class Agent {
     this.session = opts.session ?? store.create();
     this.opts = opts;
     this.mcp = mcp ?? null;
-    this.terminal = terminal ?? new TerminalManager({ dataDir: path.join(os.tmpdir(), 'open-harness'), cwd: () => this.getConfig().workingDirectory });
-    this.artifacts = artifacts ?? new ArtifactStore({ root: path.join(os.tmpdir(), 'open-harness', 'artifacts'), rendererDir: path.join(__dirname, '..', 'renderer') });
+    this.terminal = terminal ?? new TerminalManager({ dataDir: path.join(os.tmpdir(), 'silo-harness'), cwd: () => this.getConfig().workingDirectory });
+    this.artifacts = artifacts ?? new ArtifactStore({ root: path.join(os.tmpdir(), 'silo-harness', 'artifacts'), rendererDir: path.join(__dirname, '..', 'renderer') });
   }
 
   /** The Terminal pane's tabs, shared with the window's IPC handlers */
@@ -548,7 +566,8 @@ export class Agent {
     this.emit({ type: 'session_changed', session: toMeta(this.session) });
 
     try {
-      const { client, model } = cfg.provider === 'ollama' ? { client: null, model: cfg.ollama.model } : makeClient(cfg);
+      const { client, model, maxOutput } = isOllama(cfg) ? { client: null, model: ollamaOf(cfg).model, maxOutput: undefined } : makeClient(cfg);
+      this.maxOutput = maxOutput;
       if (!model) throw new Error('No model selected. Open Settings and pick one.');
       const tools = this.toolsFor(cfg);
       const specs = tools.map(toSpec);
@@ -556,8 +575,8 @@ export class Agent {
       this.emitContext();
       // A model that cannot take tools (e.g. a vision-only Ollama model) still works as a plain chat.
       let activeSpecs = specs;
-      if (cfg.provider === 'ollama') {
-        const key = `${cfg.ollama.baseURL}|${model}`;
+      if (!client) {
+        const key = `${ollamaOf(cfg).baseURL}|${model}`;
         if (!this.toolSupport.has(key)) {
           const caps = await modelCapabilities(cfg).catch(() => null);
           if (caps && caps.tools !== null) this.toolSupport.set(key, caps.tools);
@@ -669,7 +688,7 @@ export class Agent {
       if (signal.aborted) reason = 'aborted';
       else {
         reason = 'error';
-        this.emit({ type: 'error', message: errorMessage(err) });
+        this.emit({ type: 'error', message: providerErrorMessage(err, cfg) });
       }
     } finally {
       this.currentTurn = null;
@@ -716,7 +735,7 @@ export class Agent {
     const threshold = compactThreshold(cfg);
     const chars = (t: string) => (t ? Math.ceil(t.length / 4) : 0);
     const parts = systemPromptParts(cfg, this.getSkills(cfg.workingDirectory), this.mcp, this.promptExtra(cfg), this.ownToolNames(cfg));
-    const noTools = cfg.provider === 'ollama' && this.toolSupport.get(`${cfg.ollama.baseURL}|${cfg.ollama.model}`) === false;
+    const noTools = isOllama(cfg) && this.toolSupport.get(`${ollamaOf(cfg).baseURL}|${ollamaOf(cfg).model}`) === false;
     const tools = noTools ? [] : this.toolsFor(cfg);
     const byServer = new Map<string, Tool[]>();
     for (const t of tools) if (t.mcp) byServer.set(t.mcp.server, [...(byServer.get(t.mcp.server) ?? []), t]);
@@ -839,7 +858,8 @@ export class Agent {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
     try {
-      const { client, model } = cfg.provider === 'ollama' ? { client: null, model: cfg.ollama.model } : makeClient(cfg);
+      const { client, model, maxOutput } = isOllama(cfg) ? { client: null, model: ollamaOf(cfg).model, maxOutput: undefined } : makeClient(cfg);
+      this.maxOutput = maxOutput;
       if (!model) throw new Error('No model selected. Open Settings and pick one.');
       const r = await this.compact('manual', focus, signal, cfg, client, model);
       return r.ok ? { ok: true } : { ok: false, error: r.error ?? 'The summary could not be produced.' };
@@ -1045,12 +1065,12 @@ export class Agent {
       if (!client) {
         const call = (think: boolean | undefined) =>
           ollamaComplete({
-            baseURL: cfg.ollama.baseURL,
+            baseURL: ollamaOf(cfg).baseURL,
             model,
             messages,
             think,
             // num_ctx matches the agent's requests so Ollama keeps the model loaded as it is.
-            options: { num_ctx: contextSize(cfg.ollama.numCtx), num_predict: maxTokens, temperature: 0.2 },
+            options: { num_ctx: contextSize(ollamaOf(cfg).numCtx), num_predict: maxTokens, temperature: 0.2 },
             signal: timeout,
           });
         try {
@@ -1207,12 +1227,13 @@ export class Agent {
     turn: number,
   ): Promise<{ text: string; toolCalls: ToolCall[] }> {
     if (!client) {
+      const ol = ollamaOf(cfg);
       const chat = (tools: ToolSpec[]) =>
         ollamaChat({
-          baseURL: cfg.ollama.baseURL,
+          baseURL: ol.baseURL,
           model,
-          numCtx: contextSize(cfg.ollama.numCtx),
-          think: cfg.ollama.think ?? 'auto',
+          numCtx: contextSize(ol.numCtx),
+          think: ol.think ?? 'auto',
           messages: history,
           tools,
           signal,
@@ -1227,7 +1248,7 @@ export class Agent {
       } catch (err) {
         // An Ollama too old to report capabilities only tells us here: retry once as a plain chat.
         if (!specs.length || signal.aborted || !/does not support tools/i.test(errorMessage(err))) throw err;
-        this.toolSupport.set(`${cfg.ollama.baseURL}|${model}`, false);
+        this.toolSupport.set(`${ol.baseURL}|${model}`, false);
         this.emit({ type: 'error', kind: 'notice', message: noToolsNotice(model) });
         return chat([]);
       }
@@ -1265,7 +1286,7 @@ export class Agent {
     onEmit: () => void,
   ): Promise<{ text: string; toolCalls: ToolCall[] }> {
     const stream = await client.chat.completions.create(
-      { model, messages: history, tools: specs, stream: true, stream_options: includeUsage ? { include_usage: true } : undefined },
+      { model, messages: history, tools: specs, stream: true, stream_options: includeUsage ? { include_usage: true } : undefined, ...(this.maxOutput ? { max_tokens: this.maxOutput } : {}) },
       { signal },
     );
     let text = '';
@@ -1325,7 +1346,7 @@ export class Agent {
     signal: AbortSignal,
     turn: number,
   ): Promise<{ text: string; toolCalls: ToolCall[] }> {
-    const res = await client.chat.completions.create({ model, messages: history, tools: specs, stream: false }, { signal });
+    const res = await client.chat.completions.create({ model, messages: history, tools: specs, stream: false, ...(this.maxOutput ? { max_tokens: this.maxOutput } : {}) }, { signal });
     if (res.usage) this.reportUsage(mergeUsage(null, res.usage));
     const msg = res.choices?.[0]?.message;
     const text = msg?.content ?? '';

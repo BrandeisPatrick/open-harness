@@ -26,6 +26,7 @@ const SCRIPTS = [
   { name: 'regression', needsApi: true },
   { name: 'settings' },
   { name: 'settings-page' },
+  { name: 'providers' },
   { name: 'sidebar' },
   { name: 'images' },
   { name: 'history' },

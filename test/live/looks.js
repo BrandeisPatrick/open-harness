@@ -57,7 +57,7 @@ const attrs = (app, sel) => app.evaluate(`Object.fromEntries([...document.queryS
     // …and a name of its own, which must still work
     ' @keyframes escape-look-own { from { opacity: 0.25; } to { opacity: 0.75; } } .msg.user .bubble { animation: escape-look-own 1s linear -0.5s infinite paused; }');
 
-  const app = await launch({ mode: 'bypass', config: { theme: 'dark' }, env: { OPEN_HARNESS_CONFIG_DIR: home } });
+  const app = await launch({ mode: 'bypass', config: { theme: 'dark' }, env: { SILO_HARNESS_CONFIG_DIR: home } });
   const ev = app.evaluate;
   const rpc = (m, ...a) => ev(`window.oc.rpc(${js(m)}, ...${js(a)})`);
   // Measured without focus, once the composer's transitions are over, so its focus ring does not count as a change

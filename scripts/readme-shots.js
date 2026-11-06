@@ -93,10 +93,10 @@ const OUT = path.resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) 
 /** The file a scene is written to: hero.png, or hero-dark.png in the dark pass */
 const outFile = (name) => path.join(OUT, `${name}${DARK ? '-dark' : ''}.png`);
 // Everything the run makes lives in one temp home: the app runs with HOME pointing at it, so the project at
-// <home>/code/atlas-api shows as ~/code/atlas-api and the app's config folder is <home>/.open-harness.
+// <home>/code/atlas-api shows as ~/code/atlas-api and the app's config folder is <home>/.silo-harness.
 const HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-home-')));
 const PROJECT = path.join(HOME, 'code', 'atlas-api');
-const CONFIG_DIR = path.join(HOME, '.open-harness');
+const CONFIG_DIR = path.join(HOME, '.silo-harness');
 const js = (v) => JSON.stringify(v);
 
 // ---------- PNG crop ----------
@@ -654,7 +654,7 @@ function scriptApproval(mock) {
   main({ promptTokens: 15400, toolCalls: [call('bash', { command: 'git push -u origin feat/rate-limit' })] });
 }
 
-/** The mod from the README ("A mod in two files"), installed the way a user would: a folder in ~/.open-harness/mods. */
+/** The mod from the README ("A mod in two files"), installed the way a user would: a folder in ~/.silo-harness/mods. */
 function installWordCount(configDir) {
   const dir = path.join(configDir, 'mods', 'word-count');
   fs.mkdirSync(dir, { recursive: true });
@@ -739,7 +739,7 @@ async function main() {
       mock: true,
       mode: 'auto',
       size: { width: 1280, height: 800 },
-      env: { HOME, OPEN_HARNESS_CONFIG_DIR: CONFIG_DIR, npm_config_update_notifier: 'false', npm_config_fund: 'false' },
+      env: { HOME, SILO_HARNESS_CONFIG_DIR: CONFIG_DIR, npm_config_update_notifier: 'false', npm_config_fund: 'false' },
       config: {
         provider: 'ollama',
         ollama: { baseURL: `http://127.0.0.1:${mock.port}`, model: 'qwen3:8b', numCtx: 32768, think: 'auto' },

@@ -1,6 +1,6 @@
 # Mods
 
-A mod is a folder of web files that adds something to Open Harness: a panel in the right-hand rail, a tab beside the Browser, a strip above the composer, a background behind the app, a look for the conversation or the chat bar, a theme, a slash command. The panels the app ships with (Context, Outputs, Tasks, Skills, Side chat, …) are mods written against this same protocol, so anything they do, yours can do.
+A mod is a folder of web files that adds something to Silo Harness: a panel in the right-hand rail, a tab beside the Browser, a strip above the composer, a background behind the app, a look for the conversation or the chat bar, a theme, a slash command. The panels the app ships with (Context, Outputs, Tasks, Skills, Side chat, …) are mods written against this same protocol, so anything they do, yours can do.
 
 A mod page is an ordinary HTML page. It runs in a sandboxed frame, talks to the app through one small object (`harness`), and reloads the moment one of its files is saved. That last part is the point: the agent can write a mod for you in the middle of a session, you turn it on, and from then on every edit shows up live.
 
@@ -9,7 +9,7 @@ Protocol version: **1**.
 ## A mod in two files
 
 ```
-~/.open-harness/mods/word-count/
+~/.silo-harness/mods/word-count/
   mod.json
   panel.html
 ```
@@ -54,8 +54,8 @@ Save the two files, turn the mod on in Settings → Mods (or on the card that ap
 | Scope | Folder | Starts |
 | --- | --- | --- |
 | bundled | `mods/` inside the app | on (you can turn one off); a bundled mod that restyles the app (a theme) starts off |
-| user | `~/.open-harness/mods/<id>/` | off until you turn it on once |
-| project | `<project>/.open-harness/mods/<id>/` | off until you turn it on for that project |
+| user | `~/.silo-harness/mods/<id>/` | off until you turn it on once |
+| project | `<project>/.silo-harness/mods/<id>/` | off until you turn it on for that project |
 
 A user mod with the id of a bundled one replaces it, which is how you customise a built-in panel: Settings → Mods → Customise copies it into your folder, and you edit the copy.
 
@@ -118,7 +118,7 @@ The CSS is added to the app's own page while the mod is on, so it can change col
 
 ### Looks
 
-*Added in Open Harness 0.3 (the release after 0.2.0). An older app ignores `contributes.looks`, so the protocol version stays 1.*
+*Added in 0.3 (the release after 0.2.0). An older app ignores `contributes.looks`, so the protocol version stays 1.*
 
 A look is a stylesheet for one region of the window. Unlike `styles`, which apply to the whole page, a look is contained: the app wraps it so that its selectors reach only its region, and only one look per region is active at a time, chosen in Settings → Mods → Chat bar or Settings → Mods → Conversation.
 
@@ -245,7 +245,7 @@ Rail and composer views are sized to their content automatically. Use the app's 
 
 `harness.ready` resolves once the app has answered the page's hello; until then calls wait (the hello itself never times out; every other call gives up after 30 seconds, except `model.complete`). Every call returns a promise. A failed call rejects with an `Error` whose `code` is `'permission'` (with `.permission` naming it), `'unavailable'`, `'timeout'`, `'unknown-method'`, `'bad-params'` or `'error'`.
 
-`harness.info` is the hello's answer: `{ protocol, mod: { id, name, version, scope }, view: { id, seat, title }, app: { name, version }, granted: [...], theme, settings, visible }`
+`harness.info` is the hello's answer: `{ protocol, mod: { id, name, version, scope }, view: { id, seat, title }, app: { name, version }, granted: [...], theme, settings, visible }`. `app.name` is the app's name, `"Silo Harness"` (it was `"Open Harness"` before 0.6.0: a mod that shows it needs no change, one that compares it should accept both); `app.version` is the app's version.
 
 `harness.on(event, handler)` subscribes and returns a function that unsubscribes. The app only sends events a view has subscribed to. Subscribing to an event the mod has no permission for does nothing (a console warning says so); an unknown event name is accepted and never arrives.
 
@@ -307,7 +307,7 @@ Events: `session.changed` (another session came on screen, or this one's title o
 
 ### config:read and config:write
 
-`harness.config.get()` → `{ provider, model, workingDirectory, home, permissionMode, theme, autoCompact, compactThreshold, keepAwake, notifications, background, contextLimit }` (`workingDirectory` is the folder of the session on screen, `home` the user's home folder for showing paths as `~/…`). Keys and other secrets are never included. Event `config.changed`, which is also sent when `workingDirectory` changes because a session in another folder came on screen.
+`harness.config.get()` → `{ provider, model, workingDirectory, home, permissionMode, theme, autoCompact, compactThreshold, keepAwake, notifications, background, contextLimit }` (`provider` is the name of the provider in use: `ollama`, `portkey` or the name of a named provider such as `openrouter`; `workingDirectory` is the folder of the session on screen, `home` the user's home folder for showing paths as `~/…`). Keys and other secrets are never included. Event `config.changed`, which is also sent when `workingDirectory` changes because a session in another folder came on screen.
 
 `harness.config.set(patch)` changes `theme`, `autoCompact`, `compactThreshold`, `keepAwake`, `notifications` or `background`, and nothing else (any other key is refused as bad params): a mod cannot change the permission mode, the provider, or what is trusted.
 
@@ -366,7 +366,7 @@ By hand: Settings → Mods → New mod writes a starter folder (a view in the se
 
 ## Installing and sharing
 
-A mod is its folder. Copy it into `~/.open-harness/mods/`, or use Settings → Mods → Install and give it a folder or a Git URL (the repository is cloned into the mods folder). To share one, publish the folder; adding the `open-harness-mod` topic on GitHub makes it findable.
+A mod is its folder. Copy it into `~/.silo-harness/mods/`, or use Settings → Mods → Install and give it a folder or a Git URL (the repository is cloned into the mods folder). To share one, publish the folder; adding the `silo-harness-mod` topic on GitHub makes it findable.
 
 ## What keeps this safe
 

@@ -5,6 +5,7 @@ import os from 'node:os';
 import type { AppConfig } from '../../shared/types';
 import type { ModInfo, PublicConfig, PublicConfigPatch } from '../../shared/mods';
 import { contextLimit } from '../agent';
+import { activeModel } from '../providers';
 
 const THEMES = ['system', 'light', 'dark'] as const;
 const KEEP_AWAKE = ['off', 'running', 'always'] as const;
@@ -20,8 +21,8 @@ export function publicConfig(cfg: AppConfig, sessionCwd?: string): PublicConfig 
   const layout = cfg.mods?.layout;
   const background = layout?.background ? String(layout.background) : layout?.backgroundImage ? 'image' : null;
   return {
-    provider: cfg.provider === 'portkey' ? 'portkey' : 'ollama',
-    model: modelName(cfg.provider === 'portkey' ? cfg.portkey?.model : cfg.ollama?.model),
+    provider: String(cfg.provider || 'ollama'),
+    model: modelName(activeModel(cfg)),
     workingDirectory: String(sessionCwd || cfg.workingDirectory || ''),
     home: os.homedir(),
     permissionMode: cfg.permissionMode,

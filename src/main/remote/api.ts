@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { App } from '../app';
 import type { PermissionMode, SessionMeta } from '../../shared/types';
 import { toTranscript } from '../sessions';
+import { activeModel } from '../providers';
 import { bool, HttpError, json, readJson, str } from './guard';
 import { remoteItem, remoteLive } from './sanitize';
 
@@ -27,9 +28,9 @@ const MAX_TEXT = 100_000;
 function appInfo(appRoot: string): { name: string; version: string } {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8')) as { productName?: string; name?: string; version?: string };
-    return { name: pkg.productName || pkg.name || 'Open Harness', version: pkg.version || '' };
+    return { name: pkg.productName || pkg.name || 'Silo Harness', version: pkg.version || '' };
   } catch {
-    return { name: 'Open Harness', version: '' };
+    return { name: 'Silo Harness', version: '' };
   }
 }
 
@@ -109,7 +110,7 @@ export class Api {
       app: this.info,
       sessions: this.app.runtime.list(),
       foreground: this.app.runtime.foregroundId(),
-      model: cfg.provider === 'portkey' ? cfg.portkey.model : cfg.ollama.model,
+      model: activeModel(cfg),
       provider: cfg.provider,
       permissionMode: cfg.permissionMode,
     };

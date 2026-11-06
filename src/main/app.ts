@@ -10,6 +10,8 @@ import type { RpcEvents, RpcMethods } from '../shared/rpc';
 import type { ArtifactStore } from './artifacts';
 import type { BrowserController } from './browser';
 import { normalizeConfig, withRecentDir } from './config';
+import { windowConfig } from './providers';
+import { settingsLayer } from './settings';
 import type { McpManager } from './mcp';
 import { SessionRuntime } from './runtime';
 import { SessionStore, toTranscript } from './sessions';
@@ -292,7 +294,8 @@ export class AppHost implements App {
         console.warn('[app] a config listener failed:', err);
       }
     }
-    this.push('config:changed', next);
+    // The window's copy: keys masked, the providers resolved (see providers.ts).
+    this.push('config:changed', windowConfig(next, settingsLayer.info().owned));
     return next;
   }
 

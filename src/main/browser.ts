@@ -166,7 +166,7 @@ export class BrowserController {
       void wc.loadURL(url);
       return { action: 'deny' };
     });
-    wc.setUserAgent(wc.getUserAgent().replace(/ Electron\/[\d.]+/, '').replace(/ open-harness\/[\d.]+/i, ''));
+    wc.setUserAgent(wc.getUserAgent().replace(/ Electron\/[\d.]+/, '').replace(/ (?:silo|open)-harness\/[\d.]+/i, ''));
     void wc.loadURL('about:blank');
   }
 
@@ -445,7 +445,7 @@ export class BrowserController {
   async screenshot(): Promise<{ path: string; dataUrl: string; width: number; height: number }> {
     const image = await this.wc.capturePage();
     const png = image.toPNG();
-    const dir = path.join(app.getPath('temp'), 'open-harness-screenshots');
+    const dir = path.join(app.getPath('temp'), 'silo-harness-screenshots');
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `shot-${Date.now()}.png`);
     fs.writeFileSync(file, png);

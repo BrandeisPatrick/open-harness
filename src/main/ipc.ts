@@ -12,7 +12,9 @@ import type { BrowserController } from './browser';
 import { diffOf, listChanges, revertChange } from './changes';
 import { searchFiles } from './files';
 import { appendInstruction } from './instructions';
-import { listOllamaModels, modelCapabilities } from './providers';
+import { acceptFromWindow, activeModel, listOllamaModels, modelCapabilities, ollamaOf, resolveProvider, windowConfig } from './providers';
+import { settingsLayer } from './settings';
+import { contextLimit } from './agent';
 import { rewindSession, toMeta, toTranscript } from './sessions';
 import { loadSkills, toInfo } from './skills';
 import type { HistoryService } from './services';
@@ -71,16 +73,18 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
   app.onConfig((next, prev) => {
     if (next.workingDirectory !== prev.workingDirectory) reloadMcp();
     if (
-      next.workingDirectory !== prev.workingDirectory || next.provider !== prev.provider || next.ollama.model !== prev.ollama.model || next.ollama.numCtx !== prev.ollama.numCtx ||
-      next.portkey.model !== prev.portkey.model || next.portkey.contextWindow !== prev.portkey.contextWindow || next.autoCompact !== prev.autoCompact
+      next.workingDirectory !== prev.workingDirectory || next.provider !== prev.provider || activeModel(next) !== activeModel(prev) || contextLimit(next) !== contextLimit(prev) || next.autoCompact !== prev.autoCompact
     ) {
       fgAgent().emitContext();
     }
   });
 
-  ipcMain.handle('config:get', () => cfg());
-  ipcMain.handle('config:set', (_e, next: AppConfig) =>
-    app.updateConfig((current) => {
+  // The window's copy of the config has its keys masked (windowConfig); acceptFromWindow keeps the real ones.
+  const forWindow = (c: AppConfig) => windowConfig(c, settingsLayer.info().owned);
+  ipcMain.handle('config:get', () => forWindow(cfg()));
+  ipcMain.handle('config:set', (_e, sent: AppConfig) =>
+    forWindow(app.updateConfig((current) => {
+      const next = acceptFromWindow(current, sent ?? ({} as AppConfig));
       // MCP servers, trust, rules, recents, mods and remote control are changed through their own handlers only: a
       // stale copy sent with the rest of the settings must not undo them (or bring back an approval that was withdrawn).
       const merged = {
@@ -89,6 +93,8 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
         ollama: { ...current.ollama, ...next.ollama },
         portkey: { ...current.portkey, ...next.portkey },
         dreaming: { ...current.dreaming, ...next.dreaming },
+        // Named providers change through the files, the command line and providers.setModel only.
+        providers: current.providers,
         mcpServers: current.mcpServers,
         mcpTrusted: current.mcpTrusted,
         allowRules: current.allowRules,
@@ -100,7 +106,7 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
       // A caller that only flipped the legacy flag still gets the matching mode.
       if (next.permissionMode === undefined && next.autoApprove !== undefined && next.autoApprove !== current.autoApprove) merged.permissionMode = next.autoApprove ? 'bypass' : 'ask';
       return merged;
-    }),
+    })),
   );
   ipcMain.handle('cwd:choose', async () => {
     const win = app.window();
@@ -109,10 +115,12 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
     if (res.canceled || !res.filePaths[0]) return null;
     return app.updateConfig({ workingDirectory: res.filePaths[0] }).workingDirectory;
   });
-  ipcMain.handle('models:list', async () => listOllamaModels(cfg().ollama.baseURL));
+  // The Ollama in use (the block, or a named entry of type ollama), else the block's
+  ipcMain.handle('models:list', async () => listOllamaModels(ollamaOf(cfg()).baseURL));
   ipcMain.handle('models:capabilities', async () => {
     const c = cfg();
-    const key = `${c.provider}|${c.provider === 'ollama' ? `${c.ollama.baseURL}|${c.ollama.model}` : c.portkey.model}`;
+    const r = resolveProvider(c);
+    const key = `${r.name}|${r.baseURL}|${r.model}`;
     const cached = capabilityCache.get(key);
     if (cached) return cached;
     const caps = await modelCapabilities(c);
@@ -242,7 +250,7 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
   });
   ipcMain.handle('approval:response', (_e, id: string, ok: boolean, always?: boolean, scope?: ApprovalScope) => {
     runtime.respondApproval(String(id), Boolean(ok), Boolean(always), scope === 'project' ? 'project' : 'session');
-    return cfg();
+    return forWindow(cfg());
   });
   ipcMain.handle('plan:respond', (_e, id: string, decision: string) => {
     // The plan is on screen, so it is normally the foreground session's; look further in case the window lags behind.

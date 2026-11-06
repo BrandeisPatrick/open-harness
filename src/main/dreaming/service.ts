@@ -17,7 +17,7 @@ import { instructionsFile, applyProposal, checkMemory, checkMod, checkSkill, Dre
 import { buildDigest, DIGEST_SHARE, listMods, sessionTurns, when, type DigestSession, type ExistingThings } from './digest';
 import { DreamStore, MAX_DREAMS, type DreamingData } from './store';
 import { dreamToolNames } from './tools';
-import { configDir } from '../paths';
+import { configDir, projectConfigDir } from '../paths';
 import { loadSkills } from '../skills';
 import { toMeta, type Session } from '../sessions';
 
@@ -256,7 +256,7 @@ export class Dreaming {
   existing(cwd: string): ExistingThings {
     const r = this.roots(cwd);
     const skills = loadSkills(cwd, this.app.appRoot).map((s) => ({ name: s.name, description: s.description, source: s.source }));
-    const mods = listMods({ bundled: path.join(this.app.appRoot, 'mods'), user: path.join(r.configDir, 'mods'), project: path.join(cwd, '.open-harness', 'mods') });
+    const mods = listMods({ bundled: path.join(this.app.appRoot, 'mods'), user: path.join(r.configDir, 'mods'), project: path.join(projectConfigDir(cwd), 'mods') });
     const instructions: ExistingThings['instructions'] = (['project', 'user'] as const).map((scope) => {
       const f = instructionsFile(scope, r);
       let text: string | null = null;
@@ -389,7 +389,7 @@ export class Dreaming {
     this.changed(dream);
     if (first && dream.trigger === 'daily' && dream.status === 'done' && waitingOf(dream) > 0 && this.app.config().notifications) {
       const n = waitingOf(dream);
-      this.notify(`Open Harness dreamed about ${path.basename(dream.cwd) || dream.cwd}`, `${n} suggestion${n === 1 ? '' : 's'} wait${n === 1 ? 's' : ''} for you`, () => {
+      this.notify(`Silo Harness dreamed about ${path.basename(dream.cwd) || dream.cwd}`, `${n} suggestion${n === 1 ? '' : 's'} wait${n === 1 ? 's' : ''} for you`, () => {
         const w = this.app.window();
         w?.show();
         w?.focus();

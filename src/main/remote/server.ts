@@ -5,7 +5,7 @@
 //   2. the Host check (DNS rebinding: a foreign name pointing at this machine gets a bare 404),
 //   3. the token in the path, compared in constant time (bare 404, counted by the throttle),
 //   4. the Origin check (403 for another site's page),
-//   5. for POSTs, the JSON content type and the x-open-harness-remote header (no form or "simple" request qualifies).
+//   5. for POSTs, the JSON content type and the x-silo-harness-remote header (x-open-harness-remote from a page loaded before the rename) (no form or "simple" request qualifies).
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -163,7 +163,7 @@ export class RemoteServer {
     if (method === 'POST') {
       const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
       if (type !== 'application/json') return json(res, 415, { error: 'Send JSON (content-type: application/json).' });
-      if (req.headers['x-open-harness-remote'] !== '1') return bare(res, 403);
+      if (req.headers['x-silo-harness-remote'] !== '1' && req.headers['x-open-harness-remote'] !== '1') return bare(res, 403);
     } else if (method !== 'GET' && method !== 'HEAD') {
       return bare(res, 405, { Allow: 'GET, POST' });
     }

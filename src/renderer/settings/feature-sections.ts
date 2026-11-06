@@ -25,7 +25,7 @@ export function skillsSection(ctx: Ctx): Section {
 
   function render(skills: SkillInfo[], configDir: string): void {
     const project = ctx.config().workingDirectory;
-    where.textContent = `A skill is a folder with a SKILL.md. Put new ones in ${tildePath(configDir)}/skills/<name>/ for every project, or in ${tildePath(project)}/.open-harness/skills/<name>/ for this one. The agent loads a skill when its description fits the task, and / in the composer lists them.`;
+    where.textContent = `A skill is a folder with a SKILL.md. Put new ones in ${tildePath(configDir)}/skills/<name>/ for every project, or in ${tildePath(project)}/.silo-harness/skills/<name>/ for this one. The agent loads a skill when its description fits the task, and / in the composer lists them.`;
     listEl.innerHTML = '';
     for (const g of GROUPS) {
       const items = skills.filter((s) => s.source === g.source);
@@ -56,7 +56,7 @@ export function skillsSection(ctx: Ctx): Section {
     el,
     async load() {
       if (typeof window.oc?.skills?.list !== 'function') return 'absent';
-      let configDir = '~/.open-harness';
+      let configDir = '~/.silo-harness';
       try {
         configDir = (await ctx.call('app.info')).configDir || configDir;
       } catch {
@@ -77,7 +77,7 @@ export function skillsSection(ctx: Ctx): Section {
 
 export function scheduledSection(ctx: Ctx): Section {
   const el = h('section', {}, sectionTitle('Scheduled'));
-  el.append(note('Prompts that run later or on a rhythm, in a session of their own or in one you pick. They run while Open Harness is open.', 'sp-intro'));
+  el.append(note('Prompts that run later or on a rhythm, in a session of their own or in one you pick. They run while Silo Harness is open.', 'sp-intro'));
   const listEl = h('div', {});
   let schedules: Schedule[] = [];
 
@@ -279,7 +279,7 @@ export function remoteSection(ctx: Ctx): Section {
       onRow.problem(`Couldn't turn it ${on ? 'on' : 'off'}: ${ctx.cleanError(err)}`);
     }
   });
-  const onRow = row({ id: 'remote-enabled', title: 'Remote control', desc: 'Follow and steer your sessions from a phone or another computer, through a small page Open Harness serves.', keywords: 'phone mobile web server access' }, onInput);
+  const onRow = row({ id: 'remote-enabled', title: 'Remote control', desc: 'Follow and steer your sessions from a phone or another computer, through a small page Silo Harness serves.', keywords: 'phone mobile web server access' }, onInput);
   onRow.el.classList.add('clickable');
 
   const bindSeg = segmented<'localhost' | 'lan'>(

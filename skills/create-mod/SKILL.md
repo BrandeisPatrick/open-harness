@@ -65,13 +65,13 @@ Required: `protocol` (1), `id`, `name`, `version` ("0.1.0"). Optional: `descript
 - `background`: behind the whole window, takes no clicks.
 
 ## Kit (`/@harness/harness.css`)
-Classes: `h-row` (label/value line), `h-label`, `h-value`, `h-muted`, `h-title`, `h-list` + `h-item` (clickable rows), `h-btn` (`.primary`, `.ghost`, `.sm`), `h-input`, `h-switch`, `h-chip`, `h-bar` + `h-bar-seg` (meter), `h-dot`, `h-empty`, `h-spin`, `h-mono`.
+Classes: `h-row` (label/value line), `h-label`, `h-value`, `h-muted`, `h-title`, `h-list` + `h-item` (clickable rows), `h-btn` (`.primary`, `.ghost`, `.sm`), `h-input`, `h-switch`, `h-chip`, `h-bar` + `h-bar-seg` (meter), `h-dot`, `h-empty`, `h-spin`, `h-mono`, `h-md` (put `ui.markdown()`'s html in it: chat styling, working Copy buttons and links; `.compact` for the rail).
 Tokens: `--bg-000`…`--bg-400`, `--text-100`, `--text-200`, `--text-400`, `--border`, `--border-subtle`, `--accent`, `--danger`, `--success`, `--font`, `--mono`, `--r-control`, `--r-card`. Keep panels compact: 13 px text, 8 px gaps.
 
 ## harness calls, by permission
 Every call returns a promise; wait for `harness.ready` first. `harness.on(event, fn)` subscribes.
 - Always: `ui.theme()`, `ui.setTitle(t)`, `ui.setBadge(v)`, `ui.toast(text, { kind })`, `ui.open(viewId)`, `ui.copy(t)`, `ui.openExternal(url)`, `ui.markdown(text)`, `storage.get(key, fallback)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()`, `storage.session.*` (same, per session), `settings.get()`. Events: `theme.changed`, `settings.changed`, `visibility.changed`, `command`.
-- `session:read`: `session.get()`, `session.transcript({ limit })`, `session.tasks()`, `session.plan()`, `session.outputs()`, `session.context()`, `session.related()`, `outputs.open({ kind, id })`. Events: `session.changed`, `run.started`, `run.ended`, `message.user`, `message.assistant`, `message.delta`, `tool.started`, `tool.ended`, `tasks.changed`, `plan.changed`, `outputs.changed`, `context.changed`.
+- `session:read`: `session.get()` (resolves with `{ id, title, cwd, origin, messageCount, createdAt, updatedAt, running, attention? }`), `session.transcript({ limit })`, `session.tasks()`, `session.plan()`, `session.outputs()`, `session.context()`, `session.related()`, `outputs.open({ kind, id })`. Events: `session.changed`, `run.started`, `run.ended`, `message.user`, `message.assistant`, `message.delta`, `tool.started`, `tool.ended`, `tasks.changed`, `plan.changed`, `outputs.changed`, `context.changed`.
 - `session:send`: `session.send(text)`, `composer.insert(text)`.
 - `session:control`: `session.stop()`, `session.compact(focus)`, `sessions.open(id)`, `sessions.create()`, `sessions.spawn({ title, prompt })`, `sessions.merge(id)`.
 - `sessions:read`: `sessions.list()`, `sessions.search(query, { limit })`.
@@ -96,5 +96,6 @@ Ask only for the permissions the page uses. A call without its permission reject
 ## The loop
 1. Write `mod.json` and the page(s) in the right folder.
 2. Call the `mod_check` tool with the id. Fix every problem it lists and call it again until mod.json is valid.
+   A mod you just wrote shows in the installed list and in `mod_check` as off until the user turns it on; that is expected and does not mean it existed before.
 3. Tell the user the mod is ready and that they turn it on from the card in the chat or in Settings → Mods. Never edit config files to turn it on yourself.
 4. Once it is on, each save reloads the page. After changes, call `mod_check` again: it also lists errors the page threw.

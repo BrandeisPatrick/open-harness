@@ -249,7 +249,7 @@ function seed(profile) {
 
     // ---- footer ----
     const foot = await app.evaluate(`(() => { const c = document.querySelector('#model-chip'); const l = document.querySelector('#model-label'); return { text: l.innerText, fits: l.getBoundingClientRect().right <= document.querySelector('#shortcuts-btn').getBoundingClientRect().left, settings: Boolean(document.querySelector('.sidebar-foot #settings-btn')), shortcuts: Boolean(document.querySelector('.sidebar-foot #shortcuts-btn')) }; })()`);
-    check('footer: the model chip, shortcuts and settings', / · (Portkey|Ollama)$/.test(foot.text) && foot.fits && foot.settings && foot.shortcuts, foot);
+    check('footer: the model chip, shortcuts and settings', / · (Portkey|Gateway|Ollama)$/.test(foot.text) && foot.fits && foot.settings && foot.shortcuts, foot);
     await shot('footer', '.sidebar-foot', 4);
     const navs = await app.evaluate(`[...document.querySelectorAll('.sidebar-nav .nav-row')].filter((b) => !b.hidden).map((b) => b.innerText.split('\\n')[0])`);
     check('navigation rows', navs[0] === 'New session' && navs[1] === 'Search' && navs.includes('Scheduled') && navs.includes('Customize'), navs);

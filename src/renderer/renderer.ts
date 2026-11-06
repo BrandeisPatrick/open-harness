@@ -2538,8 +2538,12 @@ async function setModel(model: string, name = activeProvider(config).name): Prom
   try {
     await rpc('providers.setModel', name, model);
     config = await oc.getConfig();
-  } catch {
-    // An older main process: only the Ollama block's model could be chosen here
+  } catch (err) {
+    // An older main process (no such method): only the Ollama block's model could be chosen here
+    if (!/No handler registered|Unknown (?:RPC )?method/i.test(String((err as Error)?.message ?? err))) {
+      showInlineError(modelBtn, `Couldn't choose ${model}: ${cleanError(err)}`);
+      return;
+    }
     config = await oc.setConfig({ ...config, ollama: { ...config.ollama, model } });
   }
   applyConfigToUi();

@@ -70,6 +70,7 @@ import {
 import { bus } from './bus.js';
 import { onPush, rpc } from './rpc.js';
 import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } from './transcript-items.js';
+import { createSettingsPage } from './settings-page.js';
 
 declare global {
   interface Window {
@@ -162,9 +163,6 @@ const newSessionBtn = $<HTMLButtonElement>('new-session-btn');
 const slashMenu = $('slash-menu');
 const mentionMenu = $('mention-menu');
 const settingsDialog = $<HTMLDialogElement>('settings');
-const settingsForm = $<HTMLFormElement>('settings-form');
-const settingsBody = $('settings-body');
-const settingsStatus = $('settings-status');
 const shortcutsDialog = $<HTMLDialogElement>('shortcuts');
 const sidePane = $('side-pane');
 const browserPane = $('browser-pane');
@@ -3541,162 +3539,7 @@ openExternalBtn.onclick = async () => {
 
 // ---------- Settings ----------
 
-const field = <T extends HTMLElement = HTMLInputElement>(id: string) => $<T>(id);
-let showOtherProvider = false;
-let settingsScroll = 0;
-
-function selectedProvider(): AppConfig['provider'] {
-  return (settingsForm.querySelector<HTMLInputElement>('input[name=provider]:checked')?.value ?? 'ollama') as AppConfig['provider'];
-}
-
-function fillSettings(): void {
-  settingsForm.querySelectorAll<HTMLInputElement>('input[name=provider]').forEach((r) => (r.checked = r.value === config.provider));
-  field('ollama-baseURL').value = config.ollama.baseURL;
-  field('ollama-model').value = config.ollama.model;
-  field('ollama-numCtx').value = String(config.ollama.numCtx || 16384);
-  field<HTMLSelectElement>('ollama-think').value = config.ollama.think || 'auto';
-  field('portkey-baseURL').value = config.portkey.baseURL;
-  field('portkey-apiKey').value = config.portkey.apiKey;
-  field('portkey-model').value = config.portkey.model;
-  field('portkey-contextWindow').value = String(config.portkey.contextWindow || 128000);
-  field('portkey-virtualKey').value = config.portkey.virtualKey;
-  field('portkey-provider').value = config.portkey.provider;
-  field('portkey-providerApiKey').value = config.portkey.providerApiKey;
-  field('portkey-configId').value = config.portkey.configId;
-  field('maxTurns').value = String(config.maxTurns);
-  field<HTMLSelectElement>('theme').value = config.theme || 'system';
-  field('sendScreenshots').checked = config.sendScreenshotsToModel;
-  field('autoTitles').checked = config.autoTitles !== false;
-  field('autoCompact').checked = config.autoCompact !== false;
-  field('notifications').checked = config.notifications !== false;
-  field<HTMLTextAreaElement>('systemPromptExtra').value = config.systemPromptExtra;
-  mcpPanel.resetMessages();
-  rulesPanel.resetMessages();
-  settingsStatus.textContent = '';
-  settingsStatus.classList.remove('error');
-  showOtherProvider = false;
-  toggleProviderFields();
-}
-
-function toggleProviderFields(): void {
-  const provider = selectedProvider();
-  const otherName = provider === 'ollama' ? 'Portkey' : 'Ollama';
-  $('ollama-fields').hidden = provider !== 'ollama' && !showOtherProvider;
-  $('portkey-fields').hidden = provider !== 'portkey' && !showOtherProvider;
-  $('other-provider-text').textContent = showOtherProvider ? `${otherName} settings are shown so you can fill them in ahead of time.` : `${otherName} settings are hidden.`;
-  $('show-other-provider').textContent = showOtherProvider ? 'Hide' : 'Show';
-}
-settingsForm.querySelectorAll('input[name=provider]').forEach((r) => r.addEventListener('change', toggleProviderFields));
-$('show-other-provider').onclick = () => {
-  showOtherProvider = !showOtherProvider;
-  toggleProviderFields();
-};
-
-/** The form's values over the loaded config (mcpServers, mcpTrusted, allowRules and recentDirs belong to the main process and pass through as loaded). */
-function readSettings(): AppConfig {
-  return {
-    ...config,
-    provider: selectedProvider(),
-    ollama: {
-      ...config.ollama,
-      baseURL: field('ollama-baseURL').value.trim() || 'http://localhost:11434/v1',
-      model: field('ollama-model').value.trim(),
-      numCtx: Math.max(2048, Number(field('ollama-numCtx').value) || 16384),
-      think: (field<HTMLSelectElement>('ollama-think').value as 'auto' | 'on' | 'off') || 'auto',
-    },
-    portkey: {
-      ...config.portkey,
-      baseURL: field('portkey-baseURL').value.trim() || 'https://api.portkey.ai/v1',
-      apiKey: field('portkey-apiKey').value.trim(),
-      model: field('portkey-model').value.trim(),
-      virtualKey: field('portkey-virtualKey').value.trim(),
-      provider: field('portkey-provider').value.trim(),
-      providerApiKey: field('portkey-providerApiKey').value.trim(),
-      configId: field('portkey-configId').value.trim(),
-      contextWindow: Math.max(1024, Math.round(Number(field('portkey-contextWindow').value) || 128000)),
-    },
-    maxTurns: Math.max(1, Number(field('maxTurns').value) || 40),
-    theme: (field<HTMLSelectElement>('theme').value as AppConfig['theme']) || 'system',
-    sendScreenshotsToModel: field('sendScreenshots').checked,
-    autoTitles: field('autoTitles').checked,
-    autoCompact: field('autoCompact').checked,
-    notifications: field('notifications').checked,
-    systemPromptExtra: field<HTMLTextAreaElement>('systemPromptExtra').value,
-  };
-}
-
-async function refreshModels(): Promise<void> {
-  const list = $<HTMLDataListElement>('ollama-models');
-  const hint = $('ollama-hint');
-  try {
-    config = { ...config, ollama: { ...config.ollama, baseURL: field('ollama-baseURL').value.trim() || config.ollama.baseURL } };
-    await oc.setConfig(config);
-    const models = await oc.listOllamaModels();
-    list.innerHTML = models.map((m) => `<option value="${escapeHtml(m)}">`).join('');
-    hint.textContent = models.length ? `${models.length} local model${models.length === 1 ? '' : 's'}: ${models.join(', ')}` : 'Ollama is running but has no models. Try: ollama pull qwen3:8b';
-  } catch (err) {
-    hint.textContent = `Could not reach Ollama (${cleanError(err)}). Is it running? Start it with: ollama serve`;
-  }
-}
-$('refresh-models').onclick = () => void refreshModels();
-
-/** Scrolls the open dialog so the section (or the field holding the element) is at the top. */
-function scrollSettingsTo(id: string): void {
-  const el = document.getElementById(id);
-  if (!el || !settingsBody.contains(el)) return;
-  const target = el.matches('.set-section') ? el : el.closest<HTMLElement>('.field, .switch-row') ?? el;
-  // Layout offsets (#settings-body is the offset parent), not client rects: the dialog is still scaling in.
-  let top = 0;
-  for (let n: HTMLElement | null = target; n && n !== settingsBody; n = n.offsetParent as HTMLElement | null) top += n.offsetTop;
-  settingsBody.scrollTop = top - (target.matches('.set-section') ? 0 : 16);
-  settingsScroll = settingsBody.scrollTop;
-}
-
-/** Opens Settings where it was last scrolled, or at `scrollTo` (an element id, e.g. "mcp-section"). */
-function openSettings(scrollTo?: string): void {
-  const target = typeof scrollTo === 'string' ? scrollTo : '';
-  if (settingsDialog.open) {
-    if (target) scrollSettingsTo(target);
-    return;
-  }
-  if (confirmDialog.open) return;
-  closeMenu();
-  if (shortcutsDialog.open) shortcutsDialog.close();
-  fillSettings();
-  oc.browser.setVisible(false);
-  settingsDialog.showModal();
-  settingsDialog.focus({ preventScroll: true });
-  settingsBody.scrollTop = settingsScroll;
-  if (target) scrollSettingsTo(target);
-  void refreshModels();
-  void mcpPanel.refresh();
-  void rulesPanel.refresh();
-}
-/** Closes the dialog, remembering where it was scrolled (a closed dialog no longer has a scroll position). */
-function closeSettings(): void {
-  settingsScroll = settingsBody.scrollTop;
-  settingsDialog.close();
-}
-$('settings-btn').onclick = () => openSettings();
-$('settings-cancel').onclick = closeSettings;
-$('settings-close').onclick = closeSettings;
-settingsBody.addEventListener('scroll', () => (settingsScroll = settingsBody.scrollTop), { passive: true });
-settingsDialog.addEventListener('cancel', () => (settingsScroll = settingsBody.scrollTop));
-settingsDialog.addEventListener('close', syncBrowserView);
-settingsForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try {
-    // MCP and rule changes made while the dialog was open went straight to the main process: pass its current lists through.
-    await syncOwnedConfig();
-    config = await oc.setConfig(readSettings());
-    applyConfigToUi();
-    closeSettings();
-    void refreshContext();
-  } catch (err) {
-    settingsStatus.textContent = `Could not save: ${cleanError(err)}`;
-    settingsStatus.classList.add('error');
-  }
-});
+// The page itself is src/renderer/settings-page.ts; its hookup is under [feature:settings] below.
 
 // ---------- MCP servers (Settings section and /mcp) ----------
 
@@ -3954,6 +3797,38 @@ window.__oc_debug = {
 // [feature:mods]
 
 // [feature:settings]
+const settingsPage = createSettingsPage({
+  dialog: settingsDialog,
+  config: () => config,
+  adoptConfig: (next) => {
+    const prev = config;
+    config = next;
+    applyConfigToUi();
+    if (prev && prev.workingDirectory !== next.workingDirectory) void changesPane.refresh();
+    void refreshContext();
+  },
+  mcpPanel,
+  rulesPanel,
+  confirm: confirmAction,
+  cleanError,
+  chooseFolder,
+  openShortcuts,
+  currentSessionId: () => currentSessionId,
+  beforeOpen: () => {
+    if (confirmDialog.open) return false;
+    closeMenu();
+    if (shortcutsDialog.open) shortcutsDialog.close();
+    oc.browser.setVisible(false);
+    return true;
+  },
+  afterClose: syncBrowserView,
+});
+/** Opens Settings at the section last open, or at `section`: a section id ("mods") or the id of a field on the page ("ollama-baseURL", "mcp-section"). */
+function openSettings(section?: string): void {
+  settingsPage.open(typeof section === 'string' ? section : undefined);
+}
+$('settings-btn').onclick = () => openSettings();
+(window.__oc_debug as unknown as Record<string, unknown>).settings = settingsPage.debug;
 
 // [feature:sidebar]
 

@@ -153,160 +153,64 @@
   </div>
 
   <dialog id="settings" class="dialog settings-dialog" aria-labelledby="settings-heading" tabindex="-1">
-    <form method="dialog" id="settings-form">
-      <header class="dialog-head">
+    <div id="settings-form" class="sp">
+      <header class="sp-head">
         <h2 id="settings-heading">Settings</h2>
-        <button type="button" id="settings-close" class="icon-btn" aria-label="Close" data-icon="x"></button>
+        <button type="button" id="settings-close" class="icon-btn" aria-label="Close settings" data-icon="x"></button>
       </header>
-
-      <div class="dialog-body" id="settings-body">
-        <section class="set-section">
-          <div class="set-head">
-            <h3>Model provider</h3>
-            <p>Where OpenAgent sends model requests.</p>
+      <div class="sp-main">
+        <nav class="sp-side" aria-label="Settings">
+          <label class="search-field sp-search"><span data-icon="search" data-icon-size="14"></span><input id="settings-search" type="text" placeholder="Search" aria-label="Search settings" spellcheck="false" autocomplete="off"></label>
+          <div id="settings-nav" class="sp-nav" role="tablist" aria-orientation="vertical" aria-label="Sections"></div>
+        </nav>
+        <div class="sp-content" id="settings-body">
+          <div id="rules-section" class="rules-panel">
+            <p class="rules-for">For <span id="rules-cwd" class="rules-cwd">this project</span></p>
+            <div id="rules-list" class="rules-list" hidden>
+              <div class="rules-row" hidden>
+                <span class="rules-label"><span data-icon="terminal" data-icon-size="14"></span><span>Commands</span></span>
+                <div id="rules-programs" class="rules-chips" role="list" aria-label="Commands that run without asking"></div>
+              </div>
+              <div class="rules-row" hidden>
+                <span class="rules-label" title="Auto mode no longer pauses for these"><span data-icon="zap" data-icon-size="14"></span><span>Auto-mode checks</span></span>
+                <div id="rules-reasons" class="rules-chips" role="list" aria-label="Auto-mode checks that no longer pause"></div>
+              </div>
+              <div class="rules-row" hidden>
+                <span class="rules-label"><span data-icon="plug" data-icon-size="14"></span><span>MCP servers</span></span>
+                <div id="rules-mcp" class="rules-chips" role="list" aria-label="MCP servers whose tools run without asking"></div>
+              </div>
+              <div id="rules-edits" class="rules-row rules-edits" hidden>
+                <span class="rules-label"><span data-icon="pencil" data-icon-size="14"></span><span>File edits</span></span>
+                <span class="rules-text">Edits inside the working directory run without asking</span>
+                <button type="button" class="rule-remove" aria-label="Ask again before edits" title="Remove" data-icon="x" data-icon-size="12"></button>
+              </div>
+            </div>
+            <div class="rules-empty" hidden></div>
+            <p id="rules-status" class="rules-status" role="alert" hidden></p>
           </div>
-          <div class="segmented" role="radiogroup" aria-label="Provider">
-            <label><input type="radio" name="provider" value="ollama"><span>Ollama (local)</span></label>
-            <label><input type="radio" name="provider" value="portkey"><span>Portkey (gateway)</span></label>
-          </div>
-          <p class="set-aside"><span id="other-provider-text">Portkey settings are hidden.</span> <button type="button" class="link-btn" id="show-other-provider">Show</button></p>
-        </section>
-
-        <section class="set-section" id="ollama-fields">
-          <div class="set-head">
-            <h3>Ollama</h3>
-            <p>Runs models locally. Pick one that supports tool calling.</p>
-          </div>
-          <label class="field"><span class="field-label">Base URL</span><input id="ollama-baseURL" placeholder="http://localhost:11434/v1" spellcheck="false"></label>
-          <div class="field">
-            <label class="field-label" for="ollama-model">Model</label>
-            <div class="field-row">
-              <input id="ollama-model" list="ollama-models" placeholder="qwen3:8b" spellcheck="false">
-              <datalist id="ollama-models"></datalist>
-              <button type="button" id="refresh-models" class="btn"><span data-icon="refresh" data-icon-size="14"></span><span>Refresh</span></button>
+          <div id="mcp-section" class="mcp-panel">
+            <div id="mcp-list" class="mcp-list" role="list" aria-label="MCP servers"></div>
+            <p id="mcp-status" class="mcp-status" role="alert" hidden></p>
+            <div id="mcp-add" class="mcp-add" role="group" aria-labelledby="mcp-add-title">
+              <div class="mcp-add-title" id="mcp-add-title">Add a server</div>
+              <div class="field-grid">
+                <label class="field"><span class="field-label" id="mcp-name-label">Name</span><input id="mcp-name" placeholder="e.g. github" spellcheck="false" autocomplete="off" autocapitalize="off"></label>
+                <label class="field"><span class="field-label">Scope</span><span class="select"><select id="mcp-scope"><option value="user">This Mac (settings)</option><option value="project">This project (.mcp.json)</option></select><span class="select-chev" data-icon="chevron-down" data-icon-size="14"></span></span></label>
+              </div>
+              <label class="field"><span class="field-label">Config</span><textarea id="mcp-spec" class="mono" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="npx -y @modelcontextprotocol/server-filesystem ~/Documents&#10;https://mcp.example.com/mcp&#10;{&quot;command&quot;: &quot;npx&quot;, &quot;args&quot;: [&quot;-y&quot;, &quot;@scope/server&quot;]}"></textarea></label>
+              <p class="hint">A command line, a URL, or the JSON snippet from a server's README. A whole <code>{"mcpServers": …}</code> block adds every server in it, and then the name is optional.</p>
+              <label class="field"><span class="field-label">Environment <span class="field-opt">· KEY=value per line, for command-line servers</span></span><textarea id="mcp-env" class="mono" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="GITHUB_TOKEN=ghp_…&#10;ONE_PER_LINE=value"></textarea></label>
+              <div class="mcp-add-foot">
+                <div id="mcp-add-error" class="mcp-add-error" role="alert" hidden></div>
+                <span class="spacer"></span>
+                <button type="button" id="mcp-add-btn" class="btn"><span data-icon="plus" data-icon-size="14"></span><span>Add server</span></button>
+              </div>
             </div>
           </div>
-          <div class="field-grid">
-            <label class="field"><span class="field-label">Context size (tokens)</span><input id="ollama-numCtx" type="number" min="2048" step="1024" placeholder="16384"></label>
-            <label class="field"><span class="field-label">Thinking</span><span class="select"><select id="ollama-think"><option value="auto">Model default</option><option value="on">On</option><option value="off">Off</option></select><span class="select-chev" data-icon="chevron-down" data-icon-size="14"></span></span></label>
-          </div>
-          <p class="hint" id="ollama-hint">Ollama's own default context is 4096 tokens, too small for agent work, so OpenAgent asks for the size above.</p>
-        </section>
-
-        <section class="set-section" id="portkey-fields">
-          <div class="set-head">
-            <h3>Portkey</h3>
-            <p>Routes requests through the Portkey AI gateway.</p>
-          </div>
-          <label class="field"><span class="field-label">Base URL</span><input id="portkey-baseURL" placeholder="https://api.portkey.ai/v1" spellcheck="false"></label>
-          <label class="field"><span class="field-label">Portkey API key</span><input id="portkey-apiKey" type="password" placeholder="pk-…" autocomplete="off"></label>
-          <label class="field"><span class="field-label">Model</span><input id="portkey-model" placeholder="@openai/gpt-4o-mini" spellcheck="false"></label>
-          <label class="field narrow"><span class="field-label">Context window (tokens)</span><input id="portkey-contextWindow" type="number" step="any" inputmode="numeric" placeholder="128000"></label>
-          <details class="advanced">
-            <summary><span data-icon="chevron-right" data-icon-size="14"></span>Advanced routing (optional)</summary>
-            <div class="advanced-body">
-              <label class="field"><span class="field-label">Virtual key</span><input id="portkey-virtualKey" placeholder="x-portkey-virtual-key" spellcheck="false"></label>
-              <label class="field"><span class="field-label">Provider slug</span><input id="portkey-provider" placeholder="openai, anthropic, groq…" spellcheck="false"></label>
-              <label class="field"><span class="field-label">Provider API key</span><input id="portkey-providerApiKey" type="password" placeholder="sent as Authorization: Bearer" autocomplete="off"></label>
-              <label class="field"><span class="field-label">Config ID</span><input id="portkey-configId" placeholder="pc-…" spellcheck="false"></label>
-            </div>
-          </details>
-          <p class="hint">Model-catalog ids like <code>@openai/gpt-4o-mini</code> need only the Portkey key. Otherwise set a virtual key, or a provider slug plus that provider's key. The gateway doesn't report the model's context window, so set it above: the context meter and auto-compaction go by it.</p>
-        </section>
-
-        <section class="set-section">
-          <div class="set-head">
-            <h3>Agent</h3>
-            <p>How long a run may go on and what it is told up front.</p>
-          </div>
-          <label class="field narrow"><span class="field-label">Max tool turns per request</span><input id="maxTurns" type="number" min="1" max="500"></label>
-          <label class="field"><span class="field-label">Extra system prompt</span><textarea id="systemPromptExtra" rows="3" placeholder="House rules, coding style, project context…"></textarea></label>
-          <label class="switch-row">
-            <span class="switch-text"><span class="switch-title">Auto-compact context</span><span class="switch-desc">Summarise the conversation on its own when it nears the context window.</span></span>
-            <input type="checkbox" class="switch" id="autoCompact">
-          </label>
-        </section>
-
-        <section class="set-section" id="rules-section">
-          <div class="set-head">
-            <h3>Permissions</h3>
-            <p>Rules saved for <span id="rules-cwd" class="rules-cwd">this project</span>. Matching actions run without an approval card.</p>
-          </div>
-          <div id="rules-list" class="rules-list" hidden>
-            <div class="rules-row" hidden>
-              <span class="rules-label"><span data-icon="terminal" data-icon-size="14"></span><span>Commands</span></span>
-              <div id="rules-programs" class="rules-chips" role="list" aria-label="Commands that run without asking"></div>
-            </div>
-            <div class="rules-row" hidden>
-              <span class="rules-label" title="Auto mode no longer pauses for these"><span data-icon="zap" data-icon-size="14"></span><span>Auto-mode checks</span></span>
-              <div id="rules-reasons" class="rules-chips" role="list" aria-label="Auto-mode checks that no longer pause"></div>
-            </div>
-            <div class="rules-row" hidden>
-              <span class="rules-label"><span data-icon="plug" data-icon-size="14"></span><span>MCP servers</span></span>
-              <div id="rules-mcp" class="rules-chips" role="list" aria-label="MCP servers whose tools run without asking"></div>
-            </div>
-            <div id="rules-edits" class="rules-row rules-edits" hidden>
-              <span class="rules-label"><span data-icon="pencil" data-icon-size="14"></span><span>File edits</span></span>
-              <span class="rules-text">Edits inside the working directory run without asking</span>
-              <button type="button" class="rule-remove" aria-label="Ask again before edits" title="Remove" data-icon="x" data-icon-size="12"></button>
-            </div>
-          </div>
-          <div class="rules-empty" hidden></div>
-          <p id="rules-status" class="rules-status" role="alert" hidden></p>
-        </section>
-
-        <section class="set-section" id="mcp-section">
-          <div class="set-head">
-            <h3>MCP servers</h3>
-            <p>Tools from Model Context Protocol servers. Changes here apply right away.</p>
-          </div>
-          <div id="mcp-list" class="mcp-list" role="list" aria-label="MCP servers"></div>
-          <p id="mcp-status" class="mcp-status" role="alert" hidden></p>
-          <div id="mcp-add" class="mcp-add" role="group" aria-labelledby="mcp-add-title">
-            <div class="mcp-add-title" id="mcp-add-title">Add a server</div>
-            <div class="field-grid">
-              <label class="field"><span class="field-label" id="mcp-name-label">Name</span><input id="mcp-name" placeholder="e.g. github" spellcheck="false" autocomplete="off" autocapitalize="off"></label>
-              <label class="field"><span class="field-label">Scope</span><span class="select"><select id="mcp-scope"><option value="user">This Mac (settings)</option><option value="project">This project (.mcp.json)</option></select><span class="select-chev" data-icon="chevron-down" data-icon-size="14"></span></span></label>
-            </div>
-            <label class="field"><span class="field-label">Config</span><textarea id="mcp-spec" class="mono" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="npx -y @modelcontextprotocol/server-filesystem ~/Documents&#10;https://mcp.example.com/mcp&#10;{&quot;command&quot;: &quot;npx&quot;, &quot;args&quot;: [&quot;-y&quot;, &quot;@scope/server&quot;]}"></textarea></label>
-            <p class="hint">A command line, a URL, or the JSON snippet from a server's README. A whole <code>{"mcpServers": …}</code> block adds every server in it, and then the name is optional.</p>
-            <label class="field"><span class="field-label">Environment <span class="field-opt">· KEY=value per line, for command-line servers</span></span><textarea id="mcp-env" class="mono" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="GITHUB_TOKEN=ghp_…&#10;ONE_PER_LINE=value"></textarea></label>
-            <div class="mcp-add-foot">
-              <div id="mcp-add-error" class="mcp-add-error" role="alert" hidden></div>
-              <span class="spacer"></span>
-              <button type="button" id="mcp-add-btn" class="btn"><span data-icon="plus" data-icon-size="14"></span><span>Add server</span></button>
-            </div>
-          </div>
-        </section>
-
-        <section class="set-section">
-          <div class="set-head">
-            <h3>Appearance and behaviour</h3>
-            <p>Theme, session titles, notifications and browser screenshots.</p>
-          </div>
-          <label class="field narrow"><span class="field-label">Theme</span><span class="select"><select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select><span class="select-chev" data-icon="chevron-down" data-icon-size="14"></span></span></label>
-          <label class="switch-row">
-            <span class="switch-text"><span class="switch-title">Generated titles</span><span class="switch-desc">Name a session from its first exchange.</span></span>
-            <input type="checkbox" class="switch" id="autoTitles">
-          </label>
-          <label class="switch-row">
-            <span class="switch-text"><span class="switch-title">Notifications</span><span class="switch-desc">Notify when a run finishes or needs approval while OpenAgent is in the background.</span></span>
-            <input type="checkbox" class="switch" id="notifications">
-          </label>
-          <label class="switch-row">
-            <span class="switch-text"><span class="switch-title">Send browser screenshots to the model</span><span class="switch-desc">Needs a vision-capable model.</span></span>
-            <input type="checkbox" class="switch" id="sendScreenshots">
-          </label>
-        </section>
+          <div id="settings-empty" class="sp-empty" hidden><span data-icon="search"></span><p class="sp-empty-text"></p></div>
+        </div>
       </div>
-
-      <footer class="dialog-foot">
-        <span id="settings-status" class="hint"></span>
-        <span class="spacer"></span>
-        <button type="button" id="settings-cancel" class="btn">Cancel</button>
-        <button type="submit" class="btn primary">Save</button>
-      </footer>
-    </form>
+    </div>
   </dialog>
 
   <dialog id="shortcuts" class="dialog shortcuts-dialog" aria-labelledby="shortcuts-heading" tabindex="-1">

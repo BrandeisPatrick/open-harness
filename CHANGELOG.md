@@ -2,7 +2,7 @@
 
 ## 0.2.0
 
-The app is now called **Open Harness** (it was OpenAgent). Your sessions, settings and artifacts are carried over on the first launch. `OPENAGENT.md` files and `.openagent/skills` folders are still read.
+The app is now called **Open Harness** (it was OpenAgent). On the first launch your sessions, settings and artifacts are moved from the old data folder to the new one (`~/Library/Application Support/Open Harness`). `OPENAGENT.md` files and `.openagent/skills` folders are still read.
 
 ### Mods
 
@@ -47,7 +47,7 @@ Everything beside the chat is now a mod: a folder of web files that the app show
 ### For contributors
 
 - `docs/architecture.md`: the app container, the session runtime, and the seams features plug into.
-- `npm test`: 23 headless suites. `npm run test:live`: the real app, hidden, driven against the API (`ANTHROPIC_API_KEY`) or a mock model.
+- `npm test`: 24 headless suites. `npm run test:live`: the real app, hidden, driven against the API (`ANTHROPIC_API_KEY`) or a mock model.
 
 ### Known limits
 

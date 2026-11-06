@@ -14,7 +14,8 @@ sessions.ts    Session, SessionStore (the only place messages change), toMeta, t
 ```
 
 Feature setups, in this order, before the window opens: `setupSettings` (settings-service.ts), `setupHistory` (history.ts),
-`setupImages`, `setupMods`, `setupSchedules`, `setupSubagents`, `setupRemote`, `setupPower` (each in its own file).
+`setupContext` (context-service.ts), `setupImages`, `setupMods`, `setupSchedules`, `setupSubagents`, `setupRemote`,
+`setupPower` (each in its own file).
 
 ## App (src/main/app.ts)
 
@@ -34,7 +35,7 @@ export interface App {
   readonly runtime: SessionRuntime;
   readonly events: { on(cb: (sessionId: string, ev: AgentEvent) => void): Disposer };  // every event of every session, in order
   readonly tools: { register(tool: Tool): Disposer; list(): Tool[] };
-  readonly prompt: { add(id: string, section: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string): Disposer };
+  readonly prompt: { add(id: string, section: (info: { cwd: string; mode: PermissionMode; sessionId: string }) => string, opts?: { optional?: boolean }): Disposer };
   readonly commands: { register(cmd: Command): Disposer; list(): CommandInfo[] };
   provide(name: string, service: unknown): Disposer;
   service<T>(name: string): T | undefined;
@@ -50,6 +51,10 @@ export interface App {
   app's folder only, not each session's: a known limit.
 - Registered tools: `Tool.readOnly` decides whether plan mode offers them. Prompt sections are appended after the
   project instructions; an empty string adds nothing.
+- A tool that is not needed for plain coding work is registered with `optional: true`, and the prompt section that
+  explains it with `{ optional: true }`. Both are left out of a request when the tool set is trimmed
+  (`AppConfig.toolSet`: `auto` trims under a 32k-token window, `all` never, `essential` always; `essentialToolsOnly`
+  in agent.ts), and the model is told what is off. The scheduling, session and mod tools are registered this way.
 - `AppHost` (the concrete class) adds `invokeRpc`, `showSession`, `promptFor`, `runQuit`, `setWindow`, `mcp`,
   `terminal`, `artifacts`. Features should use `App` only. `createApp(opts)` works without Electron (tests).
 
@@ -66,6 +71,7 @@ respondApproval(id, ok, always?, scope?): boolean;   // finds the agent holding 
 respondPlan(sessionId, planId, decision): void;       // marks the plan; build decisions switch the mode and start the build
 findApproval(id) / findQueued(id): Agent | undefined;  forget(id): void;  planDecided(id): void;
 onEvent(cb: (sessionId, ev) => void): Disposer;  onStatus(cb: (sessionId, status) => void): Disposer;  onListChanged(cb): Disposer;
+emit(id, ev): void;                          // an event no run produced (a merge note appended between runs)
 ```
 
 Every agent emits through the runtime, which notes the event in the session's LiveState/status, hands it to

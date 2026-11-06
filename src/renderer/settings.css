@@ -234,3 +234,10 @@ textarea.sp-input { height: auto; min-height: 92px; padding: 8px 10px; line-heig
 @media (prefers-reduced-motion: reduce) {
   .sp-row.flash { animation: none; }
 }
+
+/* ---------- Settings → Mods: the tab strip, each tab's head, and the cards of the tab's kind ---------- */
+.sp-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 12px 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+.sp-content:not(.searching) .sp-tab-head:not(.current),
+.sp-content:not(.searching) .sp-tab-out { display: none; }
+.sp-tab-head > .sp-row:first-child, .sp-tab-head > .sp-note:first-child { border-top: none; }
+.sp-mod-set { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }

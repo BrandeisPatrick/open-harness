@@ -18,6 +18,11 @@ export interface Section {
   sync?(config: AppConfig): void;
   /** The page closed */
   closed?(): void;
+  /** A section with tabs of its own (Mods): the tab on screen, and bringing one on screen */
+  tab?(): string;
+  showTab?(tab: string): void;
+  /** Before the page reveals an element of the section (a search hit, an openSettings target): show the tab it is on */
+  uncover?(el: HTMLElement): void;
 }
 
 export interface FieldOptions extends RowOptions {
@@ -43,8 +48,8 @@ export interface Ctx {
   selectField<T extends string | number>(opts: FieldOptions & { choices: Choice<T>[]; width?: number; read?: (v: unknown) => T; inputId?: string; onSaved?: (v: T) => void }): Row;
   segField<T extends string | number>(opts: FieldOptions & { choices: Choice<T>[]; read?: (v: unknown) => T; onSaved?: (v: T) => void }): Row;
 
-  /** Brings a section on screen (clears the search) */
-  show(id: SectionId, focusRow?: string): void;
+  /** Brings a section on screen (clears the search), at one of its tabs, or at a row */
+  show(id: SectionId, opts?: { row?: string; tab?: string }): void;
   /** Called by a section whose rows changed, so a running search sees them */
   refreshSearch(): void;
 

@@ -52,7 +52,14 @@ export const LEGACY_SECTIONS: Record<string, SectionId> = {
 /** The section an openSettings(target) call means, when the target names one (else null: look for an element). */
 export function sectionForTarget(target: string): SectionId | null {
   if (isSectionId(target)) return target;
+  if (/^mods[:/]/.test(target) && isModTab(target.slice(5))) return 'mods';
   return LEGACY_SECTIONS[target] ?? null;
+}
+
+/** The tab of the Mods page a target names: "mods:backgrounds" (or "mods/backgrounds"), else null. */
+export function tabForTarget(target: string): ModTab | null {
+  const m = /^mods[:/](.+)$/.exec(target);
+  return m && isModTab(m[1]) ? m[1] : null;
 }
 
 // ---------- Search ----------
@@ -206,14 +213,111 @@ export const LOOK_WORDS: Record<ModLookTarget, string> = {
   composer: 'a look for the chat bar',
 };
 
-// ---------- Looks (Settings → Appearance → Looks) ----------
+// ---------- Kinds of mod and the tabs of Settings → Mods ----------
+
+/**
+ * What a mod is, from what its manifest contributes. general: views in the rail, the side pane or above the composer,
+ * or slash commands. background: a view in the background seat. composer / conversation: a look for that region.
+ * theme: styles for the whole app. A mod can be several kinds; one that contributes nothing is general.
+ */
+export type ModKind = 'general' | 'background' | 'composer' | 'conversation' | 'theme';
+
+export type ModTab = 'mods' | 'backgrounds' | 'chat-bar' | 'conversation' | 'themes';
+
+export interface ModTabInfo {
+  id: ModTab;
+  title: string;
+  kind: ModKind;
+  /** For "New …": what the form's Adds select starts at */
+  newKind: NewModKind;
+}
+
+/** What the New mod form makes: a view in a seat, a look for a region, or a theme. */
+export type NewModKind = ModSeat | `look:${ModLookTarget}` | 'theme';
+
+export const MOD_TABS: ModTabInfo[] = [
+  { id: 'mods', title: 'Mods', kind: 'general', newKind: 'rail' },
+  { id: 'backgrounds', title: 'Backgrounds', kind: 'background', newKind: 'background' },
+  { id: 'chat-bar', title: 'Chat bar', kind: 'composer', newKind: 'look:composer' },
+  { id: 'conversation', title: 'Conversation', kind: 'conversation', newKind: 'look:conversation' },
+  { id: 'themes', title: 'Themes', kind: 'theme', newKind: 'theme' },
+];
+
+export function isModTab(s: unknown): s is ModTab {
+  return typeof s === 'string' && MOD_TABS.some((t) => t.id === s);
+}
+
+export function tabOfKind(kind: ModKind): ModTab {
+  return MOD_TABS.find((t) => t.kind === kind)!.id;
+}
+
+/** The kinds a manifest contributes, in the order of the tabs. */
+export function modKinds(manifest: ModInfo['manifest'] | null | undefined): ModKind[] {
+  const c = manifest?.contributes ?? {};
+  const views = c.views ?? [];
+  const looks = c.looks ?? [];
+  const has: Record<ModKind, boolean> = {
+    general: views.some((v) => v.seat !== 'background') || (c.commands ?? []).length > 0,
+    background: views.some((v) => v.seat === 'background'),
+    composer: looks.some((l) => l.target === 'composer'),
+    conversation: looks.some((l) => l.target === 'conversation'),
+    theme: (c.styles ?? []).length > 0,
+  };
+  const out = MOD_TABS.map((t) => t.kind).filter((k) => has[k]);
+  return out.length ? out : ['general'];
+}
+
+/** The tabs a mod appears in. */
+export function modTabs(m: Pick<ModInfo, 'manifest'>): ModTab[] {
+  return modKinds(m.manifest).map(tabOfKind);
+}
+
+/** The mods a tab lists, in list order. */
+export function modsForTab<T extends Pick<ModInfo, 'manifest'>>(mods: readonly T[], tab: ModTab): T[] {
+  return mods.filter((m) => modTabs(m).includes(tab));
+}
+
+/** The theme mods in the order their styles apply (the list order: built-in, yours, the project's, then by id); a later one wins where two overlap. */
+export function themeMods<T extends Pick<ModInfo, 'manifest'>>(mods: readonly T[]): T[] {
+  return modsForTab(mods, 'themes');
+}
+
+/** The current choice of a kind in words, for Settings → Appearance. */
+export function choiceWords(mods: readonly ModInfo[], layout: Pick<ModLayout, 'looks' | 'background' | 'backgroundImage'> | null, kind: Exclude<ModKind, 'general'>): string {
+  const name = (ref: string, list: { value: string; label: string }[]) => list.find((c) => c.value === ref)?.label ?? `${ref} (off)`;
+  if (kind === 'theme') {
+    const on = themeMods(mods).filter((m) => (m as ModInfo).state === 'on').map((m) => m.manifest?.name ?? (m as ModInfo).id);
+    return on.length ? on.join(', ') : 'None';
+  }
+  if (kind === 'background') {
+    if (layout?.background) return name(layout.background, backgroundChoices(mods));
+    return layout?.backgroundImage ? 'Your picture' : 'None';
+  }
+  const ref = layout?.looks?.[kind] ?? null;
+  return ref ? name(ref, lookChoices(mods, kind)) : 'Default';
+}
+
+/** The choices of the Background select: every background view from mods that are on ("<mod>: <view>"), in list order. */
+export function backgroundChoices(mods: readonly ModInfo[]): LookChoice[] {
+  const out: LookChoice[] = [];
+  for (const m of mods) {
+    if (m.state !== 'on') continue;
+    for (const v of m.manifest?.contributes?.views ?? []) if (v.seat === 'background') out.push({ value: `${m.key}/${v.id}`, label: `${m.manifest?.name ?? m.id}: ${v.title}` });
+  }
+  return out;
+}
+
+/** The mod a layout reference ("<mod key>/<id>") belongs to. */
+export function refMod(ref: string): string {
+  return ref.slice(0, Math.max(0, ref.lastIndexOf('/')));
+}
+
+// ---------- Looks (Settings → Mods → Chat bar, Conversation, Backgrounds) ----------
 
 export interface LookChoice {
   value: string;
   label: string;
 }
-
-const refMod = (ref: string): string => ref.slice(0, Math.max(0, ref.lastIndexOf('/')));
 
 /** The choices of a region's select: every look for it from mods that are on ("<mod>: <look>"), in list order. */
 export function lookChoices(mods: readonly ModInfo[], target: ModLookTarget): LookChoice[] {
@@ -246,7 +350,7 @@ function setOf(m: ModInfo): LookSet {
 
 const parts = (s: LookSet) => [s.conversation, s.composer, s.background].filter(Boolean).length;
 
-/** The sets the Set row offers: every mod that is on and contributes at least two of a conversation look, a chat bar look and a background. */
+/** The sets a mod's card offers ("Use the whole set"): every mod that is on and contributes at least two of a conversation look, a chat bar look and a background. */
 export function lookSets(mods: readonly ModInfo[]): LookSet[] {
   return mods.filter((m) => m.state === 'on' && m.manifest).map(setOf).filter((s) => parts(s) >= 2);
 }
@@ -282,9 +386,16 @@ export function lookSetPatch(set: LookSet | null): Pick<ModLayout, 'looks' | 'ba
   return patch;
 }
 
-/** Mods that are off and have looks: the Looks group says where to turn them on. */
+/** Mods that are off and have looks. */
 export function offLookMods(mods: readonly ModInfo[]): string[] {
   return mods.filter((m) => m.state !== 'on' && m.state !== 'invalid' && m.manifest?.contributes?.looks?.length).map((m) => m.manifest?.name ?? m.id);
+}
+
+/** The mods of a tab that are off (or paused): a special tab says their choices show once they are on. */
+export function offModsOfTab(mods: readonly ModInfo[], tab: ModTab): string[] {
+  return modsForTab(mods, tab)
+    .filter((m) => m.state !== 'on' && m.state !== 'invalid')
+    .map((m) => m.manifest?.name ?? m.id);
 }
 
 export type ChipTone = 'neutral' | 'warn' | 'danger' | 'ok';

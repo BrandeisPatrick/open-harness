@@ -39,7 +39,7 @@ function describeMod(m: ModInfo, chosen?: Record<string, string | null>): string
   if (m.manifest?.contributes?.styles?.length) lines.push(`Styles: ${m.manifest.contributes.styles.join(', ')}`);
   const looks = m.manifest?.contributes?.looks ?? [];
   if (looks.length) {
-    lines.push('Looks (scoped to their region; the user picks one per region in Settings → Appearance → Looks):');
+    lines.push('Looks (scoped to their region; the user picks one per region in Settings → Mods → Chat bar or Conversation):');
     for (const l of looks) lines.push(`- ${l.id}: "${l.title}" for the ${l.target === 'composer' ? 'chat bar (@scope #chatbar)' : 'conversation (@scope #messages)'}, ${l.styles.join(', ')}${chosen?.[l.target] === `${m.key}/${l.id}` ? ' · active' : ''}`);
   }
   if (m.manifest?.contributes?.commands?.length) lines.push(`Commands: ${m.manifest.contributes.commands.map((c) => `/${c.name}`).join(', ')}`);

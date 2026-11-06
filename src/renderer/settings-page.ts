@@ -15,7 +15,7 @@ import { h } from './dom.js';
 import { icon } from './icons.js';
 import { onPush, rpc } from './rpc.js';
 import { bus } from './bus.js';
-import { getPath, matchesQuery, patchFor, SECTIONS, sectionForTarget, isSectionId, type SectionId } from './settings/model.js';
+import { getPath, matchesQuery, patchFor, SECTIONS, sectionForTarget, tabForTarget, isSectionId, type SectionId } from './settings/model.js';
 import { row, segmented, selectControl, switchControl, textControl, type Row } from './settings/ui.js';
 import type { Call, Ctx, Section } from './settings/ctx.js';
 import { contextSection, generalSection, modelSection, permissionsSection } from './settings/config-sections.js';
@@ -60,13 +60,23 @@ export interface SettingsDebug {
   mock(data: SettingsMock | null): void;
   /** The bridge calls the page made while a mock was set, oldest first */
   calls(): { method: string; args: unknown[] }[];
-  /** Which section is open, the search text, and the sections hidden because their feature is absent */
-  state(): { open: boolean; section: SectionId; query: string; hidden: SectionId[] };
+  /** Which section is open (and the tab of a section that has tabs), the search text, and the sections hidden because their feature is absent */
+  state(): { open: boolean; section: SectionId; tab: string | null; query: string; hidden: SectionId[] };
+  /** The same as openSettings(target, opts) */
+  open(target?: string, opts?: OpenOptions): void;
+}
+
+export interface OpenOptions {
+  /** A tab of the section: Mods has mods, backgrounds, chat-bar, conversation and themes */
+  tab?: string;
 }
 
 export interface SettingsPage {
-  /** Opens at the section last open, or at `target`: a section id or the id of an element on the page */
-  open(target?: string): void;
+  /**
+   * Opens at the section last open, or at `target`: a section id ("mods"), a section and a tab ("mods:backgrounds",
+   * or "mods" with { tab: 'backgrounds' }), or the id of an element on the page (its tab comes on screen with it)
+   */
+  open(target?: string, opts?: OpenOptions): void;
   close(): void;
   readonly debug: SettingsDebug;
 }
@@ -282,10 +292,11 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
       bind(o.field, r, (v) => ctl.set(read(v)));
       return r;
     },
-    show: (id, focusRow) => {
+    show: (id, opts) => {
       clearSearch(false);
       showSection(id);
-      if (focusRow) reveal(document.getElementById(`sp-row-${focusRow}`));
+      if (opts?.tab) sections.find((s) => s.id === id)?.showTab?.(opts.tab);
+      if (opts?.row) reveal(document.getElementById(`sp-row-${opts.row}`));
     },
     refreshSearch: () => {
       if (query) applySearch();
@@ -440,9 +451,11 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
     if (query) applySearch();
   }
 
-  /** Scrolls a row (or the row holding an element) into view and gives it a brief highlight. */
+  /** Scrolls a row (or the row holding an element) into view, on its tab, and gives it a brief highlight. */
   function reveal(el: HTMLElement | null): void {
     if (!el) return;
+    const owner = el.closest<HTMLElement>('.sp-section')?.dataset.section;
+    sections.find((s) => s.id === owner)?.uncover?.(el);
     const r = el.closest<HTMLElement>('.sp-row') ?? el;
     r.closest('.sp-advanced')?.classList.add('open');
     requestAnimationFrame(() => {
@@ -500,13 +513,33 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
       e.preventDefault();
       navItems.get(current)?.focus();
     } else if (e.key === 'Enter' && query) {
-      // Enter goes to the first match.
-      const first = body.querySelector<HTMLElement>('.sp-section.has-hit .sp-row.hit');
+      // Enter goes to the first match: its section (and tab) on screen, its control focused.
+      const first = [...body.querySelectorAll<HTMLElement>('.sp-section.has-hit .sp-row.hit')].find((r) => r.offsetParent);
       if (first) {
         e.preventDefault();
-        first.querySelector<HTMLElement>('input, select, textarea, button')?.focus();
+        goTo(first);
       }
     }
+  });
+
+  /** Chooses a search hit: the search clears and the row comes on screen in its section, on its tab. */
+  function goTo(r: HTMLElement): void {
+    const owner = r.closest<HTMLElement>('.sp-section');
+    if (!owner) return;
+    clearSearch(false);
+    showSection(owner.dataset.section as SectionId);
+    reveal(r);
+    // Focus now too: reveal() scrolls on the next frame, which a hidden window may not draw
+    r.querySelector<HTMLElement>('input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])')?.focus({ preventScroll: true });
+  }
+
+  // A click on a hit (not on its control) while searching chooses it.
+  body.addEventListener('click', (e) => {
+    if (!query) return;
+    const t = e.target as HTMLElement;
+    const r = t.closest<HTMLElement>('.sp-row.hit');
+    if (!r || t.closest('input, select, textarea, button, a, label, .sp-row-control, .sp-mod-detail')) return;
+    goTo(r);
   });
 
   // ---------- settings.json: fields a file owns are read-only here ----------
@@ -573,7 +606,7 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
     );
   }
 
-  function open(target?: string): void {
+  function open(target?: string, opts?: OpenOptions): void {
     const t = typeof target === 'string' ? target : '';
     if (!dialog.open) {
       if (!deps.beforeOpen()) return;
@@ -594,6 +627,8 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
     if (sec) {
       clearSearch(false);
       showSection(sec);
+      const tab = (opts && typeof opts.tab === 'string' ? opts.tab : null) ?? tabForTarget(t);
+      if (tab) sections.find((s) => s.id === sec)?.showTab?.(tab);
       navItems.get(sec)?.focus({ preventScroll: true });
       return;
     }
@@ -636,7 +671,8 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
         if (dialog.open) void loadAll();
       },
       calls: () => callLog.map((c) => ({ method: c.method, args: [...c.args] })),
-      state: () => ({ open: dialog.open, section: current, query, hidden: [...hidden] }),
+      state: () => ({ open: dialog.open, section: current, tab: sections.find((s) => s.id === current)?.tab?.() ?? null, query, hidden: [...hidden] }),
+      open: (target, opts) => open(target, opts),
     },
   };
 }

@@ -3906,7 +3906,7 @@ paneMods = createModsHost({
   running: () => running,
   toast: (text, kind) => flashStatus(text, kind === 'error' ? 'circle-alert' : 'info'),
   insertText: (text) => insertAtCursor(text),
-  openSettings: (section) => openSettings(section),
+  openSettings: (section, opts) => openSettings(section, opts),
   switchSession,
   newSession,
   openLightbox,
@@ -3946,9 +3946,12 @@ const settingsPage = createSettingsPage({
   },
   afterClose: syncBrowserView,
 });
-/** Opens Settings at the section last open, or at `section`: a section id ("mods") or the id of a field on the page ("ollama-baseURL", "mcp-section"). */
-function openSettings(section?: string): void {
-  settingsPage.open(typeof section === 'string' ? section : undefined);
+/**
+ * Opens Settings at the section last open, or at `section`: a section id ("mods"), a section and a tab ("mods" with
+ * { tab: 'backgrounds' }, or "mods:backgrounds"), or the id of a field on the page ("ollama-baseURL", "mcp-section").
+ */
+function openSettings(section?: string, opts?: { tab?: string }): void {
+  settingsPage.open(typeof section === 'string' ? section : undefined, opts && typeof opts === 'object' ? opts : undefined);
 }
 $('settings-btn').onclick = () => openSettings();
 (window.__oc_debug as unknown as Record<string, unknown>).settings = settingsPage.debug;

@@ -179,6 +179,8 @@ export interface AppConfig {
    * tasks, sub-sessions and mod authoring. auto: all when the window is at least 32k tokens, essential below that.
    */
   toolSet: 'auto' | 'all' | 'essential';
+  /** The tool calls in the conversation: summary folds each run of two or more into one line, all shows every call as its own row */
+  toolActivity: 'summary' | 'all';
   /** Days a deleted session stays in the trash before it is removed for good (0: at once) */
   historyTrashDays: number;
   /** Mods: which are on, their settings, and how the rail and background are arranged */

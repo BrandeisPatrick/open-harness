@@ -145,6 +145,11 @@ export const TOOL_SET: { value: AppConfig['toolSet']; label: string }[] = [
   { value: 'essential', label: 'Essential' },
 ];
 
+export const TOOL_ACTIVITY: { value: AppConfig['toolActivity']; label: string }[] = [
+  { value: 'summary', label: 'Summary' },
+  { value: 'all', label: 'Every call' },
+];
+
 export const KEEP_AWAKE: { value: AppConfig['keepAwake']; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'running', label: 'While running' },

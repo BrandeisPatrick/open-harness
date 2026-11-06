@@ -78,6 +78,7 @@ const SCALARS: Record<string, Check> = {
   notifications: bool,
   keepAwake: oneOf('off', 'running', 'always'),
   toolSet: oneOf('auto', 'all', 'essential'),
+  toolActivity: oneOf('summary', 'all'),
   historyTrashDays: nonNegative,
 };
 

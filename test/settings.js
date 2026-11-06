@@ -61,6 +61,7 @@ const base = (cwd) => ({
   allowRules: {},
   recentDirs: [],
   keepAwake: 'running',
+  toolActivity: 'summary',
   compactThreshold: 0.8,
   pruneToolResults: true,
   historyTrashDays: 30,
@@ -163,13 +164,13 @@ const fileOf = (layer, scope) => layer.info().files.find((f) => f.scope === scop
   {
     const good = {
       provider: 'portkey', permissionMode: 'plan', maxTurns: 12, sendScreenshotsToModel: true, systemPromptExtra: 'hi', theme: 'dark', autoTitles: false, autoCompact: false,
-      compactThreshold: 0.6, pruneToolResults: false, notifications: false, keepAwake: 'always', historyTrashDays: 0,
+      compactThreshold: 0.6, pruneToolResults: false, notifications: false, keepAwake: 'always', historyTrashDays: 0, toolActivity: 'all',
       ollama: { baseURL: 'http://o/v1', model: 'm', numCtx: 8192, think: 'on' },
       portkey: { baseURL: 'http://p/v1', apiKey: 'k', model: 'pm', virtualKey: 'v', provider: 'pp', providerApiKey: 'ppk', configId: 'c', contextWindow: 1000 },
     };
     const bad = {
       provider: 'openai', permissionMode: 'yolo', maxTurns: 'many', sendScreenshotsToModel: 'yes', systemPromptExtra: 5, theme: 'blue', autoTitles: 1, autoCompact: null,
-      compactThreshold: 0.99, pruneToolResults: 'no', notifications: [], keepAwake: 'sometimes', historyTrashDays: -1,
+      compactThreshold: 0.99, pruneToolResults: 'no', notifications: [], keepAwake: 'sometimes', historyTrashDays: -1, toolActivity: 'verbose',
       'ollama.baseURL': 3, 'ollama.model': false, 'ollama.numCtx': 0, 'ollama.think': 'maybe',
       'portkey.baseURL': {}, 'portkey.apiKey': 1, 'portkey.model': null, 'portkey.virtualKey': 2, 'portkey.provider': true, 'portkey.providerApiKey': [], 'portkey.configId': 9, 'portkey.contextWindow': 1.5,
     };
@@ -203,8 +204,8 @@ const fileOf = (layer, scope) => layer.info().files.find((f) => f.scope === scop
     check('message a person can act on', fileOf(layer, 'user').invalid[0].message === 'expected a whole number above 0, got a string', fileOf(layer, 'user').invalid);
     const all = new SettingsLayer({ userFile: write(tmp(), 'settings.json', good) });
     const out = all.load(base(tmp()));
-    check('every settable key applies when valid', out.provider === 'portkey' && out.keepAwake === 'always' && out.historyTrashDays === 0 && out.compactThreshold === 0.6 && out.ollama.think === 'on' && out.portkey.configId === 'c' && fileOf(all, 'user').invalid.length === 0);
-    check('every settable key is owned', all.owned().length === 13 + 4 + 8, all.owned().length);
+    check('every settable key applies when valid', out.provider === 'portkey' && out.keepAwake === 'always' && out.toolActivity === 'all' && out.historyTrashDays === 0 && out.compactThreshold === 0.6 && out.ollama.think === 'on' && out.portkey.configId === 'c' && fileOf(all, 'user').invalid.length === 0);
+    check('every settable key is owned', all.owned().length === 14 + 4 + 8, all.owned().length);
   }
 
   // --- unknown keys, sections, env entries --------------------------------------

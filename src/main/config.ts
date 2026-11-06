@@ -46,6 +46,7 @@ export function defaultConfig(): AppConfig {
     compactThreshold: 0.8,
     pruneToolResults: true,
     toolSet: 'auto',
+    toolActivity: 'summary',
     historyTrashDays: 30,
     mods: {
       enabled: {},
@@ -158,7 +159,7 @@ export function loadConfig(): AppConfig {
 /** Keeps the legacy autoApprove flag consistent with permissionMode, and autoTitles a boolean (default on). */
 export function normalizeConfig(cfg: AppConfig): AppConfig {
   const mode: PermissionMode = (MODES as string[]).includes(cfg.permissionMode) ? cfg.permissionMode : 'ask';
-  return { ...cfg, permissionMode: mode, autoApprove: mode === 'bypass', autoTitles: cfg.autoTitles !== false };
+  return { ...cfg, permissionMode: mode, autoApprove: mode === 'bypass', autoTitles: cfg.autoTitles !== false, toolActivity: cfg.toolActivity === 'all' ? 'all' : 'summary' };
 }
 
 export function saveConfig(cfg: AppConfig): void {

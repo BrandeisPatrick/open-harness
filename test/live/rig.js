@@ -265,8 +265,22 @@ async function launch(opts = {}) {
       await waitFor(`!(${busy})`, timeoutMs, 'the run to end');
       await sleep(250);
     },
-    /** The transcript as text: one entry per message, tool row or card, in order. */
-    transcript: () => evaluate(`[...document.querySelectorAll('#messages > *')].filter((e) => e.id !== 'empty-state' && !e.hidden).map((e) => ({ cls: e.className, text: (e.innerText || '').trim().slice(0, 2000) }))`),
+    /**
+     * The transcript as text: one entry per message, tool row or card, in order. A folded run of tool calls is one
+     * entry for its line followed by one for each row inside it, whether it is open or not.
+     */
+    transcript: () =>
+      evaluate(`(() => {
+        const out = [];
+        const flat = (e) => (e.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 2000);
+        for (const e of document.querySelectorAll('#messages > *')) {
+          if (e.id === 'empty-state' || e.hidden) continue;
+          out.push({ cls: e.className, text: (e.innerText || '').trim().slice(0, 2000) });
+          if (!e.classList.contains('tool-group')) continue;
+          for (const row of e.querySelectorAll(':scope > .group-body > *')) out.push({ cls: row.className, text: flat(row.querySelector(':scope > summary') || row) });
+        }
+        return out;
+      })()`),
     /** The last assistant reply's text. */
     lastReply: () => evaluate(`(() => { const all = document.querySelectorAll('.msg.assistant'); const e = all[all.length - 1]; return e ? e.innerText.trim() : ''; })()`),
     /** Answers the open approval card: 'allow' or 'deny'. */

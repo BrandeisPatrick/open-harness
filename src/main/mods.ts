@@ -21,7 +21,7 @@ import { publicConfig } from './mods/public-config';
 import { ModCommands, modCheckTool, modsPrompt } from './mods/assist';
 import { ManageError, createMod, customiseMod, installMod } from './mods/manage';
 import { installModLockdown } from './mods/lockdown';
-import { MOD_EVENT_PERMISSIONS } from './mods/permissions';
+import { MOD_EVENT_PERMISSIONS, MOD_METHOD_PERMISSIONS } from './mods/permissions';
 
 export { MOD_SCHEME, MOD_SCHEME_PRIVILEGES };
 export { MOD_METHOD_PERMISSIONS } from './mods/permissions';
@@ -161,6 +161,7 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
   const h = app.rpc.handle.bind(app.rpc);
   disposers.push(
     h('mods.list', () => registry.list()),
+    h('mods.permissions', () => ({ methods: { ...MOD_METHOD_PERMISSIONS }, events: { ...MOD_EVENT_PERMISSIONS } })),
     h('mods.setEnabled', (key, on) => {
       const m = must(key);
       if (on && !m.manifest) throw new Error(`${m.id} has no valid mod.json, so it cannot be turned on. ${m.problems[0]?.message ?? ''}`.trim());

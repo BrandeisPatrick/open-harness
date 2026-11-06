@@ -25,8 +25,6 @@ export interface ContextBreakdown {
   /** Fraction of the window at which a run compacts on its own */
   threshold: number;
   autoCompact: boolean;
-  /** Whether compacting now could free anything: false while the session is running or with fewer than two messages */
-  compactable: boolean;
   /** reported: scaled to the last request's real token count. estimated: about four characters per token. */
   basis: 'reported' | 'estimated';
   /** In display order; the token counts add up to `limit` */

@@ -386,6 +386,8 @@ export interface ModCaller {
  */
 export interface ModsRpc {
   'mods.list': () => ModInfo[];
+  /** The permission each bridge method and each event needs (null: always available), so the window enforces the same table as the main process */
+  'mods.permissions': () => { methods: Record<string, ModPermission | null>; events: Record<string, ModPermission | null> };
   /** Turns a mod on with the permissions its manifest asks for right now (also resumes a paused one), or off */
   'mods.setEnabled': (key: string, on: boolean) => ModInfo[];
   'mods.setSetting': (key: string, setting: string, value: unknown) => ModInfo[];

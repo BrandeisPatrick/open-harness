@@ -45,6 +45,9 @@
       "dist/**",
       "build/icon.png",
       "skills/**",
+      "remote/**",
+      "modkit/**",
+      "mods/**",
       "package.json"
     ],
     "directories": {

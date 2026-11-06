@@ -80,6 +80,34 @@ const { check, done } = require('./support/check.js');
   check('cron: five fields', m.parseWhen('cron', ' 0 9  * * 1-5 ').value.expr === '0 9 * * 1-5' && !m.parseWhen('cron', '0 9 * *').ok);
   check('dates in words', m.formatWhenAt(new Date(2026, 10, 5, 9, 5).getTime(), base) === 'Today at 09:05' && m.formatWhenAt(new Date(2026, 10, 6, 14, 0).getTime(), base) === 'Tomorrow at 14:00' && m.formatWhenAt(new Date(2026, 11, 24, 8, 0).getTime(), base) === 'Dec 24 at 08:00');
   check('relative days', m.relativeDays(base + 3 * 86400000, base) === 'in 3 days' && m.relativeDays(base - 3600000, base) === '1 hour ago');
+
+  // --- looks: the region selects, the sets, which set the layout shows, the patch a set makes ---
+  {
+    const lk = (id, title, target) => ({ id, title, target, styles: ['x.css'] });
+    const info = (key, name, contributes, state = 'on') => ({ key, id: key, scope: 'bundled', state, manifest: { name, contributes }, problems: [], settings: {} });
+    const hyper = info('hyperspace', 'Hyperspace', { looks: [lk('holo', 'Holo terminal', 'conversation'), lk('cockpit', 'Cockpit', 'composer')], views: [{ id: 'stars', title: 'Hyperspace', seat: 'background' }] });
+    const pair = info('pair', 'Pair', { looks: [lk('a', 'A', 'conversation')], views: [{ id: 'bg', title: 'Bg', seat: 'background' }] });
+    const single = info('single', 'Single', { looks: [lk('only', 'Only', 'conversation')] });
+    const off = info('offset', 'Off set', { looks: [lk('a', 'A', 'conversation'), lk('b', 'B', 'composer')] }, 'off');
+    const mods = [hyper, pair, single, off];
+    check('lookChoices: every look for the region from on mods, named "<mod>: <look>"', JSON.stringify(m.lookChoices(mods, 'conversation')) === JSON.stringify([{ value: 'hyperspace/holo', label: 'Hyperspace: Holo terminal' }, { value: 'pair/a', label: 'Pair: A' }, { value: 'single/only', label: 'Single: Only' }]) && m.lookChoices(mods, 'composer').length === 1);
+    const sets = m.lookSets(mods);
+    check('lookSets: on mods with at least two of the three parts', sets.map((x) => x.key).join() === 'hyperspace,pair' && sets[0].background === 'hyperspace/stars' && sets[0].composer === 'hyperspace/cockpit' && sets[1].composer === null, sets);
+    const L0 = { looks: { conversation: null, composer: null }, background: null, backgroundImage: null };
+    check('currentLookSet: None when everything is the app\'s own', m.currentLookSet(mods, L0) === '');
+    check('currentLookSet: a set when the three are exactly its parts', m.currentLookSet(mods, { ...L0, looks: { conversation: 'hyperspace/holo', composer: 'hyperspace/cockpit' }, background: 'hyperspace/stars' }) === 'hyperspace');
+    check('currentLookSet: a set lacking a part needs that part to be the app\'s own', m.currentLookSet(mods, { ...L0, looks: { conversation: 'pair/a', composer: null }, background: 'pair/bg' }) === 'pair' && m.currentLookSet(mods, { ...L0, looks: { conversation: 'pair/a', composer: 'hyperspace/cockpit' }, background: 'pair/bg' }) === 'custom');
+    check('currentLookSet: Custom for a mix, or a user picture under a set', m.currentLookSet(mods, { ...L0, looks: { conversation: 'single/only', composer: null }, background: null }) === 'custom' && m.currentLookSet(mods, { ...L0, looks: { conversation: 'pair/a', composer: null }, backgroundImage: '/x.png' }) === 'custom' && m.currentLookSet(mods, { ...L0, backgroundImage: '/x.png' }) === 'custom');
+    check('currentLookSet: "off:<key>" when all the parts come from a mod that is off or gone', m.currentLookSet(mods, { ...L0, looks: { conversation: 'offset/a', composer: 'offset/b' } }) === 'off:offset' && m.currentLookSet(mods, { ...L0, looks: { conversation: 'gone/a', composer: null }, background: 'gone/bg' }) === 'off:gone');
+    check('currentLookSet: one part of an off mod alone is Custom', m.currentLookSet(mods, { ...L0, looks: { conversation: 'offset/a', composer: null } }) === 'custom');
+    check('lookSetPatch: a set sets all three, a missing part to the app\'s own', JSON.stringify(m.lookSetPatch(sets[0])) === JSON.stringify({ looks: { conversation: 'hyperspace/holo', composer: 'hyperspace/cockpit' }, background: 'hyperspace/stars' }) && m.lookSetPatch(sets[1]).looks.composer === null);
+    const none = m.lookSetPatch(null);
+    check('lookSetPatch: None clears the looks, the background and the picture', none.looks.conversation === null && none.looks.composer === null && none.background === null && none.backgroundImage === null);
+    check('a patch applied gives back the set', m.currentLookSet(mods, { ...L0, ...m.lookSetPatch(sets[0]) }) === 'hyperspace' && m.currentLookSet(mods, { ...L0, ...m.lookSetPatch(sets[1]) }) === 'pair');
+    check('offLookMods: the off mods that have looks', m.offLookMods(mods).join() === 'Off set');
+    check('modChip: a warning alone is not a problem', m.modChip({ state: 'on', problems: [{ kind: 'manifest', message: 'x', warning: true }] }) === null && m.modChip({ state: 'on', problems: [{ kind: 'runtime', message: 'x' }] }).label === 'Problem');
+    check('grantSheet: looks get the restyle warning', /restyle the whole app/.test(m.grantSheet({ state: 'off', manifest: { name: 'L', contributes: { looks: [lk('a', 'A', 'conversation')] } }, wants: [], wantsStyles: false, granted: [] }).warnings[0] || ''));
+  }
   done();
 })().catch((err) => {
   console.error('CRASH', err);

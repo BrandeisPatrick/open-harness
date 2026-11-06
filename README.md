@@ -24,11 +24,11 @@
 ```bash
 brew install ollama && ollama serve &
 ollama pull qwen3:8b
-git clone https://github.com/BrandeisPatrick/openagent.git && cd openagent
+git clone https://github.com/BrandeisPatrick/open-harness.git && cd open-harness
 npm install && npm start
 ```
 
-Or download the app from [Releases](https://github.com/BrandeisPatrick/openagent/releases). It isn't notarized yet: on first launch, open it once, then allow it in System Settings → Privacy & Security → Open Anyway.
+Or download the app from [Releases](https://github.com/BrandeisPatrick/open-harness/releases). It isn't notarized yet: on first launch, open it once, then allow it in System Settings → Privacy & Security → Open Anyway.
 
 Hosted models: Settings → Model → Gateway. For Portkey, add your Portkey key and a model id. For Anthropic directly, set the base URL to `https://api.anthropic.com/v1`, your Anthropic key, and a model such as `claude-haiku-5-5` or `claude-sonnet-5-5`. Any OpenAI-compatible endpoint works the same way.
 

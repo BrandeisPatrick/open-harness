@@ -3,8 +3,10 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type OpenAI from 'openai';
 import type { CompactionInfo, MessageOrigin, PlanInfo, SessionMeta, SessionOrigin, TaskItem, TranscriptItem, ArtifactInfo } from '../shared/types';
+import type { ImageInfo } from '../shared/images';
 import type { Snapshot } from './changes';
 import { isCompactPreamble } from './compact';
+import { imagesByCall } from './images/store';
 import { FILE_BLOCK_RE, mentionedPaths } from './mentions';
 
 export type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
@@ -31,6 +33,8 @@ export interface Session {
   plans?: Record<string, PlanInfo>;
   /** Artifacts the model created with create_artifact (see artifacts.ts) */
   artifacts?: Record<string, ArtifactInfo>;
+  /** Images the model showed with show_image, by id (see images/store.ts) */
+  images?: Record<string, ImageInfo>;
   /** Files the agent changed: content before the first change (see changes.ts) */
   changes?: Record<string, Snapshot>;
   /** Compactions in order; each keeps the messages it folded so the transcript can still show them */
@@ -222,18 +226,19 @@ export function toMeta(s: Session): SessionMeta {
  */
 export function toTranscript(s: Session, opts: { running?: boolean } = {}): TranscriptItem[] {
   const items: TranscriptItem[] = [];
+  const shown = s.images ? imagesByCall(s, [...(s.compactions ?? []).flatMap((c) => c.folded), ...s.messages]) : undefined;
   for (const c of s.compactions ?? []) {
-    appendTranscript(s, c.folded, items);
+    appendTranscript(s, c.folded, items, undefined, false, shown);
     items.push({ role: 'compaction', compaction: compactionInfo(c) });
   }
   // Only the live messages have checkpoints; folded ones cannot be rewound to.
   const turnByAt = new Map<number, number>();
   (s.turns ?? []).forEach((t, i) => turnByAt.set(t.at, i));
-  appendTranscript(s, s.messages, items, turnByAt, opts.running === true);
+  appendTranscript(s, s.messages, items, turnByAt, opts.running === true, shown);
   return items;
 }
 
-function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], turnByAt?: Map<number, number>, inFlight = false): void {
+function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], turnByAt?: Map<number, number>, inFlight = false, shown?: Map<string, ImageInfo>): void {
   const results = new Map<string, string>();
   for (const m of messages) if (m.role === 'tool') results.set(m.tool_call_id, typeof m.content === 'string' ? m.content : String(m.content));
   messages.forEach((m, index) => {
@@ -278,6 +283,12 @@ function appendTranscript(s: Session, messages: Msg[], items: TranscriptItem[], 
             items.push({ role: 'artifact', artifact });
             continue;
           }
+        }
+        // A show_image call is the image itself (a failed one stays a tool row with its error)
+        const image = call.function.name === 'show_image' && ok ? shown?.get(call.id) : undefined;
+        if (image) {
+          items.push({ role: 'image', image });
+          continue;
         }
         items.push({ role: 'tool', name: call.function.name, args: call.function.arguments, result, ok });
       }

@@ -230,6 +230,7 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   check('5: an existing skill name without the change flag is refused', /^Error: a skill named "release-chore" exists already/.test(await run('propose_skill', skillArgs)));
   check('5: removing a line the file does not have is refused', /^Error: "nope" is not a line of OPENHARNESS\.md/.test(await run('propose_memory', { scope: 'project', remove: ['nope'], why: 'w', sessions: [B] })));
   check('5: a bundled mod id without the change flag is refused', /exists already \(a built-in one\)/.test(await run('propose_mod', { ...modArgs, id: 'context', files: [{ ...modFiles[0], content: modFiles[0].content.replace(/release-status/g, 'context') }, modFiles[1]] })));
+  check('5: a skill named like an app command is refused', /^Error: \/dream is a command of the app/.test(await run('propose_skill', { ...skillArgs, name: 'dream' })));
   check('5: proposals only in a dream', /^Error: proposals can only be made in a dream/.test(await tool('propose_skill').run(skillArgs, { sessionId: A, cwd: proj, app }).then((r) => r.content)));
   // A change to the existing skill, with the flag: it shows what is there and replaces it on Apply; revert puts it back
   const changeRes = await run('propose_skill', { ...skillArgs, changes_existing: true });
@@ -363,9 +364,13 @@ async function waitFor(fn, ms = 10000, what = 'condition') {
   await idle();
   check('8: a dream with nothing to propose is done, nothing waits', svc.state().dreams[0].status === 'done' && svc.state().dreams[0].proposals.length === 0 && rt.meta(svc.state().dreams[0].sessionId).dream.waiting === 0);
   await send(proj, 'Release chore, seventh time [sI]', [{ content: 'Done.' }]);
-  clock = t0 + 86400000 + 10 * 3600000; // that day, 12:00: a dream by hand (nothing new in "other": no session, but it counts)
+  clock = t0 + 86400000 + 10 * 3600000; // that day, 12:00: a look by hand that finds nothing new does not count as a dream
   svc.start('manual', other);
-  check('8: a run with nothing new makes no session', !svc.running() && svc.state().lastCheck.found === 0);
+  check('8: a run with nothing new makes no session and does not count', !svc.running() && svc.state().lastCheck.found === 0 && svc.data.lastRunAt < clock);
+  await send(other, 'One more post [sK]', [{ content: 'Done.' }]);
+  dreamReply({ content: 'Nothing worth proposing.' });
+  svc.start('manual', other); // a real dream by hand at 12:00
+  await idle();
   const nDaily = svc.state().dreams.filter((x) => x.trigger === 'daily').length;
   clock = t0 + 2 * 86400000 + 5 * 3600000; // the next day, 07:00: 03:00 was missed, and a dream ran 19 h ago
   svc.tick();

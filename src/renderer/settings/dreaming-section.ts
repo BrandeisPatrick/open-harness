@@ -128,6 +128,11 @@ export function dreamingSection(ctx: Ctx): Section {
     });
     const openBtn = button('Open', () => ctx.openSession(d.sessionId), { aria: `Open the session of the dream about ${tildePath(d.cwd)}` });
     openBtn.classList.add('dream-open');
+    // A session that was deleted (it may be in the trash) cannot be opened from here
+    if (!ctx.sessionTitle(d.sessionId)) {
+      openBtn.disabled = true;
+      openBtn.title = 'Its session was deleted';
+    }
     wrap.append(h('div', { class: 'dream-line' }, head, openBtn));
     if (open.has(d.id)) {
       const body = h('div', { class: 'dream-body' });

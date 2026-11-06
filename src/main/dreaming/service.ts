@@ -296,7 +296,8 @@ export class Dreaming {
     if (this.run) throw new DreamError('a dream is running already; wait for it to end, or stop it.');
     const t = this.now();
     const projects = cwd ? (this.projectSessions(cwd).length && isDir(cwd) ? [cwd] : []) : this.projects();
-    this.data.lastRunAt = t;
+    // Only a run that dreams counts as one for the missed-dream rule; a look that found nothing does not
+    if (projects.length) this.data.lastRunAt = t;
     this.data.lastCheck = { at: t, trigger, found: projects.length };
     if (!projects.length) {
       this.changed();
@@ -479,7 +480,11 @@ export class Dreaming {
     const known = this.knownSecrets();
     const base = { id: this.newId('pr'), dreamId: dream.id, why, sessions: [...new Set(ids)], state: (dream.mode === 'approve' ? 'waiting' : dream.mode === 'plan' ? 'planned' : 'waiting') as DreamProposal['state'], createdAt: this.now() };
     let p: DreamProposal;
-    if (kind === 'skill') p = { ...base, kind, ...checkSkill(input as never, r, loadSkills(dream.cwd, this.app.appRoot), known) };
+    if (kind === 'skill') {
+      const name = String(input.name ?? '').trim().toLowerCase();
+      if (this.app.commands.list().some((c) => c.name === name)) throw new DreamError(`/${name} is a command of the app already; pick another name for the skill.`);
+      p = { ...base, kind, ...checkSkill(input as never, r, loadSkills(dream.cwd, this.app.appRoot), known) };
+    }
     else if (kind === 'memory') p = { ...base, kind, ...checkMemory(input as never, r, known) };
     else p = { ...base, kind, ...checkMod(input as never, r, known) };
     // The same change twice in one dream is one proposal

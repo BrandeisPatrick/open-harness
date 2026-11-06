@@ -50,9 +50,8 @@ const STATE_WORDS: Record<DreamProposal['state'], string> = {
 
 /** The tool result for a proposal just made (the window turns it into the proposal's card by the id in it). */
 export function proposalResult(p: DreamProposal): string {
-  const where = p.kind === 'memory' ? p.target : p.target;
   if (p.state === 'failed') return `Error: recorded proposal ${p.id}, but applying it failed: ${p.error ?? 'unknown error'}. Fix what the error says and propose again with replaces "${p.id}", or leave it.`;
-  return `Recorded proposal ${p.id} (${p.title}${p.changesExisting ? ', changes what exists' : ''}): ${STATE_WORDS[p.state]}${p.state === 'applied' ? ` (${where})` : ''}.`;
+  return `Recorded proposal ${p.id} (${p.title}${p.changesExisting ? ', changes what exists' : ''}): ${STATE_WORDS[p.state]}${p.state === 'applied' ? ` (${p.target})` : ''}.`;
 }
 
 const why = { type: 'string', description: 'Why, with the evidence: quote the user\'s own words from the sessions, and say how often it came up' };

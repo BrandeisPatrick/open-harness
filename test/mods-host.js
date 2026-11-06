@@ -7,6 +7,9 @@ const { check, done } = require('./support/check.js');
 
 const projectDir = process.argv[2] || path.join(__dirname, '..');
 
+// The renderer is compiled as ES modules without "type": "module"; Node's note about reparsing it is noise here.
+process.emitWarning = () => {};
+
 (async () => {
   const L = await import(pathToFileURL(path.join(projectDir, 'dist/renderer/mods/logic.js')).href);
   const { MOD_METHOD_PERMISSIONS, MOD_EVENT_PERMISSIONS } = require(path.join(projectDir, 'dist/main/mods/permissions.js'));

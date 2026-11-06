@@ -62,7 +62,7 @@ export interface SkillProposal extends ProposalBase {
 
 export interface MemoryProposal extends ProposalBase {
   kind: 'memory';
-  /** "OPENHARNESS.md", "~/.open-harness/OPENHARNESS.md" */
+  /** "SILOHARNESS.md", "~/.silo-harness/SILOHARNESS.md" */
   label: string;
   add: string[];
   remove: string[];

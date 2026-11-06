@@ -21,19 +21,19 @@ export function generalSection(ctx: Ctx): Section {
   const awake = ctx.segField({
     id: 'keepAwake',
     title: 'Keep awake',
-    desc: 'Stop this Mac from sleeping while the agent works, or whenever Open Harness is open.',
+    desc: 'Stop this Mac from sleeping while the agent works, or whenever Silo Harness is open.',
     keywords: 'sleep caffeinate power battery lid',
     field: 'keepAwake',
     choices: KEEP_AWAKE,
   });
-  const awakeBase = 'Stop this Mac from sleeping while the agent works, or whenever Open Harness is open.';
+  const awakeBase = 'Stop this Mac from sleeping while the agent works, or whenever Silo Harness is open.';
   const showPower = (p: PowerStatus | null) => awake.setDesc(p?.active ? `${awakeBase} Keeping it awake now.` : awakeBase);
   onPush('power:changed', (p) => showPower(p));
 
   // The command-line tool: where it is, and a link on the PATH
   const cliInstall = button('Install', () => void cliAction('cli.install', cliInstall), { icon: 'terminal' });
   const cliRemove = button('Remove', () => void cliAction('cli.uninstall', cliRemove));
-  const cli = row({ id: 'cli', title: 'Command line tool', desc: '', keywords: 'cli command terminal shell open-harness path install agent claude code provider' }, actions(cliInstall, cliRemove));
+  const cli = row({ id: 'cli', title: 'Command line tool', desc: '', keywords: 'cli command terminal shell silo open-harness path install agent claude code provider' }, actions(cliInstall, cliRemove));
   cli.descEl.classList.add('sp-path');
   const showCli = (st: CliStatus | null) => {
     if (!st) {
@@ -41,16 +41,16 @@ export function generalSection(ctx: Ctx): Section {
       return;
     }
     cli.el.hidden = false;
-    const where = st.installed ? `open-harness → ${tildePath(st.command)}` : tildePath(st.command);
+    const where = st.installed ? `silo → ${tildePath(st.command)}` : tildePath(st.command);
     const extra = !st.available
       ? ' (not in this copy of the app)'
       : st.conflict
         ? `. ${st.conflict}`
         : st.installed && !st.onPath
-          ? `. Linked in ${tildePath(st.link.replace(/\/open-harness$/, ''))}, which is not on your PATH: add it to your shell profile, or run the command by its full path.`
+          ? `. Linked in ${tildePath(st.link.replace(/\/silo$/, ''))}, which is not on your PATH: add it to your shell profile, or run the command by its full path.`
           : st.installed
             ? `. Linked as ${tildePath(st.link)}.`
-            : `. Install puts a link in ${tildePath(st.link.replace(/\/open-harness$/, ''))} (no administrator password).`;
+            : `. Install puts a link in ${tildePath(st.link.replace(/\/silo$/, ''))} (no administrator password).`;
     cli.setDesc(where + extra);
     cli.descEl.title = st.command;
     cliInstall.hidden = st.installed;
@@ -84,7 +84,7 @@ export function generalSection(ctx: Ctx): Section {
         choices: TOOL_ACTIVITY,
       }),
       cli,
-      ctx.switchField({ id: 'notifications', title: 'Notifications', desc: 'Notify when a run finishes or needs your approval while Open Harness is in the background.', keywords: 'alert notify banner sound', field: 'notifications' }),
+      ctx.switchField({ id: 'notifications', title: 'Notifications', desc: 'Notify when a run finishes or needs your approval while Silo Harness is in the background.', keywords: 'alert notify banner sound', field: 'notifications' }),
       ctx.switchField({ id: 'autoTitles', title: 'Generated titles', desc: 'Name a session from its first exchange.', keywords: 'session name rename title', field: 'autoTitles' }),
       ctx.textField({ id: 'maxTurns', inputId: 'maxTurns', title: 'Max tool turns', desc: 'How many tool calls one request may make before it stops and asks you to continue.', keywords: 'limit steps iterations', field: 'maxTurns', type: 'number', width: 96, parse: (t) => parseInteger(t, 1, 500) }),
       ctx.textField({
@@ -164,7 +164,7 @@ export function modelSection(ctx: Ctx): Section {
     id: 'provider',
     inputId: 'provider',
     title: 'Provider',
-    desc: 'Where Open Harness sends model requests: Ollama on this Mac, a gateway such as Portkey, or any provider named in settings.json (OpenRouter, OpenAI, Anthropic, LM Studio, …).',
+    desc: 'Where Silo Harness sends model requests: Ollama on this Mac, a gateway such as Portkey, or any provider named in settings.json (OpenRouter, OpenAI, Anthropic, LM Studio, …).',
     keywords: 'ollama portkey gateway local cloud openrouter openai anthropic groq deepseek together lm studio service',
     field: 'provider',
     width: 300,
@@ -248,7 +248,7 @@ export function modelSection(ctx: Ctx): Section {
   const windowRow = tag(row({ id: 'provider-contextWindow', title: 'Context window', desc: '', keywords: 'tokens size memory' }, null), 'named');
 
   const files = row(
-    { id: 'provider-files', title: 'More providers', desc: 'Add OpenRouter, OpenAI, Anthropic, Groq, DeepSeek, Together, LM Studio or any OpenAI-compatible service in settings.json, or from the command line: open-harness provider add <name> --type <type>. A coding agent can do it for you; see docs/configure.md.', keywords: 'add provider new openrouter openai anthropic groq deepseek together lmstudio cli command settings.json configure' },
+    { id: 'provider-files', title: 'More providers', desc: 'Add OpenRouter, OpenAI, Anthropic, Groq, DeepSeek, Together, LM Studio or any OpenAI-compatible service in settings.json, or from the command line: silo provider add <name> --type <type>. A coding agent can do it for you; see docs/configure.md.', keywords: 'add provider new openrouter openai anthropic groq deepseek together lmstudio cli command settings.json configure' },
     button('Open settings.json', () => void ctx.call('settings.open', 'user').catch((err) => files.problem(ctx.cleanError(err))), { icon: 'file' }),
   );
 
@@ -341,7 +341,7 @@ export function modelSection(ctx: Ctx): Section {
   const gateway = group(
     null,
     pk({ id: 'portkey-baseURL', inputId: 'portkey-baseURL', title: 'Base URL', desc: 'The gateway endpoint: Portkey, or a gateway you host.', keywords: 'endpoint address server host', field: 'portkey.baseURL', placeholder: 'https://api.portkey.ai/v1', parse: parseUrl }),
-    pk({ id: 'portkey-apiKey', inputId: 'portkey-apiKey', title: 'API key', desc: 'Your gateway key. Without one, Open Harness uses PORTKEY_API_KEY from the environment.', keywords: 'token secret password credential', field: 'portkey.apiKey', type: 'password', placeholder: 'pk-…', parse: parseText }),
+    pk({ id: 'portkey-apiKey', inputId: 'portkey-apiKey', title: 'API key', desc: 'Your gateway key. Without one, Silo Harness uses PORTKEY_API_KEY from the environment.', keywords: 'token secret password credential', field: 'portkey.apiKey', type: 'password', placeholder: 'pk-…', parse: parseText }),
     pk({ id: 'portkey-model', inputId: 'portkey-model', title: 'Model', desc: 'A model-catalog id like @openai/gpt-4o-mini, or a plain id with a virtual key or provider below.', keywords: 'llm', field: 'portkey.model', placeholder: '@openai/gpt-4o-mini', parse: parseText }),
     pk({
       id: 'portkey-contextWindow',

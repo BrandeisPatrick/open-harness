@@ -10,7 +10,7 @@
 
   function session(id, title, o) {
     var now = Date.now();
-    return Object.assign({ id: id, title: title, cwd: HOME + '/code/open-harness', origin: 'user', messageCount: 0, createdAt: now - 3 * 3600 * 1000, updatedAt: now - 2 * MIN, running: false }, o || {});
+    return Object.assign({ id: id, title: title, cwd: HOME + '/code/silo-harness', origin: 'user', messageCount: 0, createdAt: now - 3 * 3600 * 1000, updatedAt: now - 2 * MIN, running: false }, o || {});
   }
 
   var LABELS = { system: 'System prompt', instructions: 'Instructions', skills: 'Skills', tools: 'Built-in tools', mcpTools: 'MCP tools', summary: 'Summary', messages: 'Messages', toolResults: 'Tool calls', reserve: 'Reserved for compaction', free: 'Free' };
@@ -40,11 +40,11 @@
   }
 
   var SKILLS = [
-    { name: 'create-mod', description: 'Write an Open Harness mod: manifest, pages and a check with mod_check.', path: '/app/skills/create-mod/SKILL.md', source: 'bundled' },
-    { name: 'git-commit', description: 'Stage and commit with a message that says what changed and why.', path: HOME + '/.open-harness/skills/git-commit/SKILL.md', source: 'user' },
+    { name: 'create-mod', description: 'Write an Silo Harness mod: manifest, pages and a check with mod_check.', path: '/app/skills/create-mod/SKILL.md', source: 'bundled' },
+    { name: 'git-commit', description: 'Stage and commit with a message that says what changed and why.', path: HOME + '/.silo-harness/skills/git-commit/SKILL.md', source: 'user' },
     { name: 'pdf', description: 'Read, fill and merge PDF files.', path: '/app/skills/pdf/SKILL.md', source: 'bundled' },
-    { name: 'review', description: 'Review the current diff for correctness bugs before you commit.', path: HOME + '/.open-harness/skills/review/SKILL.md', source: 'user' },
-    { name: 'release-notes', description: 'Draft release notes from the commits since the last tag.', path: HOME + '/code/open-harness/.open-harness/skills/release-notes/SKILL.md', source: 'project' },
+    { name: 'review', description: 'Review the current diff for correctness bugs before you commit.', path: HOME + '/.silo-harness/skills/review/SKILL.md', source: 'user' },
+    { name: 'release-notes', description: 'Draft release notes from the commits since the last tag.', path: HOME + '/code/silo-harness/.silo-harness/skills/release-notes/SKILL.md', source: 'project' },
     { name: 'xlsx', description: 'Create and edit spreadsheets, formulas included.', path: '/app/skills/xlsx/SKILL.md', source: 'bundled' },
     { name: 'webapp-testing', description: 'Drive a local web app in the built-in browser and check what it shows.', path: '/app/skills/webapp-testing/SKILL.md', source: 'bundled' },
   ];
@@ -116,9 +116,9 @@
     var w = base();
     var now = w.now;
     if (state === 'busy') {
-      w.config = Object.assign(w.config, { provider: 'ollama', model: 'qwen3-coder:30b', workingDirectory: HOME + '/code/open-harness', permissionMode: 'acceptEdits', keepAwake: 'running' });
+      w.config = Object.assign(w.config, { provider: 'ollama', model: 'qwen3-coder:30b', workingDirectory: HOME + '/code/silo-harness', permissionMode: 'acceptEdits', keepAwake: 'running' });
       w.remote = { enabled: true, running: true, bind: 'lan', port: 7788, urls: ['http://192.168.1.23:7788/?t=7f3a9c2e81d44b0f'], clients: 0, startedAt: now - 4 * MIN };
-      addSession(w, session('s-main', 'Refactor the settings loader', { cwd: HOME + '/code/open-harness', messageCount: 6, running: true, updatedAt: now - 10 * 1000 }), {
+      addSession(w, session('s-main', 'Refactor the settings loader', { cwd: HOME + '/code/silo-harness', messageCount: 6, running: true, updatedAt: now - 10 * 1000 }), {
         transcript: [
           { role: 'user', text: 'Load settings.json from the user folder and the project, layered over config.json.' },
           { role: 'assistant', text: 'I will read the current loader first.' },
@@ -138,17 +138,17 @@
         ],
         skillUsage: { 'git-commit': { count: 1, lastUsedAt: now - 5 * MIN } },
         context: context(200000, {
-          system: 2900, instructions: { tokens: 3100, items: [['OPENHARNESS.md', 1900], ['CLAUDE.md', 1200]] }, skills: 900, tools: 4100,
+          system: 2900, instructions: { tokens: 3100, items: [['SILOHARNESS.md', 1900], ['CLAUDE.md', 1200]] }, skills: 900, tools: 4100,
           mcpTools: { tokens: 11200, items: [['github', 11200]] }, messages: 9800, toolResults: 30400,
         }, { messages: 14, updatedAt: now - 40 * 1000 }),
       });
       addSession(w, session('s-c2', 'Audit mod permissions', { parentId: 's-main', origin: 'agent', running: true, messageCount: 3, createdAt: now - 6 * MIN, updatedAt: now - 20 * 1000 }));
       w.skillsAll = { 'git-commit': { count: 14, lastUsedAt: now - 5 * MIN }, review: { count: 6, lastUsedAt: now - 26 * 3600 * 1000 } };
-      w.schedules = schedules(now, HOME + '/code/open-harness').filter(function (x) { return x.id === 'sch1' || x.id === 'sch3'; });
+      w.schedules = schedules(now, HOME + '/code/silo-harness').filter(function (x) { return x.id === 'sch1' || x.id === 'sch3'; });
     } else if (state === 'full') {
-      w.config = Object.assign(w.config, { provider: 'portkey', model: '@anthropic/claude-sonnet-5', workingDirectory: HOME + '/Documents/claudecode/open-harness', permissionMode: 'auto', keepAwake: 'always', contextLimit: 1000000 });
+      w.config = Object.assign(w.config, { provider: 'portkey', model: '@anthropic/claude-sonnet-5', workingDirectory: HOME + '/Documents/claudecode/silo-harness', permissionMode: 'auto', keepAwake: 'always', contextLimit: 1000000 });
       w.remote = { enabled: true, running: true, bind: 'lan', port: 7788, urls: ['http://192.168.1.23:7788/?t=7f3a9c2e81d44b0f', 'http://patricks-mac.local:7788/?t=7f3a9c2e81d44b0f'], clients: 2, startedAt: now - 52 * MIN };
-      addSession(w, session('s-main', 'Build the mod kit and the first seven mods', { cwd: HOME + '/Documents/claudecode/open-harness', parentId: 's-parent', messageCount: 48, updatedAt: now - 2 * MIN }), {
+      addSession(w, session('s-main', 'Build the mod kit and the first seven mods', { cwd: HOME + '/Documents/claudecode/silo-harness', parentId: 's-parent', messageCount: 48, updatedAt: now - 2 * MIN }), {
         transcript: [
           { role: 'user', text: 'Build the client side of the mod system.' },
           { role: 'assistant', text: 'Starting with the kit: harness.js and harness.css.' },
@@ -178,26 +178,26 @@
         skillUsage: { 'create-mod': { count: 4, lastUsedAt: now - 3 * MIN }, 'git-commit': { count: 3, lastUsedAt: now - 20 * MIN }, review: { count: 1, lastUsedAt: now - 40 * MIN } },
         context: context(1000000, {
           system: 3100,
-          instructions: { tokens: 4200, items: [['OPENHARNESS.md', 2900], ['~/.claude/CLAUDE.md', 1300]] },
+          instructions: { tokens: 4200, items: [['SILOHARNESS.md', 2900], ['~/.claude/CLAUDE.md', 1300]] },
           skills: { tokens: 1800, items: [['bundled', 900], ['user', 600], ['project', 300]] },
           tools: 12400,
           mcpTools: { tokens: 18700, items: [['github', 11200], ['playwright', 7500]] },
           summary: 6300, messages: 41200, toolResults: 46300,
         }, { messages: 48, compactions: 1, updatedAt: now - 2 * MIN - 10 * 1000, lastCompaction: { at: now - 40 * MIN, reason: 'auto', tokensBefore: 812000, tokensAfter: 61000 } }),
       });
-      addSession(w, session('s-parent', 'Plan the mod system', { cwd: HOME + '/Documents/claudecode/open-harness', messageCount: 31, updatedAt: now - 3 * 3600 * 1000 }));
+      addSession(w, session('s-parent', 'Plan the mod system', { cwd: HOME + '/Documents/claudecode/silo-harness', messageCount: 31, updatedAt: now - 3 * 3600 * 1000 }));
       addSession(w, session('s-c1', 'Write the harness wire tests', { parentId: 's-main', origin: 'agent', messageCount: 12, createdAt: now - 50 * MIN, updatedAt: now - 25 * MIN }));
       addSession(w, session('s-c2', 'Audit mod permissions against the docs', { parentId: 's-main', origin: 'agent', running: true, messageCount: 7, createdAt: now - 8 * MIN, updatedAt: now - 15 * 1000 }));
       addSession(w, session('s-c3', 'Check that every icon name exists', { parentId: 's-main', origin: 'agent', attention: 'approval', messageCount: 4, createdAt: now - 6 * MIN, updatedAt: now - 60 * 1000 }));
       addSession(w, session('s-f1', 'Try a CSS-only theme instead', { forkedFrom: 's-main', messageCount: 22, createdAt: now - 35 * MIN, updatedAt: now - 18 * MIN }));
       w.skillsAll = { 'create-mod': { count: 9, lastUsedAt: now - 3 * MIN }, 'git-commit': { count: 41, lastUsedAt: now - 20 * MIN }, review: { count: 17, lastUsedAt: now - 40 * MIN }, pdf: { count: 2, lastUsedAt: now - 9 * 86400 * 1000 }, 'release-notes': { count: 3, lastUsedAt: now - 14 * 86400 * 1000 } };
-      w.schedules = schedules(now, HOME + '/Documents/claudecode/open-harness');
+      w.schedules = schedules(now, HOME + '/Documents/claudecode/silo-harness');
     } else {
       addSession(w, session('s-main', 'New session', { cwd: HOME, messageCount: 0, createdAt: now - 20 * 1000, updatedAt: now - 20 * 1000 }));
       w.skills = [];
     }
     // A second top-level session, for "switch session"
-    addSession(w, session('s-other', 'Fix the flaky terminal test', { cwd: HOME + '/code/open-harness', messageCount: 9, updatedAt: now - 26 * 3600 * 1000 }), {
+    addSession(w, session('s-other', 'Fix the flaky terminal test', { cwd: HOME + '/code/silo-harness', messageCount: 9, updatedAt: now - 26 * 3600 * 1000 }), {
       transcript: [{ role: 'user', text: 'The terminal test fails one run in five.' }, { role: 'assistant', text: 'It races the shell prompt; waiting for the first output fixes it.' }],
       tasks: [{ id: 'o1', title: 'Reproduce the failure', status: 'completed' }, { id: 'o2', title: 'Wait for the prompt before typing', status: 'completed' }],
       outputs: [{ kind: 'file', id: 'test/terminal-manager.js', title: 'test/terminal-manager.js', detail: '+6 −2', updatedAt: now - 26 * 3600 * 1000 }],

@@ -1,16 +1,16 @@
 ---
 name: create-mod
-description: Write or change an Open Harness mod (a panel, tab, composer strip, background, theme, a look for the conversation or the chat bar, or a slash command made of mod.json plus HTML or CSS). Load before touching any mod.
+description: Write or change an Silo Harness mod (a panel, tab, composer strip, background, theme, a look for the conversation or the chat bar, or a slash command made of mod.json plus HTML or CSS). Load before touching any mod.
 ---
 A mod is a folder named by its id with a `mod.json` and one or more HTML pages. The page runs in a sandboxed frame and talks to the app only through the `harness` object.
 
 ## Where to write
-- Something for this project only: `<project>/.open-harness/mods/<id>/` (the working directory's `.open-harness/mods`).
-- A personal mod for every project: `~/.open-harness/mods/<id>/`.
+- Something for this project only: `<project>/.silo-harness/mods/<id>/` (the working directory's `.silo-harness/mods`).
+- A personal mod for every project: `~/.silo-harness/mods/<id>/`.
 - The folder name must equal `id`: 2 to 40 lower-case letters, digits and `-`, starting with a letter.
 
 ## Complete minimal example
-`~/.open-harness/mods/word-count/mod.json`:
+`~/.silo-harness/mods/word-count/mod.json`:
 ```json
 {
   "protocol": 1,
@@ -24,7 +24,7 @@ A mod is a folder named by its id with a `mod.json` and one or more HTML pages. 
   }
 }
 ```
-`~/.open-harness/mods/word-count/panel.html`:
+`~/.silo-harness/mods/word-count/panel.html`:
 ```html
 <!doctype html>
 <link rel="stylesheet" href="/@harness/harness.css">

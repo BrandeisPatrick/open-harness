@@ -1,8 +1,9 @@
 // The main process entry: build the App, register the core IPC, run the feature setups, open the window.
 // Features never edit this file; they get `app` in their setup function (see docs/architecture.md).
+// First: carry over the folders of the app's older names, before any other module reads them.
+import './carry-over';
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, net, Notification, protocol, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
-import fs from 'node:fs';
 import path from 'node:path';
 import type { AgentEvent, McpServerInfo } from '../shared/types';
 import { McpManager, PROJECT_FILE } from './mcp';
@@ -24,36 +25,13 @@ import { setupPower } from './power';
 import { setupDreaming } from './dreaming';
 import { setupProviders } from './providers-service';
 
-// The app has been renamed (OpenCoder, then OpenAgent, now Open Harness): on the first launch under a new name the
-// old data folder (settings, sessions, history, artifacts, …) is carried over so nothing is lost. Runs before
-// anything reads the data folder. config.json goes last: it is what marks the old folder as holding data and the new
-// one as set up, so a carry-over that was cut short picks up where it stopped on the next launch.
-(function carryOverDataFolder(): void {
-  const next = app.getPath('userData');
-  if (fs.existsSync(path.join(next, 'config.json'))) return; // already set up under the new name
-  const prev = ['OpenAgent', 'opencoder', 'OpenCoder'].map((n) => path.join(path.dirname(next), n)).find((p) => fs.existsSync(path.join(p, 'config.json')));
-  if (!prev) return;
-  fs.mkdirSync(next, { recursive: true });
-  for (const entry of ['sessions', 'artifacts', 'history', 'trash', 'schedules.json', 'dreaming.json', 'skill-usage.json', 'mods-data', 'backgrounds', 'remote.json', 'config.json']) {
-    const from = path.join(prev, entry);
-    const to = path.join(next, entry);
-    if (!fs.existsSync(from) || fs.existsSync(to)) continue;
-    try {
-      fs.renameSync(from, to);
-      console.log(`[data] moved ${from} to ${to}`);
-    } catch (err) {
-      console.warn(`[data] could not move ${from}:`, err);
-    }
-  }
-})();
-
 let host: AppHost | null = null;
 let win: BrowserWindow | null = null;
 let browser: BrowserController | null = null;
 /** Blocked project MCP servers the user was told about, as "<cwd>:<name>" */
 const notifiedBlocked = new Set<string>();
 
-const APP_NAME = 'Open Harness';
+const APP_NAME = 'Silo Harness';
 // Packaged builds keep build/icon.png outside the asar (see asarUnpack) so native APIs can read it.
 const ICON_PATH = path.join(app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'), 'build', 'icon.png');
 
@@ -78,11 +56,11 @@ function windowBackground(): string {
 }
 
 /**
- * Live tests (test/live) drive the real app over the DevTools protocol. With OPEN_HARNESS_LIVE_TEST set the window is
+ * Live tests (test/live) drive the real app over the DevTools protocol. With SILO_HARNESS_LIVE_TEST set the window is
  * never shown and the app keeps out of the Dock, so a test run does not take over the screen; it still lays out and
  * paints, which is what screenshots need.
  */
-const LIVE_TEST = Boolean(process.env.OPEN_HARNESS_LIVE_TEST);
+const LIVE_TEST = Boolean(process.env.SILO_HARNESS_LIVE_TEST);
 
 function createWindow(): void {
   const icon = nativeImage.createFromPath(ICON_PATH);
@@ -181,10 +159,10 @@ function notify(a: AppHost, sessionId: string, ev: AgentEvent): void {
   let body: string;
   if (ev.type === 'run_end') {
     if (ev.reason === 'aborted') return;
-    title = ev.reason === 'error' ? 'Open Harness hit an error' : ev.reason === 'plan' ? 'Open Harness has a plan for you' : ev.reason === 'max_turns' ? 'Open Harness stopped at the turn limit' : 'Open Harness finished';
+    title = ev.reason === 'error' ? `${APP_NAME} hit an error` : ev.reason === 'plan' ? `${APP_NAME} has a plan for you` : ev.reason === 'max_turns' ? `${APP_NAME} stopped at the turn limit` : `${APP_NAME} finished`;
     body = name;
   } else if (ev.type === 'approval_request') {
-    title = 'Open Harness needs your approval';
+    title = `${APP_NAME} needs your approval`;
     body = `${name}: ${ev.detail.split('\n')[0].slice(0, 120)}`;
   } else return;
   try {

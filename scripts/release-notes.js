@@ -49,11 +49,11 @@ body = body.replace(/\n- Not notarized:[^\n]*/, '');
 const hero = 'docs/screenshots/hero.png';
 if (!fs.existsSync(path.join(root, hero))) throw new Error(`missing ${hero}`);
 const firstBreak = body.indexOf('\n\n');
-const image = `![${pkg.build?.productName ?? 'Open Harness'}](https://raw.githubusercontent.com/${slug}/${sha}/${hero})`;
+const image = `![${pkg.build?.productName ?? 'Silo Harness'}](https://raw.githubusercontent.com/${slug}/${sha}/${hero})`;
 body = firstBreak < 0 ? `${body}\n\n${image}` : `${body.slice(0, firstBreak)}\n\n${image}${body.slice(firstBreak)}`;
 
 // Downloads
-const files = [`Open-Harness-${version}-arm64.dmg`, `Open-Harness-${version}-arm64.zip`];
+const files = [`Silo-Harness-${version}-arm64.dmg`, `Silo-Harness-${version}-arm64.zip`];
 const rows = files.map((name) => {
   const file = path.join(root, 'release', name);
   if (!fs.existsSync(file)) throw new Error(`release/${name} is missing: run npm run dist first`);
@@ -63,7 +63,7 @@ const rows = files.map((name) => {
 const install = [
   '### Install',
   '',
-  `For Apple silicon Macs. Download \`${files[0]}\` below, open it and drag Open Harness into Applications; the \`.zip\` holds the same app.`,
+  `For Apple silicon Macs. Download \`${files[0]}\` below, open it and drag Silo Harness into Applications; the \`.zip\` holds the same app.`,
   '',
   'The app is not notarized: on first launch, open it once, then allow it in System Settings → Privacy & Security → Open Anyway.',
   '',

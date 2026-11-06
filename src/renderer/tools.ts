@@ -978,15 +978,15 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
 /** Title for the approval card. */
 export function approvalTitle(name: string, detail: string, args?: Args): string {
   const target = (args && str(args, 'path')) || detail.split('\n')[0] || '';
-  if (name === 'bash') return 'Allow Open Harness to run this command?';
-  if (name === 'terminal_run') return 'Allow Open Harness to run this command in the terminal?';
-  if (name === 'edit_file') return `Allow Open Harness to edit ${basename(target) || 'this file'}?`;
-  if (name === 'write_file') return `Allow Open Harness to write ${basename(target) || 'this file'}?`;
+  if (name === 'bash') return 'Allow Silo Harness to run this command?';
+  if (name === 'terminal_run') return 'Allow Silo Harness to run this command in the terminal?';
+  if (name === 'edit_file') return `Allow Silo Harness to edit ${basename(target) || 'this file'}?`;
+  if (name === 'write_file') return `Allow Silo Harness to write ${basename(target) || 'this file'}?`;
   const mcp = mcpParts(name);
-  if (mcp) return `Allow Open Harness to call ${mcp.tool} on ${mcp.server}?`;
+  if (mcp) return `Allow Silo Harness to call ${mcp.tool} on ${mcp.server}?`;
   const agent = agentApproval(name, detail);
   if (agent) return agent.title;
-  return `Allow Open Harness to use ${name}?`;
+  return `Allow Silo Harness to use ${name}?`;
 }
 
 /** Line number where an edit's old text starts, from known file contents. */

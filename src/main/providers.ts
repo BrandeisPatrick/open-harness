@@ -204,7 +204,7 @@ function resolveNamed(cfg: AppConfig, name: string, env: NodeJS.ProcessEnv): Res
   if (keyRequired && !apiKey) {
     error = `${label} needs a key: set ${keyVar} in your environment or in the "env" block of ${shownSettingsPath()}${e.apiKeyEnv ? '' : `, or name another variable with providers.${name}.apiKeyEnv`}.`;
   } else if (!e.model) {
-    error = `No model set for ${label}. Choose one in Settings → Model, or run: open-harness provider use ${name} --model <id>`;
+    error = `No model set for ${label}. Choose one in Settings → Model, or run: silo provider use ${name} --model <id>`;
   }
   return {
     name,

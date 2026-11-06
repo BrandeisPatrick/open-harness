@@ -14,13 +14,13 @@ export interface ProviderTestInfo {
   error?: string;
 }
 
-/** The `open-harness` command and its link on the PATH. */
+/** The `silo` command and its link on the PATH. */
 export interface CliStatus {
-  /** The command inside the app (Contents/Resources/bin/open-harness), or the checkout's bin/open-harness */
+  /** The command inside the app (Contents/Resources/bin/silo), or the checkout's bin/silo */
   command: string;
   /** The command exists at that path */
   available: boolean;
-  /** Where the link goes: ~/.local/bin/open-harness */
+  /** Where the link goes: ~/.local/bin/silo */
   link: string;
   /** The link exists and points at `command` */
   installed: boolean;
@@ -38,7 +38,7 @@ export interface ProvidersRpc {
   /** One tiny chat completion through a provider (default: the one in use) */
   'providers.test': (name?: string) => ProviderTestInfo;
   'cli.status': () => CliStatus;
-  /** Links ~/.local/bin/open-harness to the command (no administrator password needed) */
+  /** Links ~/.local/bin/silo to the command (no administrator password needed) */
   'cli.install': () => CliStatus;
   'cli.uninstall': () => CliStatus;
 }

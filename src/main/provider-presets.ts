@@ -28,7 +28,7 @@ export const PRESETS: Record<ProviderType, Preset> = {
     keyEnv: 'OPENROUTER_API_KEY',
     keyRequired: true,
     // App attribution, as OpenRouter's docs describe it
-    headers: { 'HTTP-Referer': 'https://github.com/BrandeisPatrick/open-harness', 'X-OpenRouter-Title': 'Open Harness' },
+    headers: { 'HTTP-Referer': 'https://github.com/BrandeisPatrick/silo-harness', 'X-OpenRouter-Title': 'Silo Harness' },
     docs: 'https://openrouter.ai/docs/quickstart',
   },
   portkey: { label: 'Portkey', baseURL: 'https://api.portkey.ai/v1', keyEnv: 'PORTKEY_API_KEY', keyRequired: true, docs: 'https://portkey.ai/docs/api-reference/inference-api/introduction' },

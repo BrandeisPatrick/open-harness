@@ -17,7 +17,7 @@ export const MODEL_DEFAULT_TOKENS = 1000;
 export const MODEL_MAX_IN_FLIGHT = 2;
 const MODEL_TIMEOUT_MS = 180_000;
 const MAX_INPUT_CHARS = 400_000;
-const DEFAULT_SYSTEM = 'You are a helpful assistant answering a request from a panel (a mod) inside Open Harness, a coding app. Answer directly and concisely.';
+const DEFAULT_SYSTEM = 'You are a helpful assistant answering a request from a panel (a mod) inside Silo Harness, a coding app. Answer directly and concisely.';
 
 export class ModelCallError extends Error {
   constructor(message: string, readonly code: number) {
@@ -72,7 +72,7 @@ export function buildMessages(cfg: AppConfig, call: ModelCall, sessionMessages: 
     const budget = Math.max(2000, Math.floor(room * 3.2));
     const transcript = renderForSummary(sessionMessages, budget);
     if (transcript.trim()) {
-      system += `\n\nThe conversation the user has open in Open Harness, for context (read-only; you are not taking part in it):\n\n<conversation>\n${transcript}\n</conversation>`;
+      system += `\n\nThe conversation the user has open in Silo Harness, for context (read-only; you are not taking part in it):\n\n<conversation>\n${transcript}\n</conversation>`;
     }
   }
   return [{ role: 'system', content: system }, ...call.messages];

@@ -118,7 +118,7 @@ function systemPrompt(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, e
  * files are left out too: what such a session needs of them, its first message carries.
  */
 function ownToolsPromptParts(cfg: AppConfig, extra: string, own: string[]): PromptParts {
-  const base = `You are Open Harness, running on the user's Mac.
+  const base = `You are Silo Harness, running on the user's Mac.
 Working directory: ${cfg.workingDirectory}
 Today: ${new Date().toISOString().slice(0, 10)}
 
@@ -130,7 +130,7 @@ In this session you have only these tools: ${own.join(', ')}. You cannot run com
 
 function systemPromptParts(cfg: AppConfig, skills: Skill[], mcp: McpManager | null, extra = '', own?: string[]): PromptParts {
   if (own) return ownToolsPromptParts(cfg, extra, own);
-  const base = `You are Open Harness, an autonomous coding agent running on the user's Mac.
+  const base = `You are Silo Harness, an autonomous coding agent running on the user's Mac.
 Working directory: ${cfg.workingDirectory}
 Today: ${new Date().toISOString().slice(0, 10)}
 
@@ -301,8 +301,8 @@ export class Agent {
     this.session = opts.session ?? store.create();
     this.opts = opts;
     this.mcp = mcp ?? null;
-    this.terminal = terminal ?? new TerminalManager({ dataDir: path.join(os.tmpdir(), 'open-harness'), cwd: () => this.getConfig().workingDirectory });
-    this.artifacts = artifacts ?? new ArtifactStore({ root: path.join(os.tmpdir(), 'open-harness', 'artifacts'), rendererDir: path.join(__dirname, '..', 'renderer') });
+    this.terminal = terminal ?? new TerminalManager({ dataDir: path.join(os.tmpdir(), 'silo-harness'), cwd: () => this.getConfig().workingDirectory });
+    this.artifacts = artifacts ?? new ArtifactStore({ root: path.join(os.tmpdir(), 'silo-harness', 'artifacts'), rendererDir: path.join(__dirname, '..', 'renderer') });
   }
 
   /** The Terminal pane's tabs, shared with the window's IPC handlers */

@@ -4,7 +4,7 @@
   "name": "Plan",
   "version": "1.0.0",
   "description": "The plan the agent proposed in Plan mode, and whether it was approved.",
-  "author": "Open Harness",
+  "author": "Silo Harness",
   "license": "MIT",
   "icon": "clipboard",
   "permissions": ["session:read"],

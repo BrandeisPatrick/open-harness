@@ -1,11 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { RpcEvents, RpcMethods } from './shared/rpc';
-import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, Bounds, BrowserState, ChangeDiff, ChangeEntry, ContextInfo, FileHit, ImageAttachment, McpScope, McpServerInfo, ModelCapabilities, OpenHarnessApi, ProjectRules, QueuedMessage, RewindResult, SendResult, SessionMeta, SkillInfo, TerminalTabInfo, TranscriptItem } from './shared/types';
+import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, Bounds, BrowserState, ChangeDiff, ChangeEntry, ContextInfo, FileHit, ImageAttachment, McpScope, McpServerInfo, ModelCapabilities, SiloHarnessApi, ProjectRules, QueuedMessage, RewindResult, SendResult, SessionMeta, SkillInfo, TerminalTabInfo, TranscriptItem } from './shared/types';
 
 // Every feature listens for pushes on the one 'rpc:push' channel, so more than Node's default ten listeners is normal.
 ipcRenderer.setMaxListeners(200);
 
-const api: OpenHarnessApi = {
+const api: SiloHarnessApi = {
   homeDir: process.env.HOME ?? '',
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
   setConfig: (cfg: AppConfig): Promise<AppConfig> => ipcRenderer.invoke('config:set', cfg),

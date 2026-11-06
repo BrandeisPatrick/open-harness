@@ -164,7 +164,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
   let mods: ModInfo[] = [];
   let methodPerms: PermissionTable = {};
   let eventPerms: PermissionTable = {};
-  let appInfo = { name: 'Open Harness', version: 'unknown' };
+  let appInfo = { name: 'Silo Harness', version: 'unknown' };
   let ready = false;
   const readyWaiters: (() => void)[] = [];
   const whenReady = () => (ready ? Promise.resolve() : new Promise<void>((r) => readyWaiters.push(r)));

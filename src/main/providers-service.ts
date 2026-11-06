@@ -1,6 +1,6 @@
 // Feature: providers. What the window asks about providers beyond the config itself (which already carries them
 // resolved, see windowConfig in providers.ts): the models one offers, choosing a model, a quick test; and the
-// command-line tool's row in Settings → General, which links the bundled `open-harness` into ~/.local/bin.
+// command-line tool's row in Settings → General, which links the bundled `silo` into ~/.local/bin.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,32 +8,49 @@ import type { CliStatus } from '../shared/providers';
 import type { App } from './app';
 import { loginPath } from './mcp';
 import { listModels, resolveProvider, testProvider } from './providers';
+import { envVar } from './paths';
+
+/** The command's name (it was open-harness before the rename) */
+export const CLI_NAME = 'silo';
 
 export interface ProvidersServiceOptions {
-  /** The folder the link goes in (default: OPEN_HARNESS_CLI_LINK_DIR, else ~/.local/bin) */
+  /** The folder the link goes in (default: SILO_HARNESS_CLI_LINK_DIR, else OPEN_HARNESS_CLI_LINK_DIR, else ~/.local/bin) */
   linkDir?: string;
-  /** The command the link points at (default: the app's bin/open-harness) */
+  /** The command the link points at (default: the app's bin/silo) */
   command?: string;
   /** The PATH of a login shell (default: mcp.ts loginPath) */
   pathOf?: () => Promise<string>;
 }
 
-/** The bundled command: Contents/Resources/bin/open-harness in the app, bin/open-harness in a checkout. */
+/** The bundled command: Contents/Resources/bin/silo in the app, bin/silo in a checkout. */
 export function cliCommandPath(appRoot: string): string {
   const res = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
-  const packaged = res ? path.join(res, 'bin', 'open-harness') : '';
+  const packaged = res ? path.join(res, 'bin', CLI_NAME) : '';
   if (packaged && fs.existsSync(packaged)) return packaged;
-  return path.join(appRoot, 'bin', 'open-harness');
+  return path.join(appRoot, 'bin', CLI_NAME);
+}
+
+/**
+ * The link the app made under the command's old name (open-harness, pointing at an app's bin/open-harness): taken
+ * away once the new one is in, since it stops working when the old app is deleted. Anything else there is left alone.
+ */
+export function removeOldLink(dir: string): void {
+  const old = path.join(dir, 'open-harness');
+  try {
+    if (fs.lstatSync(old).isSymbolicLink() && fs.readlinkSync(old).endsWith(path.join('bin', 'open-harness'))) fs.unlinkSync(old);
+  } catch {
+    /* nothing there */
+  }
 }
 
 export function setupProviders(app: App, opts: ProvidersServiceOptions = {}): () => void {
-  const linkDir = () => opts.linkDir ?? (process.env.OPEN_HARNESS_CLI_LINK_DIR?.trim() || path.join(os.homedir(), '.local', 'bin'));
+  const linkDir = () => opts.linkDir ?? (envVar('CLI_LINK_DIR') || path.join(os.homedir(), '.local', 'bin'));
   const command = () => opts.command ?? cliCommandPath(app.appRoot);
   const pathOf = opts.pathOf ?? loginPath;
 
   async function status(): Promise<CliStatus> {
     const cmd = command();
-    const link = path.join(linkDir(), 'open-harness');
+    const link = path.join(linkDir(), CLI_NAME);
     let installed = false;
     let conflict: string | undefined;
     try {
@@ -79,6 +96,7 @@ export function setupProviders(app: App, opts: ProvidersServiceOptions = {}): ()
       if (s.conflict) throw new Error(`${s.conflict}. Remove it first, then try again.`);
       fs.mkdirSync(path.dirname(s.link), { recursive: true });
       fs.symlinkSync(s.command, s.link);
+      removeOldLink(path.dirname(s.link));
       return status();
     }),
     app.rpc.handle('cli.uninstall', async () => {

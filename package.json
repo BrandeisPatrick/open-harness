@@ -1,9 +1,9 @@
 {
-  "name": "open-harness",
+  "name": "silo-harness",
   "version": "0.5.0",
   "description": "An open-source agent harness for macOS, in the style of Claude Code: local models via Ollama or any OpenAI-compatible provider, sessions that run side by side, and mods.",
   "main": "dist/main/index.js",
-  "repository": "github:BrandeisPatrick/open-harness",
+  "repository": "https://github.com/BrandeisPatrick/silo-harness",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -34,10 +34,10 @@
     "electron-builder": "^26.18.0",
     "typescript": "^7.0.2"
   },
-  "productName": "Open Harness",
+  "productName": "Silo Harness",
   "build": {
-    "appId": "dev.openharness.app",
-    "productName": "Open Harness",
+    "appId": "dev.siloharness.app",
+    "productName": "Silo Harness",
     "afterPack": "scripts/adhoc-sign.js",
     "mac": {
       "icon": "build/icon.icns",
@@ -62,13 +62,13 @@
       "node_modules/node-pty/**"
     ],
     "npmRebuild": false,
-    "artifactName": "Open-Harness-${version}-${arch}.${ext}",
+    "artifactName": "Silo-Harness-${version}-${arch}.${ext}",
     "extraResources": [
       {
-        "from": "bin/open-harness",
-        "to": "bin/open-harness"
+        "from": "bin/silo",
+        "to": "bin/silo"
       }
     ]
   },
-  "author": "Open Harness contributors"
+  "author": "Silo Harness contributors"
 }

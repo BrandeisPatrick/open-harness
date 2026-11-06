@@ -1,7 +1,7 @@
 // A Claude Code-style settings.json layer over the GUI's config.json.
 //
 //   <configDir>/settings.json                     user scope, always applied
-//   <workingDirectory>/.open-harness/settings.json   project scope, wins over user, applied only once trusted
+//   <workingDirectory>/.silo-harness/settings.json   project scope (.open-harness/ when only that one is there), wins over user, applied only once trusted
 //
 // Precedence: defaults < config.json < user settings.json < project settings.json.
 //
@@ -29,7 +29,7 @@ import { configDir, projectConfigDir } from './paths';
 
 type Scope = 'user' | 'project';
 
-/** The user's settings.json (read on every call, so OPEN_HARNESS_CONFIG_DIR may be set late). */
+/** The user's settings.json (read on every call, so SILO_HARNESS_CONFIG_DIR may be set late). */
 export function userSettingsPath(): string {
   return path.join(configDir(), 'settings.json');
 }
@@ -149,9 +149,9 @@ export function settingsSchema(): Record<string, unknown> {
   };
   return {
     $schema: 'http://json-schema.org/draft-07/schema#',
-    $id: 'https://brandeispatrick.github.io/open-harness/settings.schema.json',
-    title: 'Open Harness settings.json',
-    description: 'Settings for Open Harness: ~/.open-harness/settings.json (yours) and <project>/.open-harness/settings.json (a project\'s, applied once you trust it). See https://github.com/BrandeisPatrick/open-harness/blob/main/docs/configure.md',
+    $id: 'https://brandeispatrick.github.io/silo-harness/settings.schema.json',
+    title: 'Silo Harness settings.json',
+    description: 'Settings for Silo Harness: ~/.silo-harness/settings.json (yours) and <project>/.silo-harness/settings.json (a project\'s, applied once you trust it). See https://github.com/BrandeisPatrick/silo-harness/blob/main/docs/configure.md',
     type: 'object',
     additionalProperties: false,
     properties,

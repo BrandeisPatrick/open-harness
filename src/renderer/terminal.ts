@@ -784,7 +784,7 @@ export function createTerminalPane(o: TerminalPaneOptions): TerminalPane {
     el.querySelector<HTMLElement>('.term-tab-agent')!.hidden = !info.agent;
     const state = exited ? `exited with code ${info.exitCode}` : busy ? `running ${info.running}` : 'idle';
     el.setAttribute('aria-label', `${title}, ${state}`);
-    el.dataset.tip = [busy ? info.running : title, tilde(info.cwd), exited ? `exited (${info.exitCode})` : '', info.agent ? 'opened by Open Harness' : '']
+    el.dataset.tip = [busy ? info.running : title, tilde(info.cwd), exited ? `exited (${info.exitCode})` : '', info.agent ? 'opened by Silo Harness' : '']
       .filter(Boolean)
       .join(' · ');
     el.querySelector('.term-tab-close')!.setAttribute('aria-label', `Close ${title}`);
@@ -823,9 +823,9 @@ export function createTerminalPane(o: TerminalPaneOptions): TerminalPane {
 
   function render(): void {
     const unavailable = !api
-      ? 'The terminal needs the updated app. Restart Open Harness to turn it on.'
+      ? 'The terminal needs the updated app. Restart Silo Harness to turn it on.'
       : !xtermLib()
-        ? 'The terminal could not load xterm.js. Rebuild Open Harness (npm run build) and restart it.'
+        ? 'The terminal could not load xterm.js. Rebuild Silo Harness (npm run build) and restart it.'
         : null;
     const failed = !unavailable && failure && !order.length ? failure : null;
     const none = !unavailable && !failed && loaded && !order.length && creating === 0;

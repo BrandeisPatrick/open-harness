@@ -17,13 +17,13 @@ export function oneLine(text: string): string {
   return String(text ?? '').replace(/\s+/g, ' ').trim();
 }
 
-/** The file "#" lines go to until the main process has named another (it creates OPENHARNESS.md when a project has none) */
-export const DEFAULT_INSTRUCTIONS_FILE = 'OPENHARNESS.md';
+/** The file "#" lines go to until the main process has named another (it creates SILOHARNESS.md when a project has none) */
+export const DEFAULT_INSTRUCTIONS_FILE = 'SILOHARNESS.md';
 const LABELS_KEY = 'instructionsFiles';
 const MAX_PROJECTS = 50;
 
 export interface InstructionFiles {
-  /** The label oc.instructions.append last returned for this working directory, else OPENHARNESS.md */
+  /** The label oc.instructions.append last returned for this working directory, else SILOHARNESS.md */
   get(cwd: string): string;
   /** Remembered per working directory (in localStorage) */
   set(cwd: string, label: string): void;

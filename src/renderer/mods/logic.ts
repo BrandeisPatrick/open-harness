@@ -146,13 +146,19 @@ export function isWindowMethod(method: string): boolean {
   );
 }
 
+/**
+ * The host's name in the hello (`harness.info.app.name`). It stays "Open Harness", the name protocol 1 shipped with,
+ * so a mod that checks it keeps working after the rename to Silo Harness; the version is the app's own.
+ */
+export const MOD_HOST_NAME = 'Open Harness';
+
 export function buildHello(mod: ModInfo, view: ModViewManifest, app: { name: string; version: string }, theme: ModTheme, visible: boolean): ModHello {
   const m = mod.manifest;
   return {
     protocol: PROTOCOL,
     mod: { id: mod.id, name: m?.name ?? mod.id, version: m?.version ?? '0.0.0', scope: mod.scope },
     view: { id: view.id, seat: view.seat, title: view.title },
-    app: { name: app.name, version: app.version },
+    app: { name: MOD_HOST_NAME, version: app.version },
     granted: [...mod.granted],
     theme: { scheme: theme.scheme, tokens: { ...theme.tokens } },
     settings: { ...(mod.settings ?? {}) },
@@ -268,7 +274,7 @@ export function askLines(mod: ModInfo): AskLine[] {
   const hasLooks = !!c?.looks?.length;
   const hasBackground = !!c?.views?.some((v) => v.seat === 'background');
   if ((mod.state !== 'paused' || mod.wantsStyles) && (hasStyles || hasBackground)) {
-    const what = hasStyles && hasBackground ? 'restyle Open Harness and draw behind it' : hasStyles ? 'restyle Open Harness itself' : hasLooks ? 'restyle the conversation or the chat bar and draw behind the window' : 'draw behind the whole window';
+    const what = hasStyles && hasBackground ? 'restyle Silo Harness and draw behind it' : hasStyles ? 'restyle Silo Harness itself' : hasLooks ? 'restyle the conversation or the chat bar and draw behind the window' : 'draw behind the whole window';
     lines.push({ text: `It can ${what}: its stylesheet applies to the app's own page, approval cards included. Turn it on only if you trust where it came from.`, strong: true });
   } else if ((mod.state !== 'paused' || mod.wantsStyles) && hasLooks) {
     lines.push({ text: 'It can restyle the conversation or the chat bar once you pick its look: its stylesheet applies to the app\'s own page, approval cards in the conversation included. Turn it on only if you trust where it came from.', strong: true });

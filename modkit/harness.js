@@ -1,5 +1,5 @@
 /*
- * Open Harness mod kit: the `harness` object (protocol 1). Served on every mod origin as /@harness/harness.js.
+ * Silo Harness mod kit: the `harness` object (protocol 1). Served on every mod origin as /@harness/harness.js.
  * A classic script, no build. docs/mods.md is the reference; this file is a thin layer over the wire protocol
  * (JSON-RPC 2.0 over window.parent.postMessage) described at the end of it.
  */
@@ -387,7 +387,7 @@
   window.harness = harness;
 
   if (!host) {
-    console.warn('[harness] This page is not inside Open Harness (no parent frame), so harness.ready stays pending and calls wait. Open it from the app or from modkit/playground.');
+    console.warn('[harness] This page is not inside Silo Harness (no parent frame), so harness.ready stays pending and calls wait. Open it from the app or from modkit/playground.');
     return;
   }
 

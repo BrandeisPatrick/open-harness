@@ -248,7 +248,7 @@ export function buildDigest(input: DigestInput): Digest {
   const off = (['skills', 'memory', 'mods'] as const).filter((k) => !input.lookFor[k]);
   const all = input.sessions.flatMap((s) => s.turns).sort((a, b) => a.t - b.t);
   const head = [
-    `[Dream] Open Harness put this message together from the logs of recent sessions in ${input.cwd}, for a dream; the user did not type it.`,
+    `[Dream] Silo Harness put this message together from the logs of recent sessions in ${input.cwd}, for a dream; the user did not type it.`,
     `Review these sessions and propose what would help you work better for this user. Mode: ${MODE_WORDS[input.mode]}.`,
     `Look for: ${looking.join(', ') || 'nothing'}${off.length ? ` (${off.join(' and ')} turned off by the user)` : ''}.`,
   ].join('\n');

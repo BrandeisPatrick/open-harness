@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// open-harness: set Open Harness up from the command line, without the app's window (and without the app running).
-// It reads and writes your settings.json (~/.open-harness/settings.json, or OPEN_HARNESS_CONFIG_DIR), keeping every
+// silo: set Silo Harness up from the command line, without the app's window (and without the app running).
+// It reads and writes your settings.json (~/.silo-harness/settings.json, or SILO_HARNESS_CONFIG_DIR), keeping every
 // key it does not know about; the running app sees the change within a second. It reads config.json (the window's
 // settings) to tell what the app would use. The rules are the app's own: this script loads the built app (dist/).
 //
-// Run `open-harness --help`. In the app it is Contents/Resources/bin/open-harness; in a checkout `node bin/open-harness.js`.
+// Run `silo --help`. In the app it is Contents/Resources/bin/silo; in a checkout `node bin/silo.js`.
+// It was called open-harness before the app was renamed; the old folders and variables are still read.
 'use strict';
 const fs = require('node:fs');
 const os = require('node:os');
@@ -39,9 +40,9 @@ function emit(human, data) {
 // ---------- Help ----------
 
 const HELP = {
-  main: `open-harness: configure Open Harness from a file or the command line.
+  main: `silo: configure Silo Harness from a file or the command line.
 
-Usage: open-harness <command> [options]
+Usage: silo <command> [options]
 
 Providers
   provider list                      every provider, the one in use marked with *
@@ -63,8 +64,8 @@ Options on every command
   --help     help for a command
 
 A key is never taken from the command line (it would stay in your shell history): name its variable with
---key-env, or pipe it in with --key-stdin. See https://github.com/BrandeisPatrick/open-harness/blob/main/docs/configure.md`,
-  provider: `Usage: open-harness provider <list|add|remove|use|test> ...
+--key-env, or pipe it in with --key-stdin. See https://github.com/BrandeisPatrick/silo-harness/blob/main/docs/configure.md`,
+  provider: `Usage: silo provider <list|add|remove|use|test> ...
 
   provider list
   provider add <name> --type <type> [--base-url <url>] [--key-env <VAR> | --key-stdin] [--model <id>]
@@ -76,7 +77,7 @@ A key is never taken from the command line (it would stay in your shell history)
   provider test [<name>]
 
 Types: TYPES`,
-  'provider add': `Usage: open-harness provider add <name> --type <type> [options]
+  'provider add': `Usage: silo provider add <name> --type <type> [options]
 
 Adds a named provider to your settings.json ("providers": { "<name>": { ... } }).
 
@@ -99,11 +100,11 @@ Adds a named provider to your settings.json ("providers": { "<name>": { ... } })
   --replace                replace an entry of that name instead of refusing
 
 The names "ollama" and "portkey" belong to the built-in providers.`,
-  'provider remove': 'Usage: open-harness provider remove <name>\n\nRemoves a named provider from your settings.json. If it was the provider in use there, that choice is removed too.',
-  'provider use': 'Usage: open-harness provider use <name> [--model <id>]\n\nMakes <name> the provider in use ("provider" in your settings.json). With --model, also sets its model.',
-  'provider test': 'Usage: open-harness provider test [<name>]\n\nSends one tiny chat completion through the provider (default: the one in use) and says ok with the model and the\ntime it took, or the service\'s error in plain words. Exit code 0 when it answered.',
-  'provider list': 'Usage: open-harness provider list\n\nEvery provider: the two built-in ones (ollama, portkey) and every named one. * marks the one in use.',
-  config: `Usage: open-harness config <path|get|set|unset> ...
+  'provider remove': 'Usage: silo provider remove <name>\n\nRemoves a named provider from your settings.json. If it was the provider in use there, that choice is removed too.',
+  'provider use': 'Usage: silo provider use <name> [--model <id>]\n\nMakes <name> the provider in use ("provider" in your settings.json). With --model, also sets its model.',
+  'provider test': 'Usage: silo provider test [<name>]\n\nSends one tiny chat completion through the provider (default: the one in use) and says ok with the model and the\ntime it took, or the service\'s error in plain words. Exit code 0 when it answered.',
+  'provider list': 'Usage: silo provider list\n\nEvery provider: the two built-in ones (ollama, portkey) and every named one. * marks the one in use.',
+  config: `Usage: silo config <path|get|set|unset> ...
 
   config path                  where settings.json (yours) and config.json (the window's) are
   config get [<key>]           a field the app uses, or all of them; keys show as set / not set
@@ -111,8 +112,8 @@ The names "ollama" and "portkey" belong to the built-in providers.`,
   config set <key> --stdin     for a secret (portkey.apiKey, portkey.providerApiKey, env.SOME_KEY): read from standard input
   config unset <key>
 
-Keys: KEYS, env.<NAME>, workingDirectory. Providers are changed with "open-harness provider".`,
-  doctor: 'Usage: open-harness doctor\n\nWhat the app would use right now (files, provider, model, key set or not) and what is wrong, if anything.\nExit code 0 when the provider in use can be used.',
+Keys: KEYS, env.<NAME>, workingDirectory. Providers are changed with "silo provider".`,
+  doctor: 'Usage: silo doctor\n\nWhat the app would use right now (files, provider, model, key set or not) and what is wrong, if anything.\nExit code 0 when the provider in use can be used.',
 };
 
 function helpFor(topic) {
@@ -181,9 +182,20 @@ function settingsFile() {
   return load('settings.js').userSettingsPath();
 }
 
-/** config.json: OPEN_HARNESS_USER_DATA (tests), else the app's data folder. */
+/**
+ * config.json: SILO_HARNESS_USER_DATA (tests; OPEN_HARNESS_USER_DATA, its name before the rename, when it is unset),
+ * else the app's data folder: Silo Harness, or Open Harness when only that one is there (the app has not started
+ * since the rename).
+ */
 function configJsonFile() {
-  const dir = process.env.OPEN_HARNESS_USER_DATA?.trim() || path.join(os.homedir(), 'Library', 'Application Support', 'Open Harness');
+  const override = process.env.SILO_HARNESS_USER_DATA?.trim() || process.env.OPEN_HARNESS_USER_DATA?.trim();
+  let dir = override;
+  if (!dir) {
+    const support = path.join(os.homedir(), 'Library', 'Application Support');
+    const next = path.join(support, 'Silo Harness');
+    const old = path.join(support, 'Open Harness');
+    dir = !fs.existsSync(next) && fs.existsSync(old) ? old : next;
+  }
   return path.join(path.resolve(dir), 'config.json');
 }
 
@@ -384,8 +396,8 @@ async function providerCmd(sub, pos, flags) {
       const row = providerRows(cfg, info).find((r) => r.name === name);
       const notes = [];
       if (row && row.key === 'missing') notes.push(row.error);
-      if (row && !row.model) notes.push(`No model yet: open-harness provider use ${name} --model <id>`);
-      if (!flags.use && cfg.provider !== name) notes.push(`To use it: open-harness provider use ${name}`);
+      if (row && !row.model) notes.push(`No model yet: silo provider use ${name} --model <id>`);
+      if (!flags.use && cfg.provider !== name) notes.push(`To use it: silo provider use ${name}`);
       if (flags.use && cfg.provider !== name) notes.push(`A project's settings.json chooses "${cfg.provider}", which wins over yours in that folder.`);
       emit(`${existing !== undefined ? 'Replaced' : 'Added'} provider "${name}" (${row ? row.label : entry.type}) in ${file}.${flags.use ? ' It is now the provider in use.' : ''}${notes.length ? '\n' + notes.join('\n') : ''}`, { file, provider: row, replaced: existing !== undefined, notes });
       return;
@@ -410,7 +422,7 @@ async function providerCmd(sub, pos, flags) {
     }
     case 'use': {
       const name = pos[0];
-      if (!name) fail('provider use needs a name (see: open-harness provider list)', 2);
+      if (!name) fail('provider use needs a name (see: silo provider list)', 2);
       const before = effective();
       const { providerNames } = load('providers.js');
       const names = providerNames(before.cfg);
@@ -497,7 +509,7 @@ async function configCmd(sub, pos, flags) {
         emit(v === undefined ? `${key} is not set in your settings.json` : typeof shown === 'string' ? shown : JSON.stringify(shown), { key, value: shown === undefined ? null : shown, source: 'settings.json' });
         return;
       }
-      if (!fields.includes(key) && !/^providers\.[^.]+$/.test(key)) fail(`"${key}" is not a setting (see: open-harness config --help)`, 2);
+      if (!fields.includes(key) && !/^providers\.[^.]+$/.test(key)) fail(`"${key}" is not a setting (see: silo config --help)`, 2);
       const v = displayValue(key, getPath(cfg, key));
       if (v === undefined) fail(`"${key}" is not set`);
       emit(typeof v === 'string' ? v : JSON.stringify(v, null, 2), { key, value: v, source: sourceOf(key) });
@@ -507,8 +519,8 @@ async function configCmd(sub, pos, flags) {
       const key = pos[0];
       if (!key) fail('config set needs a key and a value, e.g. config set theme dark', 2);
       if (/^providers(\.|$)/.test(key) || key === 'provider') {
-        if (key === 'provider') fail('use: open-harness provider use <name>', 2);
-        fail('providers are changed with: open-harness provider add / remove / use', 2);
+        if (key === 'provider') fail('use: silo provider use <name>', 2);
+        fail('providers are changed with: silo provider add / remove / use', 2);
       }
       const secret = settings.SECRET_FIELDS.includes(key) || (/^env\./.test(key) && /(KEY|TOKEN|SECRET|PASSWORD)$/i.test(key));
       let value;
@@ -516,7 +528,7 @@ async function configCmd(sub, pos, flags) {
         if (pos.length > 1) fail('give the value on standard input or as an argument, not both', 2);
         value = await readSecretFromStdin(key);
       } else {
-        if (secret) fail(`${key} holds a secret, which is never taken from the command line. Pipe it in: open-harness config set ${key} --stdin`, 2);
+        if (secret) fail(`${key} holds a secret, which is never taken from the command line. Pipe it in: silo config set ${key} --stdin`, 2);
         if (pos.length < 2) fail(`config set ${key} needs a value`, 2);
         if (pos.length > 2) fail(`config set takes one value; quote it if it has spaces`, 2);
         value = pos[1];
@@ -535,7 +547,7 @@ async function configCmd(sub, pos, flags) {
         // As written if that is valid (a string), else read as JSON (numbers, true/false).
         let v = value;
         let msg = settings.checkSetting(key, v);
-        if (msg === 'unknown') fail(`"${key}" is not a setting you can set (see: open-harness config --help)`, 2);
+        if (msg === 'unknown') fail(`"${key}" is not a setting you can set (see: silo config --help)`, 2);
         if (msg && !flags.stdin) {
           try {
             const parsed = JSON.parse(String(value));
@@ -563,7 +575,7 @@ async function configCmd(sub, pos, flags) {
       if (!key) fail('config unset needs a key', 2);
       const { file, data } = readSettings();
       const parts = key.split('.');
-      if (parts.length > 2) fail(`"${key}" is not a setting (providers are removed with: open-harness provider remove)`, 2);
+      if (parts.length > 2) fail(`"${key}" is not a setting (providers are removed with: silo provider remove)`, 2);
       const [a, b] = parts;
       let had = false;
       if (b === undefined) {
@@ -607,7 +619,7 @@ function doctor() {
   const notes = [];
   if (active.key === 'set' && active.keySource && /^[A-Z_][A-Z0-9_]*$/.test(active.keySource)) {
     const fromFile = info.files.some((f) => f.applied && f.keys.includes(`env.${active.keySource}`));
-    if (!fromFile) notes.push(`${active.keySource} is set in this shell. The app sees it only when started from this shell (open -a "Open Harness"); started from the Dock or Finder it does not. To be sure, put it in the "env" block of ${settingsFile()} or store the key with --key-stdin.`);
+    if (!fromFile) notes.push(`${active.keySource} is set in this shell. The app sees it only when started from this shell (open -a "Silo Harness"); started from the Dock or Finder it does not. To be sure, put it in the "env" block of ${settingsFile()} or store the key with --key-stdin.`);
   }
   const ownerOfProvider = info.owned.provider === 'user' ? 'settings.json' : info.owned.provider === 'project' ? "the project's settings.json" : 'config.json (the window)';
   const userFile = info.files.find((f) => f.scope === 'user');
@@ -657,7 +669,7 @@ async function main(argv) {
     if (sub) fail(`doctor takes no arguments`, 2);
     return doctor();
   }
-  fail(`unknown command "${cmd}" (see: open-harness --help)`, 2);
+  fail(`unknown command "${cmd}" (see: silo --help)`, 2);
 }
 
 main(process.argv.slice(2)).catch((err) => {
@@ -669,6 +681,6 @@ main(process.argv.slice(2)).catch((err) => {
     /* nothing loaded: nothing to scrub */
   }
   if (JSON_OUT) process.stdout.write(JSON.stringify({ ok: false, error: message }, null, 2) + '\n');
-  else process.stderr.write(`open-harness: ${message}\n`);
+  else process.stderr.write(`silo: ${message}\n`);
   process.exitCode = code;
 });

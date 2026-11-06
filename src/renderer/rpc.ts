@@ -1,9 +1,9 @@
 // Typed helpers over window.oc's two generic bridges (see src/shared/rpc.ts for the contract).
 
 import type { RpcEvents, RpcMethods } from '../shared/rpc';
-import type { OpenHarnessApi } from '../shared/types';
+import type { SiloHarnessApi } from '../shared/types';
 
-const oc = (): OpenHarnessApi => (window as unknown as { oc: OpenHarnessApi }).oc;
+const oc = (): SiloHarnessApi => (window as unknown as { oc: SiloHarnessApi }).oc;
 
 /** Calls a main-process method registered with app.rpc.handle. */
 export function rpc<K extends keyof RpcMethods>(method: K, ...args: Parameters<RpcMethods[K]>): Promise<Awaited<ReturnType<RpcMethods[K]>>> {

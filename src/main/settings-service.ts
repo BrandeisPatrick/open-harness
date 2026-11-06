@@ -183,7 +183,7 @@ function appInfo(app: App): AppInfo {
     }
   }
   return {
-    name: ea?.getName() ?? 'Open Harness',
+    name: ea?.getName() ?? 'Silo Harness',
     version,
     electron: process.versions.electron ?? '',
     chrome: process.versions.chrome ?? '',

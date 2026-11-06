@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ModInfo, ModManifest, ModPermission, ModProblem, ModScope, ModsConfig } from '../../shared/mods';
-import { MOD_ID_RE, needsStylesApproval, readManifest, settingValues } from './manifest';
+import { MOD_ID_RE, bundledStartsOff, needsStylesApproval, readManifest, settingValues } from './manifest';
 
 export const MOD_SCHEME = 'mod';
 const MAX_RUNTIME_PROBLEMS = 20;
@@ -233,7 +233,7 @@ export class ModRegistry {
     let wantsStyles = false;
     if (!m) state = 'invalid';
     else if (e.scope === 'bundled') {
-      const off = (cfg.disabledBundled ?? []).includes(e.id);
+      const off = bundledStartsOff(m) ? !cfg.enabled?.[e.key] : (cfg.disabledBundled ?? []).includes(e.id);
       state = off ? 'off' : 'on';
       granted = off ? [] : [...asked];
     } else {

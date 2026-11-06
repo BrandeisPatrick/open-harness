@@ -42,6 +42,15 @@
   --scroll-thumb: rgba(115, 114, 108, 0.35);
   --scroll-thumb-hover: rgba(115, 114, 108, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  /* Markdown (.h-md): code, the user's bubble, syntax colours */
+  --code-bg: var(--bg-200);
+  --code-hover: var(--bg-400);
+  --bubble: var(--bg-300);
+  --tok-kw: #c0533a;
+  --tok-str: var(--success);
+  --tok-com: var(--text-400);
+  --tok-num: #8a6d00;
+  --tok-pun: var(--text-400);
 
   --r-control: 6px;
   --r-card: 8px;
@@ -80,6 +89,11 @@
     --scroll-thumb: rgba(156, 154, 146, 0.35);
     --scroll-thumb-hover: rgba(156, 154, 146, 0.55);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --code-bg: var(--bg-300);
+    --code-hover: rgba(222, 220, 208, 0.1);
+    --bubble: var(--bg-000);
+    --tok-kw: #e39678;
+    --tok-num: #ffd014;
     color-scheme: dark;
   }
 }
@@ -109,6 +123,11 @@
   --scroll-thumb: rgba(156, 154, 146, 0.35);
   --scroll-thumb-hover: rgba(156, 154, 146, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --code-bg: var(--bg-300);
+  --code-hover: rgba(222, 220, 208, 0.1);
+  --bubble: var(--bg-000);
+  --tok-kw: #e39678;
+  --tok-num: #ffd014;
   color-scheme: dark;
 }
 
@@ -280,6 +299,89 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
 /* ---------- Disclosure chevron: rotates when its row has aria-expanded="true" ---------- */
 .h-chev { color: var(--text-400); transition: transform 0.15s ease; }
 [aria-expanded="true"] > .h-chev, [aria-expanded="true"] .h-chev { transform: rotate(90deg); }
+
+/* ---------- Markdown: <div class="h-md"> holding harness.ui.markdown()'s html; looks like a reply in the chat ---------- */
+/* The app's .md rules (src/renderer/styles.css, images.css) in the kit's tokens. harness.js makes the code blocks'
+   Copy buttons work and opens links in the browser. .h-md.compact is the rail's size: 13 px text, tighter rhythm. */
+.h-md { font-size: 14px; line-height: 20px; color: var(--text-100); overflow-wrap: anywhere; }
+.h-md > :first-child { margin-top: 0; }
+.h-md > :last-child { margin-bottom: 0; }
+.h-md p, .h-md ul, .h-md ol, .h-md blockquote, .h-md pre, .h-md .code-block, .h-md .table-wrap { margin: 0 0 12px; }
+.h-md h1, .h-md h2 { margin: 24px 0 8px; font-size: 16px; line-height: 24px; font-weight: 600; color: var(--text-100); }
+.h-md h3, .h-md h4, .h-md h5, .h-md h6 { margin: 16px 0 4px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text-100); }
+.h-md strong { font-weight: 600; }
+.h-md ul, .h-md ol { padding-left: 24px; }
+.h-md li { margin: 4px 0; }
+.h-md li::marker { color: var(--text-400); }
+.h-md li > ul, .h-md li > ol { margin: 4px 0 0; }
+.h-md li > p { margin: 0 0 8px; }
+.h-md li > .code-block { margin: 8px 0; }
+.h-md ul.tasks { padding-left: 4px; list-style: none; }
+.h-md li.task { display: flex; align-items: flex-start; gap: 8px; }
+.h-md .task-box {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 14px; height: 14px; margin-top: 3px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-000);
+}
+.h-md li.task.done .task-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.h-md .task-text { min-width: 0; }
+.h-md code { font-family: var(--mono); font-size: 0.9em; padding: 1px 4px; border-radius: 4px; background: var(--code-bg); border: 1px solid var(--border-subtle); }
+.h-md a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 2px; cursor: pointer; }
+.h-md a:hover { color: var(--accent); text-decoration-color: currentColor; }
+.h-md a code { color: inherit; }
+.h-md blockquote { padding: 0 0 0 12px; border-left: 2px solid var(--border); color: var(--text-200); }
+.h-md hr { height: 1px; margin: 16px 0; border: none; background: var(--border-subtle); }
+.h-md del { color: var(--text-400); }
+.h-md .table-wrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--r-card); }
+.h-md table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 18px; }
+.h-md th, .h-md td { padding: 6px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
+.h-md th { background: var(--bg-200); font-weight: 600; white-space: nowrap; }
+.h-md td + td, .h-md th + th { border-left: 1px solid var(--border-subtle); }
+.h-md tbody tr:last-child td { border-bottom: none; }
+/* A fenced block: a header with the language and Copy, then the code */
+.h-md pre { padding: 12px; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--border-subtle); border-radius: var(--r-card); font: 12px/18px var(--mono); color: var(--text-100); tab-size: 4; }
+.h-md .code-block { background: var(--code-bg); border: 1px solid var(--border-subtle); border-radius: var(--r-card); overflow: hidden; }
+.h-md .code-block pre { margin: 0; border: 0; border-radius: 0; background: none; }
+.h-md pre code, .h-md .code-block code { padding: 0; border: none; background: none; font-size: inherit; }
+.h-md .code-head { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 4px 0 12px; border-bottom: 1px solid var(--border-subtle); }
+.h-md .code-lang { font-size: 12px; line-height: 16px; color: var(--text-400); }
+.h-md .code-copy {
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--r-control);
+  font-size: 12px; line-height: 16px; color: var(--text-400); transition: background-color 0.12s, color 0.12s;
+}
+.h-md .code-copy:hover { background: var(--code-hover); color: var(--text-100); }
+.h-md .code-copy.copied { color: var(--success); }
+.h-md .code-copy svg, .h-md .md-img-missing svg, .h-md .md-img-link svg, .h-md .md-img-pending svg { flex: none; }
+/* Syntax colours */
+.h-md .tok-kw { color: var(--tok-kw); }
+.h-md .tok-str { color: var(--tok-str); }
+.h-md .tok-com { color: var(--tok-com); font-style: italic; }
+.h-md .tok-num { color: var(--tok-num); }
+.h-md .tok-pun { color: var(--tok-pun); }
+.h-md .tok-add { color: var(--git-add, var(--success)); }
+.h-md .tok-del { color: var(--git-del, var(--danger)); }
+/* Images: a small inline picture, or a chip for one that is not shown here */
+.h-md img.md-img { display: inline-block; vertical-align: top; max-width: min(420px, 100%); max-height: 320px; margin: 2px 0; border: 1px solid var(--border-subtle); border-radius: var(--r-card); }
+.h-md .md-img-missing, .h-md .md-img-pending, .h-md a.md-img-link {
+  display: inline-flex; align-items: center; gap: 4px; vertical-align: -5px; max-width: 100%; height: 22px; padding: 0 8px;
+  border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--bg-200);
+  font-size: 12px; line-height: 16px; color: var(--text-400); text-decoration: none;
+}
+.h-md .md-img-missing > span, .h-md .md-img-pending > span, .h-md a.md-img-link > span:not(.md-img-arrow) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h-md a.md-img-link { color: var(--text-200); }
+.h-md a.md-img-link:hover { background: var(--hover); color: var(--text-100); }
+.h-md .md-img-arrow { flex: none; color: var(--text-400); }
+/* Compact: for rail sections */
+.h-md.compact { font-size: 13px; line-height: 18px; }
+.h-md.compact p, .h-md.compact ul, .h-md.compact ol, .h-md.compact blockquote, .h-md.compact pre, .h-md.compact .code-block, .h-md.compact .table-wrap { margin-bottom: 8px; }
+.h-md.compact h1, .h-md.compact h2, .h-md.compact h3, .h-md.compact h4, .h-md.compact h5, .h-md.compact h6 { margin: 12px 0 4px; font-size: 13px; line-height: 18px; }
+.h-md.compact ul, .h-md.compact ol { padding-left: 18px; }
+.h-md.compact li { margin: 2px 0; }
+.h-md.compact ul.tasks { padding-left: 2px; }
+.h-md.compact .task-box { margin-top: 2px; }
+.h-md.compact table { font-size: 12px; line-height: 16px; }
+.h-md.compact th, .h-md.compact td { padding: 4px 8px; }
+.h-md.compact pre { padding: 8px 10px; }
+.h-md.compact .code-head { height: 28px; padding-left: 10px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; }

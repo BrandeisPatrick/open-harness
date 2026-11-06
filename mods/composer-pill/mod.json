@@ -1,0 +1,14 @@
+{
+  "protocol": 1,
+  "id": "composer-pill",
+  "name": "Compact chat bar",
+  "version": "1.0.0",
+  "description": "The composer as one compact rounded bar: attach on the left, send on the right, and the model, mode and context in a quiet line below it.",
+  "author": "OpenAgent",
+  "license": "MIT",
+  "icon": "message",
+  "permissions": [],
+  "contributes": {
+    "styles": ["composer.css"]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "protocol": 1,
+  "id": "backgrounds",
+  "name": "Backgrounds",
+  "version": "1.0.0",
+  "description": "Quiet backgrounds behind the app, in its own colours: aurora, constellation, a dot grid, and a still dusk gradient. Pick one in Settings, Appearance.",
+  "author": "OpenAgent",
+  "license": "MIT",
+  "icon": "image",
+  "permissions": [],
+  "contributes": {
+    "views": [
+      { "id": "aurora", "title": "Aurora", "entry": "background.html", "seat": "background" },
+      { "id": "constellation", "title": "Constellation", "entry": "background.html", "seat": "background" },
+      { "id": "grid", "title": "Dot grid", "entry": "background.html", "seat": "background" },
+      { "id": "dusk", "title": "Dusk (still)", "entry": "background.html", "seat": "background" }
+    ],
+    "settings": [
+      { "key": "intensity", "type": "select", "title": "Intensity", "description": "How much colour the background carries. Text stays readable at every level.", "options": ["subtle", "medium", "vivid"], "default": "subtle" },
+      { "key": "speed", "type": "select", "title": "Speed", "description": "How fast the moving backgrounds drift. With reduced motion turned on in the system they hold still.", "options": ["slow", "normal"], "default": "normal" }
+    ]
+  }
+}

@@ -8,7 +8,7 @@
 .top-btn[aria-expanded="true"] { background: var(--hover); color: var(--text-100); }
 .top-btn .count-badge {
   position: absolute; top: 0; right: -2px; min-width: 15px; height: 15px; padding: 0 4px; margin: 0;
-  background: var(--text-200); color: var(--bg-100); font-size: 10px; line-height: 15px;
+  background: var(--text-200); color: var(--bg-100); font-size: var(--fs-micro); line-height: var(--lh-micro);
   box-shadow: 0 0 0 1.5px var(--bg-100); pointer-events: none;
 }
 .top-btn .busy-dot { position: absolute; top: 4px; right: 4px; box-shadow: 0 0 0 1.5px var(--bg-100); pointer-events: none; }
@@ -31,15 +31,14 @@
 .rail-section { flex: none; border-top: 1px solid var(--border-subtle); }
 .rail-head { margin: 0; font: inherit; }
 .rail-head-btn {
-  display: flex; align-items: center; gap: 6px; width: 100%; padding: 16px 10px 6px 12px;
-  font-size: 13px; line-height: 18px; font-weight: 500; color: var(--text-100); text-align: left; user-select: none;
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 20px 10px 8px 12px;
+  font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 400; color: var(--text-200); text-align: left; user-select: none;
 }
 .rail-head-btn:focus-visible { outline-offset: -2px; border-radius: var(--r-control); }
 .rail-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail-badge {
-  flex: none; display: inline-flex; align-items: center; height: 18px; min-width: 18px; padding: 0 6px; border-radius: 999px;
-  background: color-mix(in srgb, var(--text-400) 14%, transparent); color: var(--text-200);
-  font-size: 11px; line-height: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
+  flex: none; display: inline-flex; align-items: center; height: 18px;
+  color: var(--text-400); font-size: var(--fs-small); line-height: var(--lh-small); font-variant-numeric: tabular-nums;
 }
 .rail-chev {
   display: inline-flex; flex: none; margin-left: auto; color: var(--text-400); opacity: 0;
@@ -48,7 +47,7 @@
 .rail-head-btn:hover .rail-chev, .rail-head-btn:focus-visible .rail-chev, .rail-section.collapsed .rail-chev { opacity: 1; }
 .rail-head-btn:hover .rail-title { color: var(--text-100); }
 .rail-section.collapsed .rail-chev { transform: rotate(-90deg); }
-.rail-section.collapsed .rail-head-btn { padding-bottom: 14px; color: var(--text-200); }
+.rail-section.collapsed .rail-head-btn { padding-bottom: 18px; }
 .rail-body { position: relative; }
 
 /* ---------- Frames ---------- */
@@ -56,9 +55,9 @@
 .rail-body > .mod-frame, .mod-strip-row > .mod-frame { height: 0; }
 .mod-frame.mod-frame-next { position: absolute; left: 0; top: 0; opacity: 0; pointer-events: none; }
 .mod-failed-view .mod-frame:not(.mod-frame-next) { display: none; }
-.mod-failed { display: flex; align-items: center; gap: 8px; padding: 2px 12px 12px; font-size: 13px; line-height: 18px; color: var(--text-400); }
+.mod-failed { display: flex; align-items: center; gap: 8px; padding: 2px 12px 12px; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
 .mod-failed-text { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.mod-failed .link-btn { font-size: 13px; line-height: 18px; }
+.mod-failed .link-btn { font-size: var(--fs-small); line-height: var(--lh-small); }
 .mod-icon-img { display: inline-block; flex: none; background: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
 
 /* ---------- Mod tabs in the side pane ---------- */
@@ -76,7 +75,7 @@
 .mod-tab-panel > .mod-failed { padding: 16px; }
 
 /* ---------- The composer strip ---------- */
-.mod-strip { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.mod-strip { display: flex; flex-direction: column; gap: 4px; margin: 0 17px 8px; }
 .mod-strip-row { position: relative; }
 .mod-strip-row > .mod-frame { max-height: 120px; }
 .mod-strip-row > .mod-failed { padding: 4px 4px; }
@@ -97,22 +96,22 @@
 /* ---------- The "turn on" card ---------- */
 .mod-offer {
   margin-top: 8px; margin-bottom: 16px; padding: 16px;
-  background: var(--bg-000); border: 1px solid var(--border); border-radius: var(--r-pop); box-shadow: var(--shadow-pop);
+  background: var(--bg-000); border: 1px solid var(--border); border-radius: var(--r-card-lg);
 }
 .mod-offer-head { display: flex; align-items: center; gap: 12px; }
 .mod-offer-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: var(--r-control); background: var(--accent-soft); color: var(--accent); }
 .mod-offer-heading { display: flex; flex-direction: column; min-width: 0; }
-.mod-offer-kicker { font-size: 12px; line-height: 16px; color: var(--text-400); }
-.mod-offer-title { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text-100); overflow-wrap: anywhere; }
-.mod-offer-desc { margin: 12px 0 0; font-size: 13px; line-height: 18px; color: var(--text-200); overflow-wrap: anywhere; }
-.mod-offer-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 12px 0 0; font-size: 13px; line-height: 18px; }
+.mod-offer-kicker { font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-400); }
+.mod-offer-title { font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 600; color: var(--text-100); overflow-wrap: anywhere; }
+.mod-offer-desc { margin: 12px 0 0; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-200); overflow-wrap: anywhere; }
+.mod-offer-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 12px 0 0; font-size: var(--fs-ui); line-height: var(--lh-ui); }
 .mod-offer-facts dt { color: var(--text-400); }
 .mod-offer-facts dd { margin: 0; min-width: 0; color: var(--text-200); overflow-wrap: anywhere; }
-.mod-offer-facts code { font: 12px/18px var(--mono); color: var(--text-200); }
+.mod-offer-facts code { font: var(--fs-code)/var(--lh-code) var(--mono); color: var(--text-200); }
 .mod-offer-scope { color: var(--text-400); }
-.mod-offer-asks-label { margin-top: 12px; font-size: 13px; line-height: 18px; color: var(--text-400); }
+.mod-offer-asks-label { margin-top: 12px; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
 .mod-offer-asks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.mod-offer-asks li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 18px; color: var(--text-200); }
+.mod-offer-asks li { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-200); }
 .mod-offer-asks li .icon { margin-top: 2px; color: var(--text-400); }
 .mod-offer-asks li.strong { color: var(--text-100); }
 .mod-offer-asks li.strong .icon { color: var(--git-mod); }
@@ -120,9 +119,9 @@
 .mod-offer-files { margin-left: -8px; padding: 0 8px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-200); }
 .mod-offer-files:hover { background: var(--hover); color: var(--text-100); }
 .mod-offer-files .icon { color: var(--text-400); }
-.mod-offer-error { margin: 12px 0 0; font-size: 12px; line-height: 16px; color: var(--danger); }
-.mod-offer.done { padding: 0; margin-top: 0; margin-bottom: 4px; background: none; border: none; box-shadow: none; }
-.mod-offer-decided { display: flex; align-items: center; gap: 8px; min-height: 32px; padding-left: 24px; font-size: 13px; line-height: 18px; color: var(--text-400); }
+.mod-offer-error { margin: 12px 0 0; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--danger); }
+.mod-offer.done { padding: 0; margin-top: 0; margin-bottom: 16px; background: none; border: none; box-shadow: none; }
+.mod-offer-decided { display: flex; align-items: center; gap: 8px; min-height: 24px; padding-left: 4px; font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-400); }
 .mod-offer-decided .ok { display: inline-flex; color: var(--success); }
 .mod-offer-decided .no { display: inline-flex; color: var(--text-400); }
 

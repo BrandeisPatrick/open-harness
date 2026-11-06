@@ -9,6 +9,23 @@
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
+  /* Type scale, the app's: rows 14/20 (--fs-ui), secondary text 13/18 (--fs-small), captions and badges 12/16
+     (--fs-micro), reading text 15/21 (--fs-body), code 13/20 (--fs-code) */
+  --fs-body: 15px;
+  --lh-body: 21px;
+  --fs-head: 17px;
+  --lh-head: 24px;
+  --fs-title: 15px;
+  --lh-title: 20px;
+  --fs-ui: 14px;
+  --lh-ui: 20px;
+  --fs-small: 13px;
+  --lh-small: 18px;
+  --fs-micro: 12px;
+  --lh-micro: 16px;
+  --fs-code: 13px;
+  --lh-code: 20px;
+
   --bg-000: #ffffff;
   --bg-100: #faf9f5;
   --bg-200: #f5f4ee;
@@ -137,7 +154,7 @@
 html, body { margin: 0; background: transparent; }
 body {
   padding: var(--h-inset-top) var(--h-inset-x) var(--h-inset-bottom);
-  font: 13px/18px var(--font);
+  font: var(--fs-ui)/var(--lh-ui) var(--font);
   color: var(--text-100);
   -webkit-font-smoothing: antialiased;
   overflow-wrap: anywhere;
@@ -149,7 +166,7 @@ button:disabled { cursor: default; }
 p { margin: 0; }
 a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 2px; }
 a:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
-code, kbd, pre, samp { font-family: var(--mono); font-size: 12px; }
+code, kbd, pre, samp { font-family: var(--mono); font-size: var(--fs-code); }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
 
@@ -163,16 +180,16 @@ code, kbd, pre, samp { font-family: var(--mono); font-size: 12px; }
 .h-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; min-width: 0; }
 .h-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-200); }
 .h-value { flex: none; color: var(--text-100); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.h-muted { color: var(--text-400); font-size: 12px; line-height: 16px; }
-.h-title { margin: 0; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-400); }
-.h-mono { font-family: var(--mono); font-size: 12px; }
-.h-empty { padding: 2px 0; font-size: 12px; line-height: 16px; color: var(--text-400); }
+.h-muted { color: var(--text-400); font-size: var(--fs-small); line-height: var(--lh-small); }
+.h-title { margin: 0; font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 400; color: var(--text-400); }
+.h-mono { font-family: var(--mono); font-size: var(--fs-code); }
+.h-empty { padding: 2px 0; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
 
 /* ---------- Lists of clickable rows ---------- */
 .h-list { display: flex; flex-direction: column; margin: 0 calc(-1 * var(--h-inset-x) + 4px); padding: 0; list-style: none; }
 .h-item {
-  display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 28px; width: 100%;
-  padding: 4px calc(var(--h-inset-x) - 4px); border-radius: var(--r-control);
+  display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; width: 100%;
+  padding: 6px calc(var(--h-inset-x) - 4px); border-radius: var(--r-control);
   color: var(--text-200); text-align: left; cursor: pointer;
   transition: background-color 0.12s, color 0.12s;
 }
@@ -195,7 +212,7 @@ code, kbd, pre, samp { font-family: var(--mono); font-size: 12px; }
   height: 32px; padding: 0 12px;
   border: 1px solid var(--border); border-radius: var(--r-control);
   background: var(--bg-000); color: var(--text-100);
-  font-size: 13px; line-height: 18px; font-weight: 500; white-space: nowrap; text-decoration: none;
+  font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 500; white-space: nowrap; text-decoration: none;
   box-shadow: var(--shadow-sm); cursor: pointer;
   transition: background-color 0.12s, border-color 0.12s, color 0.12s;
 }
@@ -208,7 +225,7 @@ code, kbd, pre, samp { font-family: var(--mono); font-size: 12px; }
 .h-btn.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--text-200); }
 .h-btn.ghost:hover { background: var(--hover); color: var(--text-100); }
 .h-btn.ghost:active { background: var(--pressed); }
-.h-btn.sm { height: 28px; padding: 0 10px; font-size: 12px; line-height: 16px; }
+.h-btn.sm { height: 28px; padding: 0 10px; font-size: var(--fs-small); line-height: var(--lh-small); }
 .h-btn.sm .h-icon { width: 14px; height: 14px; color: var(--text-200); }
 .h-btn.sm:hover .h-icon { color: var(--text-100); }
 .h-btn.primary .h-icon { color: inherit; }
@@ -220,7 +237,7 @@ code, kbd, pre, samp { font-family: var(--mono); font-size: 12px; }
   width: 100%; height: 32px; padding: 0 10px;
   background: var(--field-bg); color: var(--text-100);
   border: 1px solid var(--border); border-radius: var(--r-control); outline: none;
-  font-size: 13px; line-height: 18px;
+  font-size: var(--fs-ui); line-height: var(--lh-ui);
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 textarea.h-input { height: auto; min-height: 64px; padding: 6px 10px; line-height: 20px; resize: vertical; }
@@ -253,8 +270,8 @@ input.h-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-off
 /* ---------- Segmented control: <div class="h-segmented"><button aria-pressed="true">…</button>…</div> ---------- */
 .h-segmented { display: inline-flex; flex: none; gap: 2px; padding: 2px; background: var(--bg-200); border: 1px solid var(--border-subtle); border-radius: var(--r-card); }
 .h-segmented > button {
-  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 5px;
-  font-size: 12px; line-height: 16px; color: var(--text-200); white-space: nowrap;
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 5px;
+  font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--text-200); white-space: nowrap;
   transition: background-color 0.12s, color 0.12s;
 }
 .h-segmented > button:hover { color: var(--text-100); }
@@ -266,7 +283,7 @@ input.h-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-off
 .h-chip {
   display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 100%;
   height: 20px; padding: 0 7px; border: 1px solid var(--border); border-radius: 999px;
-  font-size: 11px; line-height: 16px; font-weight: 500; color: var(--text-200); background: transparent; white-space: nowrap;
+  font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-200); background: transparent; white-space: nowrap;
 }
 .h-chip.accent { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
 .h-chip.success { color: var(--success); border-color: var(--success-line); background: var(--success-soft); }
@@ -302,13 +319,13 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
 
 /* ---------- Markdown: <div class="h-md"> holding harness.ui.markdown()'s html; looks like a reply in the chat ---------- */
 /* The app's .md rules (src/renderer/styles.css, images.css) in the kit's tokens. harness.js makes the code blocks'
-   Copy buttons work and opens links in the browser. .h-md.compact is the rail's size: 13 px text, tighter rhythm. */
-.h-md { font-size: 14px; line-height: 20px; color: var(--text-100); overflow-wrap: anywhere; }
+   Copy buttons work and opens links in the browser. .h-md.compact is the rail's size: 14 px text, tighter rhythm. */
+.h-md { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-100); overflow-wrap: anywhere; }
 .h-md > :first-child { margin-top: 0; }
 .h-md > :last-child { margin-bottom: 0; }
-.h-md p, .h-md ul, .h-md ol, .h-md blockquote, .h-md pre, .h-md .code-block, .h-md .table-wrap { margin: 0 0 12px; }
-.h-md h1, .h-md h2 { margin: 24px 0 8px; font-size: 16px; line-height: 24px; font-weight: 600; color: var(--text-100); }
-.h-md h3, .h-md h4, .h-md h5, .h-md h6 { margin: 16px 0 4px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text-100); }
+.h-md p, .h-md ul, .h-md ol, .h-md blockquote, .h-md pre, .h-md .code-block, .h-md .table-wrap { margin: 0 0 16px; }
+.h-md h1, .h-md h2 { margin: 24px 0 8px; font-size: var(--fs-head); line-height: var(--lh-head); font-weight: 600; color: var(--text-100); }
+.h-md h3, .h-md h4, .h-md h5, .h-md h6 { margin: 16px 0 4px; font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; color: var(--text-100); }
 .h-md strong { font-weight: 600; }
 .h-md ul, .h-md ol { padding-left: 24px; }
 .h-md li { margin: 4px 0; }
@@ -324,7 +341,7 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
 }
 .h-md li.task.done .task-box { background: var(--accent); border-color: var(--accent); color: #fff; }
 .h-md .task-text { min-width: 0; }
-.h-md code { font-family: var(--mono); font-size: 0.9em; padding: 1px 4px; border-radius: 4px; background: var(--code-bg); border: 1px solid var(--border-subtle); }
+.h-md code { font-family: var(--mono); font-size: 0.9em; padding: 1px 4.5px; border-radius: 4px; background: var(--code-bg); }
 .h-md a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 2px; cursor: pointer; }
 .h-md a:hover { color: var(--accent); text-decoration-color: currentColor; }
 .h-md a code { color: inherit; }
@@ -332,21 +349,21 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
 .h-md hr { height: 1px; margin: 16px 0; border: none; background: var(--border-subtle); }
 .h-md del { color: var(--text-400); }
 .h-md .table-wrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--r-card); }
-.h-md table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 18px; }
+.h-md table { width: 100%; border-collapse: collapse; font-size: var(--fs-ui); line-height: var(--lh-ui); }
 .h-md th, .h-md td { padding: 6px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
 .h-md th { background: var(--bg-200); font-weight: 600; white-space: nowrap; }
 .h-md td + td, .h-md th + th { border-left: 1px solid var(--border-subtle); }
 .h-md tbody tr:last-child td { border-bottom: none; }
 /* A fenced block: a header with the language and Copy, then the code */
-.h-md pre { padding: 12px; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--border-subtle); border-radius: var(--r-card); font: 12px/18px var(--mono); color: var(--text-100); tab-size: 4; }
+.h-md pre { padding: 12px; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--border-subtle); border-radius: var(--r-card); font: var(--fs-code)/var(--lh-code) var(--mono); color: var(--text-100); tab-size: 4; }
 .h-md .code-block { background: var(--code-bg); border: 1px solid var(--border-subtle); border-radius: var(--r-card); overflow: hidden; }
 .h-md .code-block pre { margin: 0; border: 0; border-radius: 0; background: none; }
 .h-md pre code, .h-md .code-block code { padding: 0; border: none; background: none; font-size: inherit; }
 .h-md .code-head { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 4px 0 12px; border-bottom: 1px solid var(--border-subtle); }
-.h-md .code-lang { font-size: 12px; line-height: 16px; color: var(--text-400); }
+.h-md .code-lang { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
 .h-md .code-copy {
   display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--r-control);
-  font-size: 12px; line-height: 16px; color: var(--text-400); transition: background-color 0.12s, color 0.12s;
+  font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); transition: background-color 0.12s, color 0.12s;
 }
 .h-md .code-copy:hover { background: var(--code-hover); color: var(--text-100); }
 .h-md .code-copy.copied { color: var(--success); }
@@ -364,21 +381,21 @@ button.h-chip:hover { background: var(--hover); color: var(--text-100); }
 .h-md .md-img-missing, .h-md .md-img-pending, .h-md a.md-img-link {
   display: inline-flex; align-items: center; gap: 4px; vertical-align: -5px; max-width: 100%; height: 22px; padding: 0 8px;
   border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--bg-200);
-  font-size: 12px; line-height: 16px; color: var(--text-400); text-decoration: none;
+  font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); text-decoration: none;
 }
 .h-md .md-img-missing > span, .h-md .md-img-pending > span, .h-md a.md-img-link > span:not(.md-img-arrow) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h-md a.md-img-link { color: var(--text-200); }
 .h-md a.md-img-link:hover { background: var(--hover); color: var(--text-100); }
 .h-md .md-img-arrow { flex: none; color: var(--text-400); }
 /* Compact: for rail sections */
-.h-md.compact { font-size: 13px; line-height: 18px; }
+.h-md.compact { font-size: var(--fs-ui); line-height: var(--lh-ui); }
 .h-md.compact p, .h-md.compact ul, .h-md.compact ol, .h-md.compact blockquote, .h-md.compact pre, .h-md.compact .code-block, .h-md.compact .table-wrap { margin-bottom: 8px; }
-.h-md.compact h1, .h-md.compact h2, .h-md.compact h3, .h-md.compact h4, .h-md.compact h5, .h-md.compact h6 { margin: 12px 0 4px; font-size: 13px; line-height: 18px; }
+.h-md.compact h1, .h-md.compact h2, .h-md.compact h3, .h-md.compact h4, .h-md.compact h5, .h-md.compact h6 { margin: 12px 0 4px; font-size: var(--fs-ui); line-height: var(--lh-ui); }
 .h-md.compact ul, .h-md.compact ol { padding-left: 18px; }
 .h-md.compact li { margin: 2px 0; }
 .h-md.compact ul.tasks { padding-left: 2px; }
 .h-md.compact .task-box { margin-top: 2px; }
-.h-md.compact table { font-size: 12px; line-height: 16px; }
+.h-md.compact table { font-size: var(--fs-small); line-height: var(--lh-small); }
 .h-md.compact th, .h-md.compact td { padding: 4px 8px; }
 .h-md.compact pre { padding: 8px 10px; }
 .h-md.compact .code-head { height: 28px; padding-left: 10px; }

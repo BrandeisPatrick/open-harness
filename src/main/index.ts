@@ -91,7 +91,7 @@ function createWindow(): void {
     minHeight: 600,
     title: APP_NAME,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 13 },
+    trafficLightPosition: { x: 14, y: 15 },
     backgroundColor: windowBackground(),
     icon,
     show: !LIVE_TEST,

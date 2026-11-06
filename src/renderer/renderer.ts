@@ -917,7 +917,7 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
 // Plan cards: the newest proposed plan has the buttons; Enter builds and Esc keeps planning while it is the last card.
 const KEEP_PLACEHOLDER = 'Tell Open Harness what to change in the plan…';
 const DEFAULT_PLACEHOLDER = inputEl.placeholder;
-const RUNNING_PLACEHOLDER = 'Send a message — it reaches the agent after its current step';
+const RUNNING_PLACEHOLDER = '↵ queues a message for the agent’s next step, esc stops the run';
 /** The placeholder while no run is going (the default, or the "keep planning" prompt) */
 let basePlaceholder = DEFAULT_PLACEHOLDER;
 
@@ -1306,16 +1306,25 @@ async function rewindTo(msg: HTMLElement, button: HTMLElement): Promise<void> {
 
 // ---------- Run state ----------
 
-let sendShowsStop: boolean | null = null;
+/**
+ * The chat bar's action: the return glyph, muted with nothing to send and in the text colour once there is; while a
+ * run is going and the field is empty it is the stop square, and with something typed it queues the message.
+ */
+type SendFace = 'send' | 'queue' | 'stop';
+let sendFace: SendFace | null = null;
 function updateSendButton(): void {
-  sendBtn.disabled = running ? false : !composerHasContent();
-  if (sendShowsStop === running) return;
-  sendShowsStop = running;
-  sendBtn.innerHTML = icon(running ? 'square' : 'arrow-up');
-  sendBtn.classList.toggle('stop', running);
-  sendBtn.setAttribute('aria-label', running ? 'Stop' : 'Send');
-  sendBtn.dataset.tip = running ? 'Stop' : 'Send';
-  sendBtn.dataset.tipKbd = running ? 'esc' : '↵';
+  const content = composerHasContent();
+  const face: SendFace = running ? (content ? 'queue' : 'stop') : 'send';
+  sendBtn.disabled = face === 'send' && !content;
+  sendBtn.classList.toggle('ready', content);
+  if (sendFace === face) return;
+  sendFace = face;
+  sendBtn.innerHTML = icon(face === 'stop' ? 'stop' : 'corner-down-left');
+  sendBtn.classList.toggle('stop', face === 'stop');
+  const label = face === 'stop' ? 'Stop' : face === 'queue' ? 'Queue for the next step' : 'Send';
+  sendBtn.setAttribute('aria-label', label);
+  sendBtn.dataset.tip = label;
+  sendBtn.dataset.tipKbd = face === 'stop' ? 'esc' : '↵';
 }
 
 function elapsed(ms: number): string {
@@ -1991,7 +2000,7 @@ const mentionPicker = createMentionPicker({
 
 function autosize(): void {
   inputEl.style.height = 'auto';
-  inputEl.style.height = `${Math.min(240, Math.max(40, inputEl.scrollHeight))}px`;
+  inputEl.style.height = `${Math.min(240, Math.max(44, inputEl.scrollHeight))}px`;
   updateSendButton();
 }
 
@@ -2007,10 +2016,11 @@ const composerHistory = createComposerHistory({
   },
 });
 
-sendBtn.onclick = () => (running ? void oc.abort() : void send());
+sendBtn.onclick = () => (running && !composerHasContent() ? void oc.abort() : void send());
 stopBtn.onclick = () => void oc.abort();
 $('composer').addEventListener('mousedown', (e) => {
-  if (e.target === e.currentTarget) {
+  const t = e.target as HTMLElement;
+  if (t === e.currentTarget || t.classList.contains('composer-row') || t.id === 'attachments') {
     e.preventDefault();
     inputEl.focus();
   }
@@ -2409,12 +2419,14 @@ function shortPath(p: string): string {
 
 function applyConfigToUi(): void {
   const model = config.provider === 'ollama' ? config.ollama.model : config.portkey.model;
-  modelBtn.innerHTML = `<span class="chip-label">${escapeHtml(model || 'Choose a model')}</span><span class="chev">${icon('chevron-down', 14)}</span>`;
+  // Under the chat bar: the model in the text colour, then a muted word when there is one worth saying
+  const sub = config.provider === 'ollama' && config.ollama.think === 'on' ? 'Thinking' : '';
+  modelBtn.innerHTML = `<span class="foot-label">${escapeHtml(model || 'Choose a model')}</span>${sub ? `<span class="foot-sub">${sub}</span>` : ''}`;
   modelBtn.dataset.tip = config.provider === 'ollama' ? `Ollama · ${config.ollama.baseURL}` : `Portkey · ${config.portkey.baseURL}`;
   const mode = currentMode();
   const info = MODES[mode];
-  modeBtn.innerHTML = `${icon(info.icon)}<span class="chip-label">${escapeHtml(info.label)}</span><span class="chev">${icon('chevron-down', 14)}</span>`;
-  modeBtn.dataset.tip = info.desc;
+  modeBtn.innerHTML = `<span class="foot-label">${escapeHtml(info.short)}</span>`;
+  modeBtn.dataset.tip = `${info.label}: ${info.desc}`;
   modeBtn.dataset.mode = mode;
   modeBtn.setAttribute('aria-label', `Permission mode: ${info.label}`);
   for (const c of MODE_CHIP_CLASSES) modeBtn.classList.toggle(c, c === info.chipClass);

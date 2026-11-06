@@ -5,9 +5,9 @@
 .transcript > .task-list {
   order: 1;
   margin: 0 auto 16px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card-lg);
   background: transparent;
   /* The tick inside a done row's filled circle is cut out in the card's own colour */
   --task-check: var(--bg-100);
@@ -16,7 +16,7 @@
 .task-list > .task-rows { margin: 0; padding: 0; list-style: none; border: none; overflow: visible; max-height: none; }
 .task-list .task-row {
   display: flex; align-items: center; gap: 10px; min-height: 28px; padding: 4px 0;
-  font-size: 14px; line-height: 20px; font-weight: 400; color: var(--text-100);
+  font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 400; color: var(--text-100);
   transition: color 0.15s;
 }
 .task-list .task-glyph { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; color: var(--text-400); }

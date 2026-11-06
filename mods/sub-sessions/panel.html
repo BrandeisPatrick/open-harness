@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="/@harness/harness.css">
 <style>
-  .group + .group { margin-top: 6px; }
+  .group + .group { margin-top: 12px; }
   .group > .h-title { margin: 2px 0 2px; }
   .row { display: flex; align-items: center; gap: 4px; }
   .row .h-item { flex: 1 1 auto; min-width: 0; }
@@ -14,7 +14,7 @@
   .glyph .wait { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
   .row .when { flex: none; }
   .merge { margin-right: calc(var(--h-inset-x) - 4px - 4px); }
-  .note { padding: 0 0 4px 32px; font-size: 12px; line-height: 16px; }
+  .note { padding: 0 0 4px 32px; font-size: var(--fs-small); line-height: var(--lh-small); }
   .note.ok { color: var(--success); }
   .note.err { color: var(--danger); }
 </style>

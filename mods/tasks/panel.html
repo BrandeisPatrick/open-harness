@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="/@harness/harness.css">
 <style>
-  .head { display: flex; align-items: center; justify-content: space-between; min-height: 20px; margin-bottom: 2px; }
+  .head { display: flex; align-items: center; justify-content: space-between; min-height: 20px; margin-bottom: 4px; }
   .head .count { font-variant-numeric: tabular-nums; }
   .head.all-done .count { color: var(--success); }
   .rows { margin: 0; padding: 0; list-style: none; }
-  .row { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; color: var(--text-200); }
-  .glyph { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 18px; color: var(--text-400); }
+  .row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; color: var(--text-200); }
+  .glyph { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 20px; color: var(--text-400); }
   .title { min-width: 0; }
-  .row[data-status="in_progress"] { color: var(--text-100); font-weight: 500; }
+  .row[data-status="in_progress"] { color: var(--text-100); }
   .row[data-status="completed"] { color: var(--text-400); }
   .row[data-status="completed"] .glyph { color: var(--success); }
   .check { width: 16px; height: 16px; }

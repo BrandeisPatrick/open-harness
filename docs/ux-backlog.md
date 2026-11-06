@@ -25,7 +25,19 @@ MCP servers · context meter, auto-compaction and `/compact` · project instruct
 | 9 | **Welcome and empty states**: recent sessions and project hints on the empty screen, first-run checklist (Ollama running, model pulled, folder chosen) | First five minutes | done (ticks 3–4) |
 | 10 | **Transcript details**: collapse long tool output by default with "show more", sticky date dividers, unread marker when returning to a session | Reading long sessions | done (tick 4) |
 | 11 | **Diff pane review**: accept/revert per hunk, "open in editor" per line | Reviewing larger changes | later |
-| 12 | **Subagents / background tasks** with a Tasks pane | Parallel work; heavy for small local models | later |
+| 12 | **Subagents / background tasks** with a Tasks pane | Parallel work; heavy for small local models | done (0.2): sessions run concurrently; sub-sessions with `session_spawn` / `/spawn`, reports back, merge; a Sub-sessions panel |
+| 13 | **Mods**: an open protocol for panels, tabs, a composer strip, backgrounds, themes and commands, written and edited live by the agent | The right-hand panel of the desktop app, made extensible | done (0.2): [mods.md](mods.md) |
+| 14 | **Sidebar**: navigation rows, day groups, forks and sub-sessions as a tree, unread and waiting marks, search inside conversations | Finding and following many sessions | done (0.2) |
+| 15 | **Settings page** with sections, search, changes applied at once | The old form could not hold what the app grew | done (0.2) |
+| 16 | **Images in replies** and thumbnails on tool rows | "Here is the screenshot" should show the screenshot | done (0.2) |
+| 17 | **History**: append-only log, crash recovery, trash, export | Nothing said in a session should be lost | done (0.2) |
+| 18 | **Compaction** that prunes first and keeps the recent turn | Long sessions on small windows | done (0.2) |
+| 19 | **Scheduled tasks** the agent can create, **remote control** from a phone, **keep awake** | Work that goes on while you are away | done (0.2) |
+| 20 | **Tools loaded on demand**: the model asks for a tool family (schedules, sessions, mods) when it needs it | Today a small window simply goes without them (`toolSet`) | next |
+| 21 | **Per-session project context**: MCP servers and the project settings file follow each session's folder, not the one on screen | Background sessions in another project | next |
+| 22 | **Mod protocol 2**: tools a mod provides to the model, a background page per mod, seats in the transcript and the status line | Mods that extend the agent, not only the window | next |
+| 23 | **History, further**: thinking blocks restored on reload; search over messages a rewind removed | The log already holds both | later |
+| 24 | **Remote control over HTTPS**, tried on real phone browsers | Plain HTTP is for networks you trust | later |
 
 Out of scope: hosted features (cloud sessions, remote control), Anthropic-specific fonts and branding, usage billing.
 
@@ -49,9 +61,9 @@ Contract: `AppConfig.recentDirs` (most recent first, at most 8; main maintains i
 
 ## How changes are verified
 
-- `npm test` runs the headless suites in `test/` against the built app: a mock model server (OpenAI-compatible and Ollama-native) and a small stdio MCP server stand in for real services, so the agent loop, tools, approvals, compaction, mentions, rules, checkpoints and the terminal manager are exercised without a model.
-- Live checks drive the running app over the Chrome DevTools Protocol (`electron . --remote-debugging-port=9222`) with the same mock server: they type into the composer, click cards and settings, and take screenshots; `window.__oc_debug` offers hooks to render synthetic states. These scripts live outside the repository for now.
-- CPU is measured with per-process CPU-time deltas while a run streams (the spinner-only and streaming numbers in the commit history came from that).
+- `npm test` runs the headless suites in `test/` against the built app: a mock model server (OpenAI-compatible and Ollama-native) and a small stdio MCP server stand in for real services, so the agent loop, the session runtime, tools, approvals, compaction, history, schedules, sub-sessions, mods, remote control and settings are exercised without a model.
+- `npm run test:live` drives the real app over the Chrome DevTools Protocol (`test/live/rig.js`): the window stays hidden and uses a throwaway profile and config folder, so it never touches your own. With `ANTHROPIC_API_KEY` set the runs talk to the real API; without it, to the mock model. The scripts type into the composer, answer cards, open Settings, switch sessions, kill the app mid-run and relaunch it, and take screenshots; `window.__oc_debug` offers hooks to render synthetic states.
+- `node modkit/playground/serve.js` hosts mods outside the app with a mock behind the bridge, and `modkit/playground/shot.js` screenshots them.
 
 ## Tick 2 renderer spec (items 4–6)
 

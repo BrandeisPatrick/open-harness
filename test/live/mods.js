@@ -435,7 +435,7 @@ const HELLO = (v) => page(`<div class="h-row"><span class="h-label">Hello</span>
       await shot(app, 'styles-tint-light');
       await rpc(app, 'mods.setEnabled', 'tint', false);
       await sleep(800);
-      check('styles mod off: its style is removed', await app.evaluate(`!document.querySelector('style[data-mod="tint"]') && getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === '#d97757'`));
+      check('styles mod off: its style is removed', await app.evaluate(`!document.querySelector('style[data-mod="tint"]') && getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === '#1f66c4'`));
       // Background
       await app.evaluate(`document.activeElement.blur()`);
       await sleep(300);

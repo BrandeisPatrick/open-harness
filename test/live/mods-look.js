@@ -236,7 +236,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
     // The look mods are bundled; the two that restyle the app start off, the backgrounds wait to be picked
     const list = await dbg(app, 'list()');
     const st = (id) => list.find((m) => m.id === id)?.state;
-    check('bundled: backgrounds on (nothing shown until picked), theme-midnight off', st('backgrounds') === 'on' && st('theme-midnight') === 'off' && !(await app.evaluate(`document.documentElement.classList.contains('mod-bg') || !!document.querySelector('style[data-mod]')`)), { b: st('backgrounds'), t: st('theme-midnight') });
+    check('bundled: backgrounds on (nothing shown until picked), theme-midnight and theme-paper off', st('backgrounds') === 'on' && st('theme-midnight') === 'off' && st('theme-paper') === 'off' && !(await app.evaluate(`document.documentElement.classList.contains('mod-bg') || !!document.querySelector('style[data-mod]')`)), { b: st('backgrounds'), t: st('theme-midnight'), p: st('theme-paper') });
     const stale = list.filter((m) => m.id === 'composer-pill');
     const errors = app.console.filter((l) => /^\[(error|exception)\]/.test(l) && /composer-pill|mod/i.test(l));
     check('a stale composer-pill entry from an older profile: no such mod, no styles, no error', stale.length === 0 && !(await app.exists('style[data-mod="composer-pill"]')) && errors.length === 0, { stale, errors });
@@ -522,7 +522,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       check('theme: "System" on a light system gets the light values', (await app.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--bg-100').trim()`)) === '#f6f8fc');
       await setTheme(app, 'light');
       await enable(app, 'theme-midnight', false);
-      check('theme off: the app\'s accent is back', (await app.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()`)) === '#d97757');
+      check('theme off: the app\'s accent is back', (await app.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()`)) === '#1f66c4');
     }
 
     // ---------- All three ----------

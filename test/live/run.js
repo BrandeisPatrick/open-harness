@@ -40,6 +40,7 @@ const SCRIPTS = [
   { name: 'type-scale' },
   { name: 'mods-protocol', shots: 'none' },
   { name: 'looks', shots: 'env' },
+  { name: 'palette' },
   { name: 'dreaming' },
   { name: 'remote-page', electron: true },
 ];

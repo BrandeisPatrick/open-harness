@@ -141,7 +141,7 @@ const js = (v) => JSON.stringify(v);
     check('a valid value clears the problem and saves', (await cfg(app)).maxTurns === 30 && !(await app.exists('#sp-row-maxTurns.invalid')));
     await open(app, 'model');
     // The Ollama rows show only for Ollama: switch to it to edit one, then back.
-    await app.evaluate(`[...document.querySelectorAll('#sp-row-provider input')].find((i) => i.value === 'ollama').click()`);
+    await app.fill('#provider', 'ollama');
     await sleep(300);
     await app.fill('#ollama-numCtx', 'abc');
     await app.evaluate(`document.querySelector('#ollama-numCtx').blur()`);
@@ -149,7 +149,7 @@ const js = (v) => JSON.stringify(v);
     check('Ollama rows show for Ollama', await app.evaluate(`Boolean(document.querySelector('#sp-row-ollama-numCtx').offsetParent) && !document.querySelector('#sp-row-portkey-apiKey').offsetParent`));
     await app.fill('#ollama-numCtx', String(before.ollama.numCtx));
     await app.evaluate(`document.querySelector('#ollama-numCtx').blur()`);
-    await app.evaluate(`[...document.querySelectorAll('#sp-row-provider input')].find((i) => i.value === 'portkey').click()`);
+    await app.fill('#provider', 'portkey');
     await sleep(300);
     await app.fill('#portkey-contextWindow', 'abc');
     await app.evaluate(`document.querySelector('#portkey-contextWindow').blur()`);

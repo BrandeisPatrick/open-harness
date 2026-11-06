@@ -144,7 +144,7 @@ export function modelSection(ctx: Ctx): Section {
   // The choices are every provider the config has; sync() rebuilds them (the selectField keeps this array).
   const providerChoices: Choice<string>[] = [];
   const choicesFor = (cfg: AppConfig): Choice<string>[] =>
-    allProviders(cfg).map((p) => ({ value: p.name, label: p.name === 'ollama' ? 'Ollama' : p.name === 'portkey' ? `${p.label} (the gateway fields)` : p.label === p.name ? p.name : `${p.label} (${p.name})` }));
+    allProviders(cfg).map((p) => ({ value: p.name, label: p.name === 'ollama' ? 'Ollama' : p.name === 'portkey' ? `${p.label} (built-in gateway)` : p.label.toLowerCase() === p.name.toLowerCase() || p.label.endsWith(`(${p.name})`) ? p.label : `${p.label} (${p.name})` }));
   const setChoices = (cfg: AppConfig) => {
     const next = choicesFor(cfg);
     // An unknown name stays visible as it is, so the select does not pretend another provider is in use

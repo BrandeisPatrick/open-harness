@@ -3,7 +3,7 @@ import type OpenAI from 'openai';
 import type { ContextBreakdown, ContextSlice } from '../shared/context';
 import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, CompactionInfo, ContextInfo, ImageAttachment, MessageOrigin, PermissionMode, PlanInfo, QueuedMessage, TaskItem } from '../shared/types';
 import { expandMentions } from './mentions';
-import { isOllama, makeClient, modelCapabilities, ollamaOf, resolveProvider, scrubSecrets } from './providers';
+import { isOllama, makeClient, modelCapabilities, ollamaOf, plainError, resolveProvider, scrubSecrets } from './providers';
 import { contextSize, ollamaChat, ollamaComplete, type Usage } from './ollama';
 import { McpManager } from './mcp';
 import {
@@ -177,6 +177,21 @@ function userMessage(text: string, attachments: ImageAttachment[]): Msg {
 
 function noToolsNotice(model: string): string {
   return `${model} does not support tools, so this run is a plain chat: it can see your message and images but cannot read files, run commands or browse.`;
+}
+
+/**
+ * What a run's error says: a service's refusal or an unreachable address in plain words, naming the provider and
+ * what to check (plainError); anything else as it is. Never with a key.
+ */
+function providerErrorMessage(err: unknown, cfg: AppConfig): string {
+  const e = err as { status?: unknown; name?: unknown };
+  const fromService = typeof e?.status === 'number' || e?.name === 'APIConnectionError' || e?.name === 'APIConnectionTimeoutError';
+  if (!fromService || isContextLengthError(err)) return errorMessage(err);
+  try {
+    return plainError(err, resolveProvider(cfg));
+  } catch {
+    return errorMessage(err);
+  }
 }
 
 /** An error's message, with any key the providers resolved taken out (a service's error may quote it). */
@@ -673,7 +688,7 @@ export class Agent {
       if (signal.aborted) reason = 'aborted';
       else {
         reason = 'error';
-        this.emit({ type: 'error', message: errorMessage(err) });
+        this.emit({ type: 'error', message: providerErrorMessage(err, cfg) });
       }
     } finally {
       this.currentTurn = null;

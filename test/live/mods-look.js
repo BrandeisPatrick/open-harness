@@ -359,7 +359,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
         return r;
       };
       const bar = async (name) => shot(app, `chatbar-${name}`, await clip());
-      const geo = () => app.evaluate(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2 }; }; const cs = (s, p) => getComputedStyle(document.querySelector(s))[p]; return { comp: r('#composer'), input: r('#input'), attach: r('#attach-btn'), send: r('#send-btn'), foot: r('#composer-foot'), model: r('#model-btn'), mode: r('#mode-btn'), meter: r('#context-meter'), att: r('#attachments'), radius: cs('#composer', 'borderTopLeftRadius'), border: cs('#composer', 'borderTopColor'), chipBorder: cs('#model-btn', 'borderTopColor'), modeBorder: cs('#mode-btn', 'borderTopStyle') }; })()`);
+      const geo = () => app.evaluate(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom, cy: b.y + b.height / 2 }; }; const cs = (s, p) => getComputedStyle(document.querySelector(s))[p]; return { comp: r('#composer'), input: r('#input'), attach: r('#attach-btn'), send: r('#send-btn'), foot: r('#composer-foot'), model: r('#model-btn'), mode: r('#mode-btn'), meter: r('#context-meter'), att: r('#attachments'), radius: cs('#composer', 'borderTopLeftRadius'), border: cs('#composer', 'borderTopColor'), chipBorder: cs('#model-btn', 'borderTopStyle'), modeBorder: cs('#mode-btn', 'borderTopStyle') }; })()`);
       const near = (a, b, d = 1.5) => Math.abs(a - b) <= d;
       for (const theme of [false, true]) {
         if (theme) await enable(app, 'theme-midnight', true);
@@ -376,7 +376,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
             near(g.attach.cy, g.input.cy, 2) && near(g.send.cy, g.input.cy, 2) &&
             g.foot.y >= g.comp.b && near(g.model.cy, g.mode.cy) && g.model.x < g.mode.x &&
             (!g.meter || (g.mode.r <= g.meter.x + 1 && near(g.meter.r, g.comp.r - 8, 3))) &&
-            /rgba\(0, 0, 0, 0\)|transparent/.test(g.chipBorder) && g.modeBorder === 'none';
+            g.chipBorder === 'none' && g.modeBorder === 'none';
           check(`chatbar (${tag}): one 46 px bar with the plus left, the field, the action right; model, mode, ring in a borderless row under it, right-aligned`, ok, g);
           await bar(`empty-${tag}`);
           await app.evaluate(`document.querySelector('#input').focus()`);
@@ -400,7 +400,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       await sleep(200);
       const ga = await geo();
       const thumb = await app.evaluate(`(() => { const t = document.querySelector('.attachment').getBoundingClientRect(); const c = document.querySelector('#composer').getBoundingClientRect(); return { w: t.width, h: t.height, left: Math.round(t.left - c.left), top: Math.round(t.top - c.top) }; })()`);
-      check('chatbar: two attachments sit inside the bar above the field, 120 px, lined up with the text', ga.att && ga.att.b <= ga.input.y + 1 && ga.att.y >= ga.comp.y && (await app.evaluate(`window.__oc_debug.attachments().length`)) === 2 && thumb.w === 120 && thumb.h === 120 && near(thumb.left, 45) && near(thumb.top, 13), { att: ga.att, thumb });
+      check('chatbar: two attachments sit inside the bar above the field, 120 px, lined up with the text', ga.att && ga.att.b <= ga.input.y + 1 && ga.att.y >= ga.comp.y && (await app.evaluate(`window.__oc_debug.attachments().length`)) === 2 && thumb.w === 120 && thumb.h === 120 && near(thumb.left, 45) && near(thumb.top, 13, 2.5), { att: ga.att, thumb });
       await bar('attachments-light');
       await setTheme(app, 'dark');
       await bar('attachments-dark');

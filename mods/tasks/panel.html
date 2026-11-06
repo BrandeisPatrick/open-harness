@@ -65,7 +65,7 @@
   }
 
   async function load() {
-    const [s, r] = await Promise.all([harness.session.get(), harness.session.tasks()]);
+    const [s, r] = await Promise.all([harness.session.get().catch(() => null), harness.session.tasks().catch(() => null)]);
     running = !!(s && s.running);
     tasks = (r && r.tasks) || [];
     render();

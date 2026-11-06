@@ -48,7 +48,8 @@ function folderRev(dir) {
 
 function listMods(modsDir) {
   let dirs = [];
-  try { dirs = fs.readdirSync(modsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name); } catch { /* none */ }
+  const isDir = (e) => e.isDirectory() || (e.isSymbolicLink() && (() => { try { return fs.statSync(path.join(modsDir, e.name)).isDirectory(); } catch { return false; } })());
+  try { dirs = fs.readdirSync(modsDir, { withFileTypes: true }).filter((e) => isDir(e) && !e.name.startsWith('.')).map((e) => e.name); } catch { /* none */ }
   return dirs.sort().map((folder) => {
     const dir = path.join(modsDir, folder);
     const file = path.join(dir, 'mod.json');

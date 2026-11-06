@@ -9,20 +9,8 @@
   .head .h-chip { margin-top: -1px; }
   .body { position: relative; margin-top: 6px; overflow: hidden; color: var(--text-200); }
   .body.clamped { max-height: 108px; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
-  .md > :first-child { margin-top: 0; }
-  .md > :last-child { margin-bottom: 0; }
-  .md h1, .md h2, .md h3, .md h4 { margin: 10px 0 2px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--text-100); }
-  .md p { margin: 0 0 6px; }
-  .md ul, .md ol { margin: 0 0 6px; padding-left: 18px; }
-  .md li { margin: 1px 0; }
-  .md li.task { list-style: none; margin-left: -18px; }
-  .md li.task input { margin: 0 6px 0 0; vertical-align: -2px; }
-  .md code { padding: 0 3px; border-radius: 4px; background: var(--bg-300); font-size: 11.5px; }
-  :root[data-theme="dark"] .md code { background: rgba(222, 220, 208, 0.1); }
-  .md pre { margin: 0 0 6px; padding: 6px 8px; border-radius: var(--r-control); background: var(--bg-200); overflow-x: auto; }
-  .md pre code { padding: 0; background: none; }
-  .md blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid var(--border); color: var(--text-400); }
-  .md a { color: var(--accent); }
+  /* The plan's Markdown: the kit's .h-md at rail size (harness.css), a step quieter than the title */
+  .body .h-md { color: var(--text-200); }
   .more { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--accent); }
   .more:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 2px; }
 </style>
@@ -30,7 +18,7 @@
 <body>
 <div id="root" hidden>
   <div class="head"><span class="title" id="title"></span><span class="h-chip" id="status"></span></div>
-  <div class="body" id="body"><div class="md" id="md"></div></div>
+  <div class="body" id="body"><div class="h-md compact" id="md"></div></div>
   <button class="more" id="more" hidden></button>
 </div>
 <p class="h-empty" id="empty" hidden>No plan in this session. Plans appear here when the agent works in Plan mode.</p>
@@ -60,8 +48,7 @@
       if (mine !== seq) return;
       const md = $('md');
       if (html) md.innerHTML = html; else md.textContent = plan.markdown || '';
-      // Links open in the browser, never in the frame
-      md.querySelectorAll('a[href]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); harness.ui.openExternal(a.href).catch(() => {}); }));
+      // Links open in the browser and code blocks copy: harness.js does both inside .h-md
       renderedFor = key;
     }
     layout();

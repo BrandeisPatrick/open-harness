@@ -228,6 +228,49 @@
     return Promise.all(running.slice().map(function (id) { return call('model.cancel', { requestId: id }); })).then(function () {});
   }
 
+  // ---------- Markdown (.h-md) ----------
+
+  // harness.ui.markdown() returns the chat's markup. Inside an .h-md element its code blocks' Copy buttons copy the
+  // block, and its links open in the browser: a sandboxed frame can do neither by itself.
+  var COPIED_MS = 1500;
+  function noop() {}
+  function flipCopied(btn) {
+    var label = btn.querySelector && btn.querySelector('span');
+    if (btn.__hCopied) clearTimeout(btn.__hCopied.timer);
+    else btn.__hCopied = { text: label ? label.textContent : '' };
+    btn.classList.add('copied');
+    if (label) label.textContent = 'Copied';
+    btn.__hCopied.timer = setTimeout(function () {
+      btn.classList.remove('copied');
+      if (label) label.textContent = btn.__hCopied.text;
+      btn.__hCopied = null;
+    }, COPIED_MS);
+  }
+  function onMarkdownClick(ev) {
+    var t = ev && ev.target;
+    if (t && t.nodeType === 3) t = t.parentElement; // a click on text
+    if (!t || typeof t.closest !== 'function' || !t.closest('.h-md')) return;
+    var btn = t.closest('.code-copy');
+    if (btn) {
+      ev.preventDefault();
+      var block = btn.closest('.code-block');
+      var code = block && (block.querySelector('pre code') || block.querySelector('pre'));
+      if (!code) return;
+      harness.ui.copy(code.textContent).then(
+        function () { flipCopied(btn); },
+        function (e) { harness.ui.toast((e && e.message) || 'Could not copy', { kind: 'error' }).catch(noop); }
+      );
+      return;
+    }
+    var a = t.closest('a[href]');
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (href.charAt(0) === '#') return; // a jump within the page
+    ev.preventDefault();
+    var url = a.href || href;
+    if (/^https?:\/\//i.test(url)) harness.ui.openExternal(url).catch(noop);
+  }
+
   // ---------- the object ----------
 
   function storageApi(scope) {
@@ -349,6 +392,7 @@
   }
 
   window.addEventListener('message', onMessage);
+  document.addEventListener('click', onMarkdownClick);
   window.addEventListener('error', function (ev) {
     report(ev && ev.error, ev && ev.message ? ev.message + (ev.filename ? ' (' + ev.filename + ':' + ev.lineno + ')' : '') : 'Script error');
   });

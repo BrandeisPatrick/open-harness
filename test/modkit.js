@@ -25,6 +25,7 @@ function page(opts = {}) {
   const rafs = [];
   const observers = [];
   const warnings = [];
+  const docListeners = {};
   const attrs = {};
   const style = {};
   const size = { height: 100 };
@@ -32,7 +33,7 @@ function page(opts = {}) {
   const win = {
     document: {
       readyState: 'complete',
-      addEventListener() {},
+      addEventListener: (t, fn) => { (docListeners[t] = docListeners[t] || []).push(fn); },
       documentElement: {
         setAttribute: (k, v) => { attrs[k] = v; },
         style: { setProperty: (k, v) => { style[k] = v; }, removeProperty: (k) => { delete style[k]; } },
@@ -51,7 +52,8 @@ function page(opts = {}) {
   vm.createContext(win);
   vm.runInContext(SRC, win, { filename: 'harness.js' });
   const p = {
-    win, h: win.harness, sent, listeners, timers, rafs, observers, warnings, attrs, style, size,
+    win, h: win.harness, sent, listeners, docListeners, timers, rafs, observers, warnings, attrs, style, size,
+    click: (target) => { const ev = { target, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }; (docListeners.click || []).forEach((fn) => fn(ev)); return ev; },
     deliver: (data, source = parent) => (listeners.message || []).forEach((fn) => fn({ source, data })),
     reply: (id, result) => p.deliver({ jsonrpc: '2.0', id, result }),
     fail: (id, error) => p.deliver({ jsonrpc: '2.0', id, error }),
@@ -384,6 +386,109 @@ async function readyPage(hello = HELLO) {
     check('on() and its unsubscribe work without a host', ok);
   }
 
+  // --- .h-md: Copy buttons and links in rendered Markdown ---------------------------------------------------
+  {
+    // A tiny element tree: enough of closest/querySelector/classList for harness.js's click handler
+    const node = (tag, cls = '', attrs = {}, kids = []) => {
+      const n = { nodeType: 1, tag, cls: new Set(cls.split(' ').filter(Boolean)), attrs, parent: null, kids, text: '' };
+      kids.forEach((k) => { k.parent = n; });
+      const matches = (x, sel) => sel.split(',').some((one) => {
+        one = one.trim();
+        if (one.startsWith('.')) return x.cls.has(one.slice(1));
+        const m = /^(\w+)(\[(\w+)\])?$/.exec(one);
+        return m && x.tag === m[1] && (!m[3] || m[3] in x.attrs);
+      });
+      const all = (x) => x.kids.flatMap((k) => [k, ...all(k)]);
+      n.closest = (sel) => { for (let x = n; x; x = x.parent) if (matches(x, sel)) return x; return null; };
+      n.querySelector = (sel) => {
+        const parts = sel.split(' ');
+        if (parts.length === 2) { for (const a of all(n)) if (matches(a, parts[0])) { const b = all(a).find((k) => matches(k, parts[1])); if (b) return b; } return null; }
+        return all(n).find((k) => matches(k, sel)) || null;
+      };
+      n.getAttribute = (k) => (k in n.attrs ? n.attrs[k] : null);
+      n.classList = { add: (c) => n.cls.add(c), remove: (c) => n.cls.delete(c), contains: (c) => n.cls.has(c) };
+      Object.defineProperty(n, 'textContent', { get: () => n.text + n.kids.map((k) => k.textContent).join(''), set: (v) => { n.text = v; n.kids = []; } });
+      return n;
+    };
+    const tree = () => {
+      const label = node('span');
+      label.text = 'Copy';
+      const btn = node('button', 'code-copy', {}, [node('svg'), label]);
+      const code = node('code');
+      code.text = 'npm test';
+      const block = node('div', 'code-block', {}, [node('div', 'code-head', {}, [node('span', 'code-lang'), btn]), node('pre', '', {}, [code])]);
+      const link = node('a', '', { href: 'https://example.com/x' });
+      link.href = 'https://example.com/x';
+      const hash = node('a', '', { href: '#part' });
+      hash.href = 'mod://demo.user/panel.html#part';
+      const rel = node('a', '', { href: 'notes.html' });
+      rel.href = 'mod://demo.user/notes.html';
+      const md = node('div', 'h-md', {}, [block, node('p', '', {}, [link, hash, rel])]);
+      const outsideBtn = node('button', 'code-copy');
+      const outsideLink = node('a', '', { href: 'https://example.com/out' });
+      outsideLink.href = 'https://example.com/out';
+      node('body', '', {}, [md, node('div', 'other', {}, [outsideBtn, outsideLink])]);
+      return { btn, label, link, hash, rel, outsideBtn, outsideLink };
+    };
+    const p = await readyPage();
+    const t = tree();
+    check('h-md: the kit listens for clicks on the page', (p.docListeners.click || []).length === 1);
+    const ev = p.click(t.label);
+    await flush();
+    const copy = p.last();
+    check('h-md: Copy in a code block copies that block\'s code with ui.copy', copy.method === 'ui.copy' && copy.params.text === 'npm test' && ev.defaultPrevented, copy);
+    p.reply(copy.id, null);
+    await flush();
+    check('h-md: the button flips to "Copied"', t.btn.classList.contains('copied') && t.label.textContent === 'Copied');
+    const flip = p.timers.filter((x) => x.ms === 1500 && !x.cleared).pop();
+    check('h-md: and back after a moment', !!flip);
+    flip.fn();
+    check('h-md: label and class restored', !t.btn.classList.contains('copied') && t.label.textContent === 'Copy');
+    const n0 = p.sent.length;
+    const ev2 = p.click(t.link);
+    await flush();
+    const open = p.last();
+    check('h-md: a link opens with ui.openExternal and does not navigate the frame', p.sent.length === n0 + 1 && open.method === 'ui.openExternal' && open.params.url === 'https://example.com/x' && ev2.defaultPrevented, open);
+    const n1 = p.sent.length;
+    const ev3 = p.click(t.hash);
+    const ev4 = p.click(t.rel);
+    await flush();
+    check('h-md: a #fragment link is left to the page', !ev3.defaultPrevented);
+    check('h-md: a link that is not http(s) is stopped and not opened', ev4.defaultPrevented && p.sent.length === n1);
+    const ev5 = p.click(t.outsideBtn);
+    const ev6 = p.click(t.outsideLink);
+    await flush();
+    check('h-md: clicks outside .h-md are left alone', !ev5.defaultPrevented && !ev6.defaultPrevented && p.sent.length === n1);
+    // A failed copy says so
+    const t2 = tree();
+    p.click(t2.btn);
+    await flush();
+    p.fail(p.last().id, { code: 4000, message: 'clipboard busy' });
+    await flush();
+    await flush();
+    const toast = p.last();
+    check('h-md: a failed copy shows a toast and does not flip', toast.method === 'ui.toast' && toast.params.kind === 'error' && /clipboard busy/.test(toast.params.text) && !t2.btn.classList.contains('copied'), toast);
+  }
+
+  // --- harness.css: the Markdown class and its tokens ------------------------------------------------------
+  {
+    const css = fs.readFileSync(path.join(ROOT, 'modkit/harness.css'), 'utf8');
+    const blocks = [css.slice(0, css.indexOf('@media')), css.slice(css.indexOf('@media'), css.indexOf(':root[data-theme="dark"]')), css.slice(css.indexOf(':root[data-theme="dark"]'), css.indexOf('/* ---------- Page'))];
+    for (const tok of ['--code-bg', '--code-hover', '--bubble', '--tok-kw', '--tok-str', '--tok-com', '--tok-num', '--tok-pun']) check(`harness.css: ${tok} has a default`, blocks[0].includes(tok + ':'));
+    for (const tok of ['--code-bg', '--bubble', '--tok-kw', '--tok-num']) check(`harness.css: ${tok} has a dark value in both dark blocks`, blocks[1].includes(tok + ':') && blocks[2].includes(tok + ':'));
+    for (const sel of ['.h-md p', '.h-md h1', '.h-md ul', '.h-md a', '.h-md code', '.h-md blockquote', '.h-md table', '.h-md .code-block', '.h-md .code-head', '.h-md .code-copy', '.h-md .code-copy.copied', '.h-md .tok-kw', '.h-md li.task', '.h-md.compact']) check(`harness.css: styles ${sel}`, css.includes(sel));
+    // The Markdown the kit styles is the app's: every class markdown.ts emits has a rule
+    const mdSrc = fs.readFileSync(path.join(ROOT, 'src/renderer/markdown.ts'), 'utf8');
+    const emitted = [...new Set([...mdSrc.matchAll(/class="([a-z-]+)/g)].map((m) => m[1]).filter((c) => c !== 'icon'))];
+    const missing = emitted.filter((c) => !new RegExp(`\\.h-md[^{]*\\.${c}\\b`).test(css) && !new RegExp(`\\.h-md [a-z]+\\.${c}\\b`).test(css));
+    check('harness.css: every class the Markdown renderer emits is styled under .h-md', missing.length === 0, missing);
+    for (const folder of ['side-chat', 'plan']) {
+      const html = fs.readFileSync(path.join(ROOT, 'mods', folder, 'panel.html'), 'utf8');
+      check(`${folder}: renders Markdown in .h-md and keeps no copy of the app's .md rules`, /h-md/.test(html) && !/\.md (code|pre|h1|ul|blockquote|\.code-block)/.test(html) && !/\.tok-kw\s*\{/.test(html));
+      check(`${folder}: no hand-made link or Copy handler (the kit does it)`, !/closest\('\.code-copy'\)/.test(html) && !/querySelectorAll\('a\[href\]'\)/.test(html));
+    }
+  }
+
   // --- the playground host: the protocol as it now stands -------------------------------------------------
   {
     const hostModule = require(path.join(ROOT, 'modkit/playground/host.js'));
@@ -537,6 +642,9 @@ async function readyPage(hello = HELLO) {
     skills: { order: 50, permissions: ['skills:read'] },
     'side-chat': { seat: 'tab', permissions: ['model', 'session:read', 'session:send'] },
     scheduled: { seat: 'tab', permissions: ['schedules', 'session:control'] },
+    backgrounds: { seat: 'background', views: ['aurora', 'constellation', 'grid', 'dusk'], permissions: [] },
+    'composer-pill': { styles: ['composer.css'], permissions: [] },
+    'theme-midnight': { styles: ['theme.css'], permissions: [] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
   check('mods/ holds the bundled mods', same(mods.map((m) => m.folder).sort(), Object.keys(EXPECTED).sort()), mods.map((m) => m.folder));
@@ -546,7 +654,9 @@ async function readyPage(hello = HELLO) {
     check(`${m.folder}: mod.json has no problems`, m.valid && m.problems.length === 0, m.problems);
     check(`${m.folder}: metadata`, man.version === '1.0.0' && man.author === 'OpenAgent' && man.license === 'MIT' && typeof man.description === 'string' && man.description.length > 10 && typeof man.icon === 'string');
     const views = (man.contributes && man.contributes.views) || [];
-    if (exp.seat === 'tab') check(`${m.folder}: one tab view, with no rail-only fields`, views.length === 1 && views[0].seat === 'tab' && views[0].order === undefined && views[0].maxHeight === undefined, views);
+    if (exp.styles) check(`${m.folder}: styles only, no views`, views.length === 0 && same(man.contributes.styles, exp.styles) && exp.styles.every((f) => fs.existsSync(path.join(m.dir, f))), man.contributes);
+    else if (exp.seat === 'background') check(`${m.folder}: background views ${exp.views.join(', ')}, with no rail-only fields`, same(views.map((v) => v.id), exp.views) && views.every((v) => v.seat === 'background' && v.order === undefined && v.maxHeight === undefined), views);
+    else if (exp.seat === 'tab') check(`${m.folder}: one tab view, with no rail-only fields`, views.length === 1 && views[0].seat === 'tab' && views[0].order === undefined && views[0].maxHeight === undefined, views);
     else check(`${m.folder}: one rail view at order ${exp.order}`, views.length === 1 && views[0].seat === 'rail' && views[0].order === exp.order, views);
     check(`${m.folder}: permissions`, same((man.permissions || []).slice().sort(), (exp.permissions || []).slice().sort()), man.permissions);
 
@@ -618,6 +728,68 @@ async function readyPage(hello = HELLO) {
     const isoLocal = iso && new Function('pad', iso[0] + '; return isoLocal;')(pad);
     const at = isoLocal && isoLocal('2026-11-06', '09:00');
     check('scheduled: a local time becomes ISO with an offset that means the same moment', at && /^2026-11-06T09:00:00[+-]\d\d:\d\d$/.test(at) && new Date(Date.parse(at)).getHours() === 9, at);
+  }
+
+  // --- The look mods: backgrounds, the compact chat bar, the Midnight theme ----------------------------------
+  {
+    const read = (f) => fs.readFileSync(path.join(ROOT, 'mods', f), 'utf8');
+    const noComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+    /** [selector, body] of every rule, with @media wrappers opened */
+    const rules = (css) => [...noComments(css).replace(/@media[^{]*\{([\s\S]*?\})\s*\}/g, '$1').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim(), m[2]]);
+
+    // Backgrounds: cheap and well-behaved
+    const bg = read('backgrounds/background.html');
+    const man = JSON.parse(read('backgrounds/mod.json'));
+    const fps = [...bg.matchAll(/fps: (\d+)/g)].map((m) => Number(m[1]));
+    check('backgrounds: every animated kind runs at 30 frames a second or less, and the loop caps it at 30', fps.length === 3 && fps.every((n) => n <= 30) && /Math\.min\(30, KINDS\[kind\]\.fps\)/.test(bg), fps);
+    check('backgrounds: the canvas is never more than 1.5 device pixels', /Math\.min\(window\.devicePixelRatio \|\| 1, 1\.5, maxScale\)/.test(bg) && [...bg.matchAll(/maxScale: ([\d.]+)/g)].every((m) => Number(m[1]) <= 1.5));
+    check('backgrounds: pauses when hidden (visibility.changed and the document), holds still for reduced motion', /harness\.on\('visibility\.changed'/.test(bg) && /visibilitychange/.test(bg) && /document\.visibilityState/.test(bg) && /prefers-reduced-motion: reduce/.test(bg));
+    check('backgrounds: colours from the tokens and theme.changed, settings from settings.get and settings.changed', /harness\.on\('theme\.changed'/.test(bg) && /token\('--accent'\)/.test(bg) && /token\('--bg-100'\)/.test(bg) && /harness\.settings\.get\(\)/.test(bg) && /harness\.on\('settings\.changed'/.test(bg));
+    check('backgrounds: no hard-coded colours outside the token fallbacks', !/#[0-9a-f]{3,6}\b/i.test(bg.replace(/'#010203'|\/\^#010203\$\/i/g, '')));
+    const settings = Object.fromEntries((man.contributes.settings || []).map((s) => [s.key, s]));
+    check('backgrounds: settings intensity (subtle, medium, vivid) and speed (slow, normal)', same(settings.intensity && settings.intensity.options, ['subtle', 'medium', 'vivid']) && same(settings.speed && settings.speed.options, ['slow', 'normal']));
+    check('backgrounds: asks for no permissions', same(man.permissions, []));
+
+    // The compact chat bar: CSS only, every rule scoped to the composer, tokens instead of colours
+    const pill = read('composer-pill/composer.css');
+    const pillRules = rules(pill);
+    const outside = pillRules.filter(([sel]) => !sel.split(',').every((s) => /^\s*#(composer|attach-btn|send-btn)\b/.test(s)));
+    check('composer-pill: every rule is scoped to the composer', pillRules.length > 10 && outside.length === 0, outside.map((r) => r[0]));
+    const colours = pillRules.flatMap(([sel, body]) => [...body.matchAll(/(?:^|;)\s*(color|background|border-color|background-color)\s*:\s*([^;]+)/g)].map((m) => [sel, m[2].trim()])).filter(([, v]) => !/^(var\(|transparent|none|currentColor)/.test(v));
+    check('composer-pill: colours come from tokens', colours.length === 0, colours);
+    check('composer-pill: keeps the focus ring, the drop highlight and the disabled send state', /#composer:has\(#input:focus\)::before/.test(pill) && /#composer\.dragging::before/.test(pill) && /#send-btn:disabled/.test(pill));
+    check('composer-pill: adds no controls (no content other than the send glyph)', (pill.match(/content:/g) || []).length === 2);
+
+    // Midnight: tokens only, the app's three selectors, and contrast measured from the file itself
+    const theme = read('theme-midnight/theme.css');
+    const themeRules = rules(theme);
+    check('theme-midnight: only the three selectors the app declares its tokens with', same(themeRules.map((r) => r[0]), [':root', ':root:not([data-theme="light"])', ':root[data-theme="dark"]']) && /@media \(prefers-color-scheme: dark\)/.test(theme), themeRules.map((r) => r[0]));
+    const decls = themeRules.map(([, body]) => Object.fromEntries(body.split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()])));
+    check('theme-midnight: sets nothing but custom properties', decls.every((d) => Object.keys(d).every((k) => k.startsWith('--'))));
+    check('theme-midnight: the two dark blocks are the same', same(decls[1], decls[2]));
+    const appCss = fs.readFileSync(path.join(ROOT, 'src/renderer/styles.css'), 'utf8');
+    const appDark = rules(appCss.slice(appCss.indexOf('@media (prefers-color-scheme: dark)'), appCss.indexOf('/* ---------- Base')))[0][1];
+    const appDarkNames = [...appDark.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]).filter((n) => !/^--(git|diff)-/.test(n));
+    check('theme-midnight: sets every dark token the app sets (git and diff colours aside)', appDarkNames.every((n) => n in decls[2]), appDarkNames.filter((n) => !(n in decls[2])));
+    const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    const lum = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); };
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const resolve = (d, name) => { let v = d[name]; for (let i = 0; i < 4 && v && /^var\(/.test(v); i++) v = d[/var\((--[\w-]+)/.exec(v)[1]]; return v; };
+    for (const [label, d] of [['light', decls[0]], ['dark', decls[2]]]) {
+      const low = [];
+      for (const surface of ['--bg-000', '--bg-100', '--bg-200', '--bg-300']) {
+        for (const [fg, min] of [['--text-100', 4.5], ['--text-200', 4.5], ['--text-400', 3], ['--accent', 4.5], ['--danger', 4.5], ['--success', 4.5]]) {
+          const r = ratio(resolve(d, fg), resolve(d, surface));
+          if (r < min) low.push(`${fg} on ${surface}: ${r.toFixed(2)}`);
+        }
+      }
+      for (const tok of ['--tok-kw', '--tok-str', '--tok-num', '--tok-com']) {
+        const r = ratio(resolve(d, tok), resolve(d, '--code-bg'));
+        if (r < (tok === '--tok-com' ? 3 : 4.5)) low.push(`${tok} on --code-bg: ${r.toFixed(2)}`);
+      }
+      if (ratio('#ffffff', resolve(d, '--accent')) < 3) low.push('white on --accent');
+      check(`theme-midnight ${label}: text 4.5:1 and muted 3:1 on every surface, syntax colours on code, white on the accent 3:1`, low.length === 0, low);
+    }
   }
 
   // --- the manifest rules themselves -----------------------------------------------------------------------

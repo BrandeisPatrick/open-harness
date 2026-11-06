@@ -21,6 +21,7 @@ import type { Call, Ctx, Section } from './settings/ctx.js';
 import { contextSection, generalSection, modelSection, permissionsSection } from './settings/config-sections.js';
 import { modsSection } from './settings/mods-section.js';
 import { remoteSection, scheduledSection, skillsSection } from './settings/feature-sections.js';
+import { dreamingSection } from './settings/dreaming-section.js';
 import { aboutSection, appearanceSection, filesSection, historySection, mcpSection } from './settings/info-sections.js';
 
 export interface SettingsPageDeps {
@@ -35,6 +36,9 @@ export interface SettingsPageDeps {
   chooseFolder(): Promise<boolean>;
   openShortcuts(): void;
   currentSessionId(): string;
+  /** Brings a session on screen (Settings closes first) */
+  openSession(id: string): void;
+  sessionTitle(id: string): string | undefined;
   /** Before the page opens (close menus and sheets, hide the browser view); false keeps it closed */
   beforeOpen(): boolean;
   /** After it closed (the browser view may come back) */
@@ -292,6 +296,11 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
       deps.openShortcuts();
     },
     currentSessionId: deps.currentSessionId,
+    openSession: (id) => {
+      dialog.close();
+      deps.openSession(id);
+    },
+    sessionTitle: (id) => deps.sessionTitle(id),
   };
 
   // ---------- Building ----------
@@ -308,6 +317,7 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
       mcpSection(ctx, document.getElementById('mcp-section')!),
       skillsSection(ctx),
       scheduledSection(ctx),
+      dreamingSection(ctx),
       remoteSection(ctx),
       historySection(ctx),
       appearanceSection(ctx),

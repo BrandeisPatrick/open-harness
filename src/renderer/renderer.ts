@@ -73,6 +73,7 @@ import type { Schedule } from '../shared/schedules';
 import { bus } from './bus.js';
 import { onPush, rpc } from './rpc.js';
 import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } from './transcript-items.js';
+import { PROPOSAL_TOOLS, proposalEnded, setupDreamingView } from './dreaming.js';
 import { createModsHost, type ModPaneTabs } from './mods-host.js';
 import { createSettingsPage } from './settings-page.js';
 import { agentApproval, setNameLookup } from './tool-labels.js';
@@ -390,6 +391,8 @@ interface UserMessageOptions {
   originLabel?: string;
   /** The text was written by a model (another session's report or message, a merged summary): drawn as Markdown */
   markdown?: boolean;
+  /** A long message the app put together (a dream's digest): drawn shut, opened with "Show all" */
+  folded?: boolean;
 }
 
 const REWIND_BUTTON = `<button type="button" class="icon-btn sm msg-rewind" aria-label="Rewind to this message" data-tip="Rewind">${icon('rotate-ccw', 14)}</button>`;
@@ -452,6 +455,18 @@ function addUserMessage(text: string, images: BubbleImage[] = [], mentions?: str
   if (text && opts.markdown) {
     bubble.classList.add('rich');
     bubble.insertAdjacentHTML('beforeend', `<div class="md">${renderMarkdown(text)}</div>`);
+    if (opts.folded) {
+      bubble.classList.add('folded');
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'link-btn bubble-more';
+      more.textContent = 'Show all';
+      more.onclick = () => {
+        const shut = bubble.classList.toggle('folded');
+        more.textContent = shut ? 'Show all' : 'Show less';
+      };
+      bubble.appendChild(more);
+    }
   } else if (text) appendWithMentions(bubble, text, { mentions: Array.isArray(mentions) ? mentions : null, known: pickedPaths, cwd: config?.workingDirectory ?? '' });
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
@@ -1094,7 +1109,8 @@ async function respondPlan(card: PlanCard, decision: PlanDecision, btn: HTMLElem
   if (decision === 'keep') {
     setBasePlaceholder(KEEP_PLACEHOLDER);
     if (!dialogOpen()) inputEl.focus();
-  } else if (!synthetic) {
+  } else if (!synthetic && card.plan.kind !== 'dream') {
+    // A dream's plan builds nothing: approving it applied its suggestions, and the mode stays as it was
     const before = currentMode();
     try {
       config = await oc.getConfig();
@@ -1219,7 +1235,7 @@ function renderTranscript(items: TranscriptItem[]): void {
     if (item.role === 'user') {
       const images = Array.isArray(item.images) ? item.images.filter((src): src is string => typeof src === 'string' && Boolean(src)) : [];
       const shown = unframe(item.origin, item.text ?? '');
-      addUserMessage(shown.text, images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn, originLabel: item.origin ? originLabel(item.origin, item.from, shown.note) : undefined, markdown: writtenByModel(item.origin) });
+      addUserMessage(shown.text, images.map((src) => ({ src })), Array.isArray(item.mentions) ? item.mentions : null, { turn: item.turn, originLabel: item.origin ? originLabel(item.origin, item.from, shown.note) : undefined, markdown: writtenByModel(item.origin), folded: item.origin === 'dream' });
     } else if (item.role === 'assistant') {
       appendAssistantText(item.text);
       endAssistant();
@@ -1251,9 +1267,9 @@ function appendExtraNode(el: HTMLElement): void {
 }
 setTranscriptSink(appendExtraNode);
 
-/** A message another session sent, or a summary a merge wrote: a model's words, which come as Markdown. */
+/** A message another session sent, a summary a merge wrote, or a dream's digest: written for a model, as Markdown. */
 function writtenByModel(origin: MessageOrigin | undefined): boolean {
-  return origin === 'session' || origin === 'command';
+  return origin === 'session' || origin === 'command' || origin === 'dream';
 }
 
 /**
@@ -1269,6 +1285,7 @@ function originLabel(origin: MessageOrigin, from?: string, note?: string): strin
   if (origin === 'mod') return from ? `from mod ${from}` : 'from a mod';
   if (origin === 'schedule') return from ? `scheduled: ${from}` : 'scheduled';
   if (origin === 'remote') return 'from remote control';
+  if (origin === 'dream') return 'dreaming · what the dream read';
   // A slash command put this into the conversation; with a session behind it, it is that session's merged summary.
   if (origin === 'command') {
     const title = from ? sessions.find((m) => m.id === from)?.title : undefined;
@@ -1896,7 +1913,7 @@ function clearBrowsing(): void {
 
 /** Tool calls that do not get a row (the plan and artifacts arrive as cards instead), with their arguments. */
 const hiddenTools = new Map<string, unknown>();
-const CARD_TOOLS = new Set(['submit_plan', 'create_artifact']);
+const CARD_TOOLS = new Set(['submit_plan', 'create_artifact', ...PROPOSAL_TOOLS]);
 
 function handleEvent(ev: AgentEvent, synthetic = false): void {
   switch (ev.type) {
@@ -1910,7 +1927,7 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       if (!label) break;
       finishThinking();
       endAssistant();
-      addUserMessage(shown.text, [], null, { turn: ev.turn, originLabel: label, markdown: writtenByModel(ev.origin) });
+      addUserMessage(shown.text, [], null, { turn: ev.turn, originLabel: label, markdown: writtenByModel(ev.origin), folded: ev.origin === 'dream' });
       break;
     }
     case 'thinking_delta':
@@ -1961,6 +1978,8 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
         // A plan or artifact that could not be made is shown as a failed row, so the error is visible.
         const failed = !ev.ok || (ev.name === 'create_artifact' && /^\s*Error\b/.test(String(ev.result ?? '')));
         if (failed) finishToolCard({ ...ev, ok: false, id: undefined }, addToolCard(ev.name, args));
+        // A dream's proposal is its card (dreaming.ts)
+        else if (PROPOSAL_TOOLS.includes(ev.name) && !proposalEnded(ev.name, String(ev.result ?? ''), true)) finishToolCard({ ...ev, id: undefined }, addToolCard(ev.name, args));
         if (ev.name !== 'submit_plan') setStatusText(baseVerb());
         break;
       }
@@ -3916,6 +3935,8 @@ const settingsPage = createSettingsPage({
   chooseFolder,
   openShortcuts,
   currentSessionId: () => currentSessionId,
+  openSession: (id) => void switchSession(id),
+  sessionTitle: (id) => sessions.find((s) => s.id === id)?.title,
   beforeOpen: () => {
     if (confirmDialog.open) return false;
     closeMenu();
@@ -4004,6 +4025,15 @@ setNameLookup({
 // [feature:subagents]
 
 // [feature:remote]
+
+// [feature:dreaming]
+// Proposal cards in a dream's transcript and in Settings → Dreaming; the sidebar row is in sidebar.ts
+setupDreamingView({
+  openSession: (id) => void switchSession(id),
+  sessionTitle: (id) => sessions.find((s) => s.id === id)?.title,
+  showError: showInlineError,
+  cleanError,
+});
 
 // ---------- Init ----------
 

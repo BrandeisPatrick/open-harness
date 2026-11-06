@@ -10,7 +10,7 @@ import type { IconName } from '../icons.js';
 
 // ---------- Sections ----------
 
-export type SectionId = 'general' | 'model' | 'permissions' | 'context' | 'mods' | 'mcp' | 'skills' | 'scheduled' | 'remote' | 'history' | 'appearance' | 'files' | 'about';
+export type SectionId = 'general' | 'model' | 'permissions' | 'context' | 'mods' | 'mcp' | 'skills' | 'scheduled' | 'dreaming' | 'remote' | 'history' | 'appearance' | 'files' | 'about';
 
 export interface SectionInfo {
   id: SectionId;
@@ -29,6 +29,7 @@ export const SECTIONS: SectionInfo[] = [
   { id: 'mcp', title: 'MCP servers', icon: 'plug', group: 1 },
   { id: 'skills', title: 'Skills', icon: 'sparkles', group: 1 },
   { id: 'scheduled', title: 'Scheduled', icon: 'clock', group: 1 },
+  { id: 'dreaming', title: 'Dreaming', icon: 'moon', group: 1 },
   { id: 'remote', title: 'Remote control', icon: 'smartphone', group: 1 },
   { id: 'history', title: 'History', icon: 'archive', group: 2 },
   { id: 'appearance', title: 'Appearance', icon: 'palette', group: 2 },

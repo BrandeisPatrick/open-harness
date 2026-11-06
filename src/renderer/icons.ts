@@ -89,6 +89,9 @@ const ICONS = {
   'git-merge': '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="9" r="1.5"/><path d="M4.5 5v6M4.5 5.5c0 2 1.5 3.5 3.5 3.5h2"/>',
   'file-export': `<path d="${PAGE}"/><path d="M9 1.75V6h4.25M8 13V8.5M6 10.25L8 8.25l2 2"/>`,
   'circle-dashed': '<circle cx="8" cy="8" r="5.5" stroke-dasharray="2.4 2.2"/>',
+  // Dreaming: the navigation row and a dream's sessions (a crescent moon), and the run control (a play triangle)
+  moon: '<path d="M13.25 9.75A5.75 5.75 0 1 1 6.25 2.75a4.75 4.75 0 0 0 7 7z"/>',
+  play: '<path d="M5.25 3.5v9l7-4.5-7-4.5z"/>',
   'circle-check-filled': '<circle cx="8" cy="8" r="6.25" fill="currentColor" stroke="none"/><path d="M5.5 8.25l1.75 1.75 3.25-3.5" style="stroke: var(--task-check, #fff)"/>',
   // mods: the rail toggle (panel-left mirrored), icons a manifest may name (gauge, message, clock) and the default
   // for a mod without one (four blocks, one of them round)

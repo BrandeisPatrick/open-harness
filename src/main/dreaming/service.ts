@@ -4,6 +4,7 @@
 
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { App, Disposer } from '../app';
 import type { HistoryService } from '../services';
@@ -410,7 +411,7 @@ export class Dreaming {
     const latest = dream.planId ? s.plans?.[dream.planId] : undefined;
     if (latest?.status === 'proposed') return;
     const title = `${planned.length} suggestion${planned.length === 1 ? '' : 's'} for ${path.basename(dream.cwd) || dream.cwd}`;
-    const markdown = planned.map((p, i) => planEntry(p, i + 1)).join('\n\n');
+    const markdown = planned.map((p, i) => planEntry(p, i + 1, dream.cwd, (id) => this.app.store.get(id)?.title ?? id)).join('\n\n');
     const plan: PlanInfo = { id: this.newId('plan'), title, markdown, status: 'proposed', createdAt: this.now(), kind: 'dream' };
     s.plans ??= {};
     s.plans[plan.id] = plan;
@@ -637,18 +638,24 @@ export class Dreaming {
   }
 }
 
-const KIND_WORDS: Record<ProposalKind, string> = { skill: 'Skill', memory: 'Memory', mod: 'Mod' };
+/** A path as the user knows it: inside the project relative to it, under the home folder with ~. */
+function shownPath(p: string, cwd: string): string {
+  const rel = path.relative(cwd, p);
+  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
+  const home = os.homedir();
+  return p.startsWith(home + path.sep) ? `~${p.slice(home.length)}` : p;
+}
 
 /** One proposal in a dream's plan. */
-function planEntry(p: DreamProposal, n: number): string {
-  const lines = [`### ${n}. ${KIND_WORDS[p.kind]}: ${p.title.replace(/^(New|Change|Add to|Remove from) /, (m) => m)}`, '', p.why, ''];
-  if (p.kind === 'skill') lines.push(`Writes \`${p.target}\`${p.changesExisting ? ' (replaces what is there)' : ''}: ${p.description}`);
+function planEntry(p: DreamProposal, n: number, cwd: string, title: (id: string) => string): string {
+  const lines = [`### ${n}. ${p.title}`, '', p.why, ''];
+  if (p.kind === 'skill') lines.push(`Writes \`${shownPath(p.target, cwd)}\`${p.changesExisting ? ', replacing what is there' : ''}. ${p.description}`);
   else if (p.kind === 'memory') {
-    lines.push(`In \`${p.target}\`:`);
+    lines.push(`In \`${shownPath(p.target, cwd)}\`:`);
     for (const l of p.remove) lines.push(`- removes: ${l.replace(/^[-*]\s+/, '')}`);
     for (const l of p.add) lines.push(`- adds: ${l.replace(/^[-*]\s+/, '')}`);
-  } else lines.push(`Writes the mod folder \`${p.target}\` (${p.files.length} file${p.files.length === 1 ? '' : 's'}); it stays off until you turn it on.`);
-  lines.push('', `From ${p.sessions.length === 1 ? 'session' : 'sessions'} ${p.sessions.map((s) => `\`${s}\``).join(', ')}.`);
+  } else lines.push(`Writes the mod folder \`${shownPath(p.target, cwd)}\` (${p.files.length} file${p.files.length === 1 ? '' : 's'}); it stays off until you turn it on.`);
+  lines.push('', `From ${p.sessions.map((s) => `“${title(s)}”`).join(', ')}.`);
   return lines.join('\n');
 }
 

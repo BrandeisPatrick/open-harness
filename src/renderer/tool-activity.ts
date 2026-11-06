@@ -56,11 +56,17 @@ const KINDS: Record<string, Omit<Kind, 'key' | 'target'>> = {
   schedule_update: counted('changed', 'a', 'schedule'),
   schedule_delete: counted('deleted', 'a', 'schedule'),
   mod_check: counted('checked', 'a', 'mod'),
+  history_read: counted('read', 'a', 'session'),
+  history_search: times('searched the sessions'),
+  propose_skill: counted('proposed', 'a', 'skill'),
+  propose_memory: times('proposed memory'),
+  propose_mod: counted('proposed', 'a', 'mod'),
+  withdraw_proposal: counted('withdrew', 'a', 'proposal'),
   browser_screenshot: counted('took', 'a', 'screenshot'),
 };
 
 /** Kinds that share a phrase share a key, so "ran 2 searches" counts grep and glob together */
-const SHARED: Record<string, string> = { glob: 'search', grep: 'search', bash: 'command', terminal_run: 'command' };
+const SHARED: Record<string, string> = { glob: 'search', grep: 'search', bash: 'command', terminal_run: 'command', history_read: 'session_read' };
 
 function kindOf(c: ActivityCall): Kind {
   const name = c.name;

@@ -17,7 +17,7 @@ const { check, done } = require('./support/check.js');
   fs.rmSync(path.dirname(copy), { recursive: true, force: true });
 
   // --- sections ---------------------------------------------------------------
-  check('thirteen sections in four groups', m.SECTIONS.length === 13 && new Set(m.SECTIONS.map((s) => s.group)).size === 4);
+  check('fourteen sections in four groups', m.SECTIONS.length === 14 && new Set(m.SECTIONS.map((s) => s.group)).size === 4);
   check('section ids are recognised', m.isSectionId('mods') && !m.isSectionId('nope'));
   check('old targets map to sections', m.sectionForTarget('mcp-section') === 'mcp' && m.sectionForTarget('rules-section') === 'permissions' && m.sectionForTarget('mods') === 'mods');
   check('a field id is not a section (the page looks it up)', m.sectionForTarget('ollama-baseURL') === null);

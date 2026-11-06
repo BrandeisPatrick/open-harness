@@ -65,7 +65,7 @@ export function dreamTools(app: App, sink: ProposalSink): Tool[] {
   const propose = (kind: ProposalKind) => (args: Record<string, unknown>, ctx: ToolContext) => guarded(() => ({ content: proposalResult(sink.propose(ctx.sessionId, kind, args ?? {})) }));
 
   const skill: Tool = {
-    name: KIND_TOOLS.skill,
+    name: 'propose_skill',
     description:
       'Propose a skill: a procedure the user asked for more than once, written as instructions the agent follows when the user runs /<name> or the task matches the description. The app writes <scope>/skills/<name>/SKILL.md when the proposal is applied, never you.',
     parameters: {
@@ -87,7 +87,7 @@ export function dreamTools(app: App, sink: ProposalSink): Tool[] {
   };
 
   const memory: Tool = {
-    name: KIND_TOOLS.memory,
+    name: 'propose_memory',
     description:
       "Propose memory: lines for the instructions file the agent reads at the start of every run (the project's, or the user's for every project), for durable preferences, corrections and facts. Lines to remove must be written exactly as the file has them.",
     parameters: {
@@ -108,7 +108,7 @@ export function dreamTools(app: App, sink: ProposalSink): Tool[] {
   };
 
   const mod: Tool = {
-    name: KIND_TOOLS.mod,
+    name: 'propose_mod',
     description:
       'Propose a mod: a view or status the user keeps asking for, as a folder of web files with a mod.json (see the mods documentation the app follows: protocol 1, id, name, version, contributes.views with a seat). It is checked the way the app checks every mod, written to <scope>/mods/<id>/ when applied, and stays off until the user turns it on.',
     parameters: {
@@ -134,7 +134,7 @@ export function dreamTools(app: App, sink: ProposalSink): Tool[] {
   };
 
   const withdraw: Tool = {
-    name: WITHDRAW_TOOL,
+    name: 'withdraw_proposal',
     description: 'Take back one of your proposals in this dream (one that has not been applied), e.g. when the user says it is wrong.',
     parameters: { type: 'object', properties: { id: { type: 'string', description: 'The proposal id (pr_…)' }, reason: { type: 'string' } }, required: ['id'] },
     scoped: true,

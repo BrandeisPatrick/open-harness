@@ -133,6 +133,8 @@ export type Indicator =
   | { kind: 'fork' }
   | { kind: 'spawn' }
   | { kind: 'schedule' }
+  /** A dream's session: the moon, with the attention dot while its proposals wait for the user */
+  | { kind: 'dream'; waiting: boolean }
   | null;
 
 /**
@@ -146,6 +148,7 @@ export function indicatorFor(
 ): Indicator {
   const st = status ?? meta.status;
   if (st?.running) return { kind: 'running' };
+  if (meta.origin === 'dream') return { kind: 'dream', waiting: Boolean(st?.attention || meta.dream?.waiting) };
   if (st?.attention) return { kind: 'attention', reason: st.attention };
   if (st?.unread && !opts.current) return { kind: 'unread' };
   if (opts.children) return opts.collapsed ? { kind: 'family', count: opts.children, hot: Boolean(opts.hiddenHot) } : { kind: 'family' };
@@ -196,13 +199,24 @@ function hot(n: TreeNode, status: (id: string) => SessionStatus | undefined, cur
   return false;
 }
 
+/**
+ * Whether a session has a row in the list. A dream's session shows only while it waits for the user (its proposals,
+ * its plan) or is the one on screen, so nightly dreams do not crowd the list; Settings → Dreaming lists them all.
+ */
+export function listed(m: SessionMeta, currentId: string, status?: SessionStatus): boolean {
+  if (m.origin !== 'dream' || m.id === currentId) return true;
+  const st = status ?? m.status;
+  return Boolean(m.dream?.waiting || st?.attention);
+}
+
 /** The rows on screen, top to bottom: group labels and the sessions of expanded groups and parents. */
 export function visibleRows(metas: SessionMeta[], o: VisibleOptions): Row[] {
   const now = o.now ?? Date.now();
   const status = o.status ?? (() => undefined);
   const currentId = o.currentId ?? '';
   const rows: Row[] = [];
-  for (const g of groupFamilies(buildTree(metas), now)) {
+  const shown = metas.filter((m) => !m || listed(m, currentId, status(m.id)));
+  for (const g of groupFamilies(buildTree(shown), now)) {
     const collapsed = o.groupCollapsed(g.label);
     rows.push({ kind: 'group', label: g.label, collapsed, sessions: g.families.reduce((n, f) => n + 1 + f.descendants, 0) });
     if (collapsed) continue;

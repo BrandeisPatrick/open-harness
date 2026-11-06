@@ -1,4 +1,5 @@
-// Plan card: a plan the model proposed in plan mode, with Build it / Build, accept edits / Keep planning.
+// Plan card: a plan the model proposed in plan mode, with Build it / Build, accept edits / Keep planning. A dream's
+// plan (kind 'dream') gathers its suggestions instead: Apply all / Keep planning, and approving it builds nothing.
 
 import type { PlanInfo } from '../shared/types';
 import { escapeHtml } from './dom.js';
@@ -36,7 +37,7 @@ export function createPlanCard(plan: PlanInfo, opts: PlanCardOptions): PlanCard 
   el.dataset.planId = plan.id;
   el.innerHTML =
     `<div class="plan-head"><span class="plan-icon">${icon('clipboard')}</span>` +
-    `<div class="plan-heading"><div class="plan-kicker">Plan</div><div class="plan-title"></div></div>` +
+    `<div class="plan-heading"><div class="plan-kicker">${plan.kind === 'dream' ? 'Dream plan' : 'Plan'}</div><div class="plan-title"></div></div>` +
     `<span class="plan-chip"></span></div>` +
     `<div class="plan-body md"></div>` +
     `<div class="plan-foot"></div>`;
@@ -57,17 +58,27 @@ export function createPlanCard(plan: PlanInfo, opts: PlanCardOptions): PlanCard 
   const button = (id: string, label: string, cls: string, key?: string) =>
     `<button type="button" id="${id}" class="${cls}"><span>${escapeHtml(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
 
+  const dream = plan.kind === 'dream';
   const renderFoot = () => {
     const status = card.plan.status;
     if (decided) {
-      if (decided === 'keep') statusLine(false, 'Sent back for changes');
-      else statusLine(true, `Approved · building with ${opts.modeLabel(decided)}`);
+      if (decided === 'keep') statusLine(false, dream ? 'Sent back: answer below to change it' : 'Sent back for changes');
+      else statusLine(true, dream ? 'Approved · applied' : `Approved · building with ${opts.modeLabel(decided)}`);
       return;
     }
-    if (status === 'approved') return statusLine(true, 'Approved');
+    if (status === 'approved') return statusLine(true, dream ? 'Approved · applied' : 'Approved');
     if (status === 'rejected') return statusLine(false, 'Sent back for changes');
     if (!interactive) return statusLine(null, 'Replaced by a newer plan');
     footEl.className = 'plan-foot plan-actions';
+    if (dream) {
+      footEl.innerHTML =
+        `<span class="plan-hint">Apply all of it, or keep planning to change it.</span>` +
+        button('plan-keep', 'Keep planning', 'btn', 'esc') +
+        button('plan-build', 'Apply all', 'btn primary', '↵');
+      footEl.querySelector<HTMLButtonElement>('#plan-keep')!.onclick = () => void card.decide('keep');
+      footEl.querySelector<HTMLButtonElement>('#plan-build')!.onclick = () => void card.decide('build-ask');
+      return;
+    }
     footEl.innerHTML =
       `<span class="plan-hint">Build it, or keep planning to change it.</span>` +
       button('plan-keep', 'Keep planning', 'btn', 'esc') +

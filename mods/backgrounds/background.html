@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/@harness/harness.css">
+<style>
+  /* The whole window is this page: no padding, nothing to scroll, nothing to click (the seat takes no pointer events). */
+  html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  body { background: var(--bg-100); transition: background-color 0.4s; }
+  canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  canvas[hidden] { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c" hidden></canvas>
+<script src="/@harness/harness.js"></script>
+<script>
+  // One page for the four views of this mod: the view id (harness.info.view.id) picks what is drawn.
+  //
+  // What keeps it cheap: at most 30 frames a second (each kind sets its own, lower rate), a timer between frames rather
+  // than a requestAnimationFrame loop that wakes on every display refresh, a canvas at no more than 1.5 device pixels
+  // (aurora draws at a quarter of the window's size: soft colour needs no resolution), nothing at all while the window
+  // or the view is hidden, and one still frame when the system asks for reduced motion. Dusk is a CSS gradient and
+  // never draws after the first paint.
+  //
+  // What keeps it readable: every colour comes from the app's tokens (--bg-100, --text-400, --accent), so it follows
+  // light and dark and a theme mod, and the app lays its own surfaces over it (Settings, Appearance, Dim), so the
+  // colours here are kept soft enough to sit under text at every intensity.
+
+  const root = document.documentElement;
+  const canvas = document.getElementById('c');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const INTENSITY = { subtle: 1, medium: 1.5, vivid: 2 };
+  const SPEED = { slow: 0.5, normal: 1 };
+  let settings = { intensity: 'subtle', speed: 'normal' };
+  let kind = null;
+  let visible = true;
+
+  // ---------- colours from the app's tokens ----------
+
+  // A 1 × 1 canvas turns any CSS colour (hex, rgb(), hsl(), oklch(), color-mix()) into RGB.
+  const probe = document.createElement('canvas');
+  probe.width = probe.height = 1;
+  const pctx = probe.getContext('2d', { willReadFrequently: true });
+  function rgb(css, fallback) {
+    if (!css) return fallback;
+    pctx.fillStyle = '#010203';
+    pctx.fillStyle = css;
+    if (pctx.fillStyle === '#010203' && !/^#010203$/i.test(css)) return fallback; // not a colour
+    pctx.clearRect(0, 0, 1, 1);
+    pctx.fillRect(0, 0, 1, 1);
+    const d = pctx.getImageData(0, 0, 1, 1).data;
+    return d[3] ? [d[0], d[1], d[2]] : fallback;
+  }
+  const token = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+
+  function toHsl([r, g, b]) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+    if (max === min) return [0, 0, l];
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [h * 60, s, l];
+  }
+  function fromHsl(h, s, l) {
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+  }
+  const css = (c, a = 1) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const mix = (a, b, t) => [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t));
+
+  let pal = null;
+  function readPalette() {
+    const dark = root.getAttribute('data-theme') === 'dark' || (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const bg = rgb(token('--bg-100'), dark ? [38, 38, 36] : [250, 249, 245]);
+    const ink = rgb(token('--text-400'), dark ? [156, 154, 146] : [115, 114, 108]);
+    const accent = rgb(token('--accent'), [217, 119, 87]);
+    const [h, s, l] = toHsl(accent);
+    // Companions of the accent around the colour wheel, at a lightness that suits the scheme: the set stays in the
+    // accent's family, so a theme mod with a blue accent gets blue, violet and teal fields.
+    const sat = Math.min(0.8, Math.max(0.4, s));
+    const lit = (dl) => (dark ? Math.min(0.6, Math.max(0.42, l + dl)) : Math.min(0.7, Math.max(0.52, l + dl + 0.05)));
+    const near = (dh, dl) => fromHsl((h + dh + 360) % 360, sat, lit(dl));
+    pal = { dark, bg, ink, accent, fields: [near(0, 0), near(36, 0.04), near(-44, -0.02), near(14, 0.06)] };
+  }
+
+  // ---------- the canvas ----------
+
+  let ctx = null;
+  let W = 0, H = 0, scale = 1;
+  function fit(maxScale) {
+    const s = Math.min(window.devicePixelRatio || 1, 1.5, maxScale);
+    const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+    const cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+    W = w; H = h; scale = s;
+    ctx.setTransform(s, 0, 0, s, 0, 0); // draw in CSS pixels
+  }
+
+  // A seeded random, so the stars and the aurora's phases are the same each time the view loads.
+  function rand(seed) {
+    let x = seed >>> 0 || 1;
+    return () => ((x = (x * 1664525 + 1013904223) >>> 0) / 4294967296);
+  }
+
+  // ---------- the four kinds ----------
+
+  const KINDS = {
+    // Soft colour fields drifting on long, unrelated periods (minutes, not seconds).
+    aurora: {
+      fps: 20,
+      maxScale: 0.25,
+      opaque: true,
+      setup() {
+        const r = rand(7);
+        this.blobs = [0, 1, 2, 3].map((i) => ({ x: 0.15 + r() * 0.7, y: 0.15 + r() * 0.7, ax: 0.18 + r() * 0.16, ay: 0.12 + r() * 0.14, fx: 0.011 + r() * 0.012, fy: 0.009 + r() * 0.012, p: r() * Math.PI * 2, size: 0.55 + r() * 0.25, i }));
+      },
+      draw(t) {
+        const k = INTENSITY[settings.intensity] || 1;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = css(pal.bg);
+        ctx.fillRect(0, 0, W, H);
+        const peak = (pal.dark ? 0.34 : 0.3) * k;
+        const big = Math.max(W, H);
+        for (const b of this.blobs) {
+          const x = W * (b.x + b.ax * Math.sin(t * b.fx + b.p));
+          const y = H * (b.y + b.ay * Math.cos(t * b.fy + b.p * 1.3));
+          const r = big * b.size * (0.9 + 0.1 * Math.sin(t * 0.02 + b.p));
+          const c = pal.fields[b.i];
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+          g.addColorStop(0, css(c, peak));
+          g.addColorStop(0.45, css(c, peak * 0.45));
+          g.addColorStop(1, css(c, 0));
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, W, H);
+        }
+      },
+    },
+
+    // Sparse points, faint lines between near neighbours, all drifting a few pixels a second.
+    constellation: {
+      fps: 20,
+      maxScale: 1.5,
+      wash: true,
+      setup() {
+        const r = rand(11);
+        const n = Math.round(Math.min(90, Math.max(24, (W * H) / 21000)));
+        this.stars = Array.from({ length: n }, () => {
+          const a = r() * Math.PI * 2, v = 3 + r() * 6;
+          return { x: r() * W, y: r() * H, vx: Math.cos(a) * v, vy: Math.sin(a) * v, size: 0.8 + r() * 1.2, lit: r() < 0.18 };
+        });
+        this.at = null;
+      },
+      resize(pw, ph) {
+        for (const s of this.stars) { s.x *= W / pw; s.y *= H / ph; }
+      },
+      draw(t) {
+        const k = INTENSITY[settings.intensity] || 1;
+        const dt = this.at === null ? 0 : Math.min(0.5, t - this.at);
+        this.at = t;
+        const m = 20;
+        for (const s of this.stars) {
+          s.x += s.vx * dt; s.y += s.vy * dt;
+          if (s.x < -m) s.x += W + 2 * m; else if (s.x > W + m) s.x -= W + 2 * m;
+          if (s.y < -m) s.y += H + 2 * m; else if (s.y > H + m) s.y -= H + 2 * m;
+        }
+        ctx.clearRect(0, 0, W, H);
+        // Lines, bucketed by strength so a frame is a handful of strokes rather than one per pair
+        const D = 150, D2 = D * D, buckets = [[], [], [], []];
+        const st = this.stars;
+        for (let i = 0; i < st.length; i++) for (let j = i + 1; j < st.length; j++) {
+          const dx = st[i].x - st[j].x, dy = st[i].y - st[j].y, d2 = dx * dx + dy * dy;
+          if (d2 < D2) buckets[Math.min(3, Math.floor((1 - Math.sqrt(d2) / D) * 4))].push(i, j);
+        }
+        ctx.lineWidth = 0.75;
+        const lineA = (pal.dark ? 0.16 : 0.14) * k;
+        buckets.forEach((list, b) => {
+          if (!list.length) return;
+          ctx.strokeStyle = css(pal.ink, lineA * (b + 1) / 4);
+          ctx.beginPath();
+          for (let q = 0; q < list.length; q += 2) { ctx.moveTo(st[list[q]].x, st[list[q]].y); ctx.lineTo(st[list[q + 1]].x, st[list[q + 1]].y); }
+          ctx.stroke();
+        });
+        const dotA = (pal.dark ? 0.42 : 0.36) * k;
+        for (const lit of [false, true]) {
+          ctx.fillStyle = lit ? css(pal.accent, Math.min(0.9, dotA * 1.4)) : css(pal.ink, dotA);
+          ctx.beginPath();
+          for (const s of st) if (s.lit === lit) { ctx.moveTo(s.x + s.size, s.y); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); }
+          ctx.fill();
+        }
+      },
+    },
+
+    // A quiet dot grid; a soft crest rolls across it diagonally and lifts the dots it passes.
+    grid: {
+      fps: 20,
+      maxScale: 1.5,
+      wash: true,
+      setup() {},
+      draw(t) {
+        const k = INTENSITY[settings.intensity] || 1;
+        ctx.clearRect(0, 0, W, H);
+        const S = 26, ox = (W % S) / 2, oy = (H % S) / 2;
+        const baseA = (pal.dark ? 0.2 : 0.18) * k;
+        const lambda = Math.max(W, H) * 0.9; // one crest at a time across the window
+        const phase0 = (t * 0.035) % 1;
+        const levels = 5, paths = Array.from({ length: levels }, () => new Path2D());
+        for (let y = oy; y < H; y += S) for (let x = ox; x < W; x += S) {
+          // distance along the diagonal, as a fraction of a wavelength, measured from the moving crest
+          let f = ((x * 0.8 + y * 0.6) / lambda - phase0) % 1;
+          if (f < 0) f += 1;
+          const crest = Math.exp(-Math.pow((f - 0.5) / 0.09, 2));
+          const lvl = Math.min(levels - 1, Math.floor(crest * levels));
+          const r = 0.9 + crest * 0.9;
+          paths[lvl].moveTo(x + r, y);
+          paths[lvl].arc(x, y, r, 0, Math.PI * 2);
+        }
+        paths.forEach((p, lvl) => {
+          const c = lvl / (levels - 1);
+          ctx.fillStyle = css(mix(pal.ink, pal.accent, c * 0.85), baseA * (1 + c * 1.6));
+          ctx.fill(p);
+        });
+      },
+    },
+
+    // A still gradient: dusk light low in the window, the page's colour above. CSS only, drawn once.
+    dusk: { still: true },
+  };
+
+  // The static wash under the canvas kinds (and all of dusk): plain CSS gradients on the body, painted once.
+  function paintBody() {
+    const k = INTENSITY[settings.intensity] || 1;
+    const def = kind && KINDS[kind];
+    if (!pal || !def) return;
+    const [a, b, c] = pal.fields;
+    if (kind === 'dusk') {
+      const base = (pal.dark ? 0.3 : 0.26) * k;
+      document.body.style.background = [
+        `radial-gradient(120% 70% at 70% 115%, ${css(a, base)}, ${css(a, 0)} 70%)`,
+        `radial-gradient(90% 60% at 10% 105%, ${css(c, base * 0.8)}, ${css(c, 0)} 70%)`,
+        `linear-gradient(to bottom, ${css(pal.bg)} 30%, ${css(mix(pal.bg, b, 0.12 * k))})`,
+      ].join(', ');
+    } else if (def.wash) {
+      const base = (pal.dark ? 0.1 : 0.08) * k;
+      document.body.style.background = [
+        `radial-gradient(70% 60% at 85% 10%, ${css(a, base)}, ${css(a, 0)} 70%)`,
+        `radial-gradient(60% 60% at 10% 95%, ${css(c, base)}, ${css(c, 0)} 70%)`,
+        css(pal.bg),
+      ].join(', ');
+    } else document.body.style.background = css(pal.bg);
+  }
+
+  // ---------- running ----------
+
+  let timer = 0, raf = 0, clock = 0, lastNow = 0, started = false;
+  const moving = () => kind && !KINDS[kind].still && !reduced.matches;
+  const shown = () => visible && document.visibilityState !== 'hidden';
+
+  function drawNow() {
+    const def = KINDS[kind];
+    if (!def || def.still || !ctx) return;
+    def.draw(clock);
+  }
+
+  function tick() {
+    timer = 0;
+    raf = requestAnimationFrame((now) => {
+      raf = 0;
+      if (!running()) return;
+      const dt = lastNow ? Math.min(0.25, (now - lastNow) / 1000) : 0;
+      lastNow = now;
+      clock += dt * (SPEED[settings.speed] || 1);
+      drawNow();
+      timer = setTimeout(tick, 1000 / Math.min(30, KINDS[kind].fps));
+    });
+  }
+  const running = () => moving() && shown();
+
+  /** Starts or stops the loop to match what should happen now; a stopped loop keeps its last frame on screen. */
+  function sync() {
+    if (running()) {
+      if (!timer && !raf) { lastNow = 0; tick(); }
+    } else {
+      clearTimeout(timer); cancelAnimationFrame(raf); timer = raf = 0;
+      if (shown()) drawNow(); // reduced motion: one still frame
+    }
+  }
+
+  function setKind(id) {
+    kind = KINDS[id] ? id : 'aurora';
+    const def = KINDS[kind];
+    canvas.hidden = !!def.still;
+    if (!def.still) {
+      ctx = canvas.getContext('2d', { alpha: !def.opaque });
+      fit(def.maxScale);
+      def.setup();
+    }
+    // A fixed starting point that already looks composed, so the still frame of reduced motion is a good one.
+    clock = 40;
+    paintBody();
+    started = true;
+    sync();
+  }
+
+  function refreshColours() {
+    readPalette();
+    paintBody();
+    if (!running()) drawNow();
+  }
+
+  let resizeQueued = false;
+  window.addEventListener('resize', () => {
+    if (resizeQueued || !started) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => {
+      resizeQueued = false;
+      const def = KINDS[kind];
+      if (!def || def.still) return;
+      const pw = W, ph = H;
+      fit(def.maxScale);
+      if (def.resize && pw && ph) def.resize(pw, ph);
+      if (!running()) drawNow();
+    });
+  });
+
+  document.addEventListener('visibilitychange', sync);
+  reduced.addEventListener('change', sync);
+  // harness.js applies the new tokens in its own theme.changed handler, which runs before this one.
+  harness.on('theme.changed', () => refreshColours());
+  harness.on('visibility.changed', (v) => { visible = !(v && v.visible === false); sync(); });
+  harness.on('settings.changed', (s) => { settings = Object.assign({}, settings, s || {}); paintBody(); if (!running()) drawNow(); });
+
+  harness.ready.then(async (info) => {
+    visible = info.visible !== false;
+    try { settings = Object.assign({}, settings, info.settings || {}, await harness.settings.get()); } catch (e) { /* the defaults */ }
+    readPalette();
+    setKind(info.view && info.view.id);
+  });
+</script>
+</body>
+</html>

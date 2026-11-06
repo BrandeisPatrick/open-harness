@@ -441,6 +441,18 @@ export class SessionStore {
     return s;
   }
 
+  /**
+   * Takes in a session that was not loaded from this store's folder (brought back from the trash, or rebuilt from
+   * its history log) and writes it. Refused when a session with that id exists.
+   */
+  adopt(s: Session): Session {
+    if (!s?.id || !Array.isArray(s.messages)) throw new Error('Not a session.');
+    if (this.sessions.has(s.id)) throw new Error(`A session ${s.id} already exists.`);
+    this.sessions.set(s.id, s);
+    this.save(s, false);
+    return s;
+  }
+
   delete(id: string): void {
     const s = this.sessions.get(id);
     if (s) this.notify(s, { kind: 'delete' });

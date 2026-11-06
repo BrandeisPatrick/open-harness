@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 Silo Harness (the new name of Open Harness) now works with whichever model service you use, and can be set up from a file or the command line, by you or by a coding agent such as Claude Code.
 

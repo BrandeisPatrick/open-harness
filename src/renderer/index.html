@@ -18,17 +18,24 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-top drag"></div>
-      <div class="sidebar-actions">
-        <button id="new-session-btn" class="new-session" data-tip="New session" data-tip-kbd="⌘ N"><span class="new-session-icon" data-icon="plus"></span><span>New session</span></button>
-        <label class="search-field">
-          <span class="search-icon" data-icon="search"></span>
-          <input id="session-search" placeholder="Search sessions" spellcheck="false" autocomplete="off">
-        </label>
-      </div>
+      <nav class="sidebar-nav" aria-label="Navigation">
+        <button type="button" id="new-session-btn" class="nav-row"><span class="nav-icon" data-icon="plus"></span><span class="nav-label">New session</span><kbd class="nav-kbd">⌘N</kbd></button>
+        <div class="nav-search" id="nav-search">
+          <button type="button" id="search-row" class="nav-row" aria-controls="session-search"><span class="nav-icon" data-icon="search"></span><span class="nav-label">Search</span><kbd class="nav-kbd">⌘F</kbd></button>
+          <label class="search-field" id="search-field" hidden>
+            <span class="search-icon" data-icon="search"></span>
+            <input id="session-search" placeholder="Search sessions" spellcheck="false" autocomplete="off" aria-label="Search sessions">
+            <button type="button" id="search-clear" class="icon-btn sm search-clear" aria-label="Clear search" data-icon="x" data-icon-size="14" hidden></button>
+          </label>
+        </div>
+        <button type="button" id="scheduled-row" class="nav-row" hidden><span class="nav-icon" data-icon="clock"></span><span class="nav-label">Scheduled</span></button>
+        <button type="button" id="customize-row" class="nav-row" hidden><span class="nav-icon" data-icon="sliders"></span><span class="nav-label">Customize</span></button>
+      </nav>
       <nav id="session-list" class="session-list" aria-label="Sessions"></nav>
       <div class="sidebar-foot">
-        <button id="settings-btn" class="foot-row"><span data-icon="settings"></span><span class="foot-label">Settings</span><kbd>⌘,</kbd></button>
-        <button id="shortcuts-btn" class="icon-btn" aria-label="Keyboard shortcuts" data-tip="Keyboard shortcuts" data-tip-kbd="⌘ /" data-icon="keyboard"></button>
+        <button type="button" id="model-chip" class="model-chip" data-tip="Model settings"><span class="model-mark" id="model-mark"></span><span class="model-label" id="model-label">OpenAgent</span></button>
+        <button type="button" id="shortcuts-btn" class="icon-btn" aria-label="Keyboard shortcuts" data-tip="Keyboard shortcuts" data-tip-kbd="⌘ /" data-icon="keyboard"></button>
+        <button type="button" id="settings-btn" class="icon-btn" aria-label="Settings" data-tip="Settings" data-tip-kbd="⌘ ," data-icon="settings"></button>
       </div>
     </aside>
 
@@ -57,11 +64,11 @@
               <div id="recent-dirs" class="recent-dirs" role="group" aria-labelledby="recent-dirs-label" hidden></div>
               <div class="empty-suggestions" id="empty-suggestions"></div>
             </div>
+            <div id="task-list" class="task-list" role="region" aria-label="Task list" hidden></div>
           </div>
 
           <div class="composer-wrap">
             <button type="button" id="jump-latest" class="jump-latest" hidden><span data-icon="arrow-down" data-icon-size="14"></span><span>Jump to latest</span></button>
-            <div id="task-list" class="task-list" role="region" aria-label="Task list" hidden></div>
             <div id="queue" class="queue" role="list" aria-label="Queued messages" hidden></div>
             <div id="conn-banner" class="conn-banner" role="status" hidden>
               <span data-icon="circle-alert" aria-hidden="true"></span>

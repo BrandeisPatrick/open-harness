@@ -1,1 +1,175 @@
-/* Styles for the sidebar: navigation rows, session groups and the session tree. Tokens come from styles.css. */
+/* Styles for the sidebar: navigation rows, session groups and the session tree, search, the footer.
+   Tokens come from styles.css; the few below are the sidebar's own (row fills, the tree's hairline, the unread dot). */
+
+.sidebar {
+  --side-hover: rgba(31, 30, 29, 0.05);
+  --side-active: rgba(31, 30, 29, 0.085);
+  --tree-line: #d3d2cc; /* opaque: translucent lines darken where an elbow meets a rail */
+  --unread-dot: #2f7ae5;
+  /* Row geometry: height, the left padding of a top-level row, one level of indent */
+  --row-h: 32px;
+  --pad: 10px;
+  --step: 20px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sidebar {
+    --side-hover: rgba(222, 220, 208, 0.05);
+    --side-active: rgba(222, 220, 208, 0.1);
+    --tree-line: #403f3c;
+    --unread-dot: #4c94f5;
+  }
+}
+:root[data-theme="dark"] .sidebar {
+  --side-hover: rgba(222, 220, 208, 0.05);
+  --side-active: rgba(222, 220, 208, 0.1);
+  --tree-line: #403f3c;
+  --unread-dot: #4c94f5;
+}
+
+/* ---------- Navigation rows ---------- */
+.sidebar-nav { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 0 8px 4px; }
+.nav-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: var(--row-h); padding: 0 8px 0 var(--pad);
+  border-radius: 8px; color: var(--text-200); font-size: 14px; line-height: 20px; text-align: left;
+  transition: background-color 0.1s, color 0.1s;
+}
+.nav-row[hidden] { display: none; }
+.nav-row:hover { background: var(--side-hover); color: var(--text-100); }
+.nav-row:active { background: var(--side-active); }
+.nav-row:focus-visible { outline-offset: -2px; }
+.nav-icon { display: inline-flex; flex: none; color: var(--text-200); }
+.nav-row:hover .nav-icon { color: var(--text-100); }
+.nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-kbd { flex: none; font: inherit; font-size: 12px; line-height: 16px; color: var(--text-400); opacity: 0; transition: opacity 0.1s; }
+.nav-row:hover .nav-kbd, .nav-row:focus-visible .nav-kbd { opacity: 1; }
+
+/* Search: the row turns into the field in place, same height */
+.nav-search { display: flex; flex-direction: column; }
+.search-field {
+  display: flex; align-items: center; gap: 10px; height: var(--row-h); padding: 0 4px 0 var(--pad);
+  border: 1px solid var(--border); border-radius: 8px; background: var(--field-bg);
+  color: var(--text-400); cursor: text; transition: border-color 0.12s;
+}
+.search-field:focus-within { border-color: var(--accent-line); }
+.search-field[hidden] { display: none; }
+.search-field .search-icon { display: inline-flex; flex: none; margin-left: -1px; }
+.search-field input { flex: 1; min-width: 0; height: 100%; border: none; background: transparent; padding: 0; outline: none; font-size: 14px; color: var(--text-100); }
+.search-field input::placeholder { color: var(--text-400); }
+.search-clear { flex: none; color: var(--text-400); }
+.search-clear[hidden] { display: none; }
+
+/* ---------- The session list ---------- */
+.session-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.session-empty { padding: 8px var(--pad); font-size: 13px; line-height: 18px; color: var(--text-400); }
+
+/* Group labels: small, muted, normal case, a tiny chevron right after the text */
+.session-group {
+  display: flex; align-items: center; gap: 4px; flex: none; align-self: flex-start; max-width: 100%;
+  height: 28px; margin-top: 10px; padding: 0 6px 0 var(--pad); border-radius: 6px;
+  font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-400);
+  transition: color 0.1s;
+}
+.session-group:first-child { margin-top: 0; }
+.session-group:hover { color: var(--text-200); }
+.session-group:focus-visible { outline-offset: -2px; }
+.group-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-chev { display: inline-flex; flex: none; transition: transform 0.15s ease; }
+.session-group.collapsed .group-chev { transform: rotate(-90deg); }
+
+/* A session row: its title, the full width, a filled rounded rectangle when selected (no border, no shadow) */
+.session-item {
+  position: relative; display: flex; align-items: center; flex: none;
+  height: var(--row-h); padding: 0 4px 0 calc(var(--pad) + var(--indent, 0) * var(--step));
+  border-radius: 8px; color: var(--text-200); font-size: 14px; line-height: 20px; cursor: pointer;
+  transition: background-color 0.1s, color 0.1s;
+}
+.session-item:hover { background: var(--side-hover); color: var(--text-100); }
+.session-item:active { background: var(--side-active); }
+.session-item.active { background: var(--side-active); color: var(--text-100); }
+.session-item:focus-visible { outline-offset: -2px; }
+.session-item .label { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A parent: a small chevron right after its title (collapses its children) */
+.tree-toggle {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 18px; height: 18px; margin-left: 2px; border-radius: 4px; color: var(--text-400);
+  transition: transform 0.15s ease, background-color 0.1s, color 0.1s;
+}
+.tree-toggle:hover { background: var(--side-active); color: var(--text-100); }
+.session-item.collapsed .tree-toggle { transform: rotate(-90deg); }
+
+/* Merged into its parent: dimmed, with a small tag */
+.session-item.merged .label { opacity: 0.55; }
+.merged-tag {
+  flex: none; margin-left: 6px; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px;
+  font-size: 11px; line-height: 15px; color: var(--text-400);
+}
+
+/* The right end: one indicator, the hover menu in its place */
+.session-item .trail { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; flex: none; min-width: 24px; height: 24px; margin-left: auto; padding-left: 6px; color: var(--text-400); }
+.session-item .trail[hidden] { display: none; }
+.trail-meta { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 24px; height: 24px; color: var(--text-400); }
+.trail-meta .icon { flex: none; }
+.family-count { font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.trail-meta.family.hot { color: var(--accent); }
+.session-item .row-more { display: none; color: var(--text-400); }
+.session-item:hover .row-more, .session-item:focus-within .row-more, .session-item.menu-open .row-more, .session-item .row-more[aria-expanded="true"] { display: inline-flex; }
+.session-item:hover .trail-meta, .session-item:focus-within .trail-meta, .session-item.menu-open .trail-meta { display: none; }
+.session-item .row-more:hover { background: var(--side-active); color: var(--text-100); }
+.session-item .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.session-item .status-dot.attention { background: var(--accent); }
+.session-item .status-dot.unread { background: var(--unread-dot); }
+/* Sidebar spinners turn on their own variable (sidebar.ts), so a session running in the background spins too */
+.session-item .spinner { transform: rotate(var(--side-spin, 0deg)); }
+
+/* Rename in place */
+.session-item.renaming { background: var(--field-bg); box-shadow: inset 0 0 0 1px var(--accent-line), 0 0 0 2px var(--field-ring); }
+.rename-input { flex: 1; min-width: 0; height: 24px; border: none; outline: none; background: transparent; padding: 0; font-size: 14px; color: var(--text-100); }
+
+/* The tree's connectors, hairlines: a child's elbow comes down from its parent's text edge and turns into the row;
+   a rail carries an ancestor's line past this row to a later sibling. Lines start 2 px above the row (the gap). */
+.tree-line { position: absolute; pointer-events: none; left: calc(var(--pad) + (var(--level) - 1) * var(--step) + 6px); }
+.tree-line.rail { top: -2px; bottom: 0; border-left: 1px solid var(--tree-line); }
+.tree-line.elbow {
+  top: -2px; height: calc(var(--row-h) / 2 + 2px); width: calc(var(--step) - 10px);
+  border-left: 1px solid var(--tree-line); border-bottom: 1px solid var(--tree-line); border-bottom-left-radius: 6px;
+}
+/* More siblings follow: the line runs on to the bottom of the row */
+.tree-line.elbow.more::after {
+  content: ''; position: absolute; left: -1px; top: calc(100% - 6px); height: calc(var(--row-h) / 2 + 6px);
+  border-left: 1px solid var(--tree-line);
+}
+
+/* ---------- Search results ---------- */
+.search-result {
+  display: flex; flex-direction: column; gap: 2px; flex: none; padding: 6px 8px 7px var(--pad);
+  border-radius: 8px; color: var(--text-200); cursor: pointer; transition: background-color 0.1s, color 0.1s;
+}
+.search-result:hover { background: var(--side-hover); color: var(--text-100); }
+.search-result.active { background: var(--side-active); color: var(--text-100); }
+.search-result:focus-visible { outline-offset: -2px; }
+.result-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.result-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 20px; }
+.result-date { flex: none; font-size: 12px; line-height: 16px; color: var(--text-400); font-variant-numeric: tabular-nums; }
+.result-snippet { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--text-400); }
+.search-result mark { background: var(--accent-soft); color: var(--text-100); border-radius: 2px; padding: 0 1px; }
+.session-empty.searching { font-size: 12px; line-height: 16px; }
+
+/* ---------- Footer, pinned: the model chip at the left, shortcuts and settings at the right ---------- */
+.sidebar-foot { display: flex; align-items: center; gap: 2px; flex: none; padding: 8px; border-top: 1px solid var(--border-subtle); }
+.model-chip {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; height: var(--row-h); padding: 0 8px 0 6px;
+  border-radius: 8px; color: var(--text-200); font-size: 13px; line-height: 18px; text-align: left;
+  transition: background-color 0.1s, color 0.1s;
+}
+.model-chip:hover { background: var(--side-hover); color: var(--text-100); }
+.model-chip:active { background: var(--side-active); }
+.model-mark { display: inline-flex; flex: none; }
+.model-mark .brand-mark { border-radius: 50%; overflow: hidden; }
+.model-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-foot .icon-btn { color: var(--text-400); }
+.sidebar-foot .icon-btn:hover { background: var(--side-hover); color: var(--text-100); }
+
+@media (prefers-reduced-motion: reduce) {
+  .group-chev, .tree-toggle { transition: none; }
+}

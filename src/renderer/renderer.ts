@@ -52,6 +52,7 @@ import { createMcpPanel, mcpCardHtml, mockMcpSource, type MockMcpSource } from '
 import { appendWithMentions, createMentionPicker, normalizeMention } from './mentions.js';
 import { createRulesPanel, mockRulesSource } from './rules.js';
 import { cleanTasks, createTaskList } from './tasks.js';
+import { createSidebar, type SidebarView } from './sidebar.js';
 import { createComposerHistory, createDoublePress, createInstructionFiles, memoryText, oneLine } from './composer.js';
 import { createRecentRow, dirName, recentChoices } from './recent.js';
 import {
@@ -156,8 +157,6 @@ const modelBtn = $<HTMLButtonElement>('model-btn');
 const cwdBtn = $<HTMLButtonElement>('cwd-btn');
 const cwdLabel = $('cwd-label');
 const sessionTitle = $('session-title');
-const sessionList = $('session-list');
-const sessionSearch = $<HTMLInputElement>('session-search');
 const newSessionBtn = $<HTMLButtonElement>('new-session-btn');
 const slashMenu = $('slash-menu');
 const mentionMenu = $('mention-menu');
@@ -255,8 +254,8 @@ const queueList = createQueueList({
   onChange: () => syncQueueHeight(),
 });
 
-/** The agent's task list, pinned above the queue and the status line (tasks_updated, SessionMeta.tasks) */
-const taskList = createTaskList({ root: taskListEl, onChange: () => syncTaskHeight() });
+/** The agent's task list, a card that is always last in the conversation (tasks_updated, SessionMeta.tasks) */
+const taskList = createTaskList({ root: taskListEl, home: messagesEl, after: emptyState, onChange: () => scrollToBottom() });
 
 /** A task list from an event or the debug hook. */
 function showTasks(tasks: unknown): void {
@@ -2161,18 +2160,9 @@ function syncQueueHeight(): void {
 }
 new ResizeObserver(() => syncQueueHeight()).observe(queueEl);
 
-/** The task card floats above the queue and the status line; the transcript leaves room for it too. */
-function syncTaskHeight(): void {
-  const h = taskListEl.hidden ? 0 : Math.ceil(taskListEl.getBoundingClientRect().height);
-  transcriptWrap.style.setProperty('--tasks-h', `${h}px`);
-  if (stick) scrollToBottom();
-}
-new ResizeObserver(() => syncTaskHeight()).observe(taskListEl);
-
+/** ⌘F: the sidebar's Search row turns into the field (the sidebar opens first when collapsed). */
 function focusSearch(): void {
-  if (shell.classList.contains('sidebar-collapsed')) toggleSidebar();
-  sessionSearch.focus();
-  sessionSearch.select();
+  sidebarView?.openSearch();
 }
 
 // Esc Esc between runs opens the rewind confirmation. Every Esc is seen here first; only the ones that reach the
@@ -2776,14 +2766,11 @@ sessionTitle.addEventListener('keydown', (e) => {
 
 // ---------- Sessions ----------
 
-function groupLabel(ts: number): string {
-  const d = new Date(ts);
-  const today = new Date();
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  if (ts >= startOfToday) return 'Today';
-  if (ts >= startOfToday - 86_400_000) return 'Yesterday';
-  if (ts >= startOfToday - 6 * 86_400_000) return 'Previous 7 days';
-  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+/** The sidebar's list (sidebar.ts); set up under // [feature:sidebar]. */
+let sidebarView: SidebarView | null = null;
+
+function renderSessionList(): void {
+  sidebarView?.render();
 }
 
 /** Re-reads the session list; returns the meta of the session on screen. */
@@ -2830,176 +2817,6 @@ function onSessionChanged(meta: SessionMeta): void {
   applySessionPlan(meta);
   void refreshSessions();
 }
-
-// Inline rename in the sidebar survives list re-renders (e.g. the switch triggered by the first click of a double-click).
-let rowRename: { id: string; value: string; fresh: boolean } | null = null;
-
-function mountRowRename(row: HTMLElement): void {
-  if (!rowRename) return;
-  const state = rowRename;
-  const label = row.querySelector('.label');
-  if (!label) return;
-  row.classList.add('renaming');
-  const input = document.createElement('input');
-  input.className = 'rename-input';
-  input.value = state.value;
-  input.setAttribute('aria-label', 'Session title');
-  input.spellcheck = false;
-  label.replaceWith(input);
-  row.querySelector('.trail')?.setAttribute('hidden', '');
-  input.focus();
-  if (state.fresh) input.select();
-  state.fresh = false;
-  const done = async (save: boolean) => {
-    if (rowRename !== state) return;
-    rowRename = null;
-    const next = input.value.replace(/\s+/g, ' ').trim();
-    const before = sessions.find((s) => s.id === state.id)?.title ?? '';
-    renderSessionList();
-    if (save && next && next !== before) {
-      const fresh = sessionList.querySelector<HTMLElement>(`.session-item[data-id="${CSS.escape(state.id)}"]`);
-      await renameSession(state.id, next, fresh ?? sessionList);
-    }
-  };
-  input.addEventListener('input', () => (state.value = input.value));
-  input.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      void done(true);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      void done(false);
-    }
-  });
-  input.addEventListener('blur', () =>
-    setTimeout(() => {
-      if (input.isConnected) void done(true);
-    }, 0),
-  );
-  input.addEventListener('click', (e) => e.stopPropagation());
-  input.addEventListener('dblclick', (e) => e.stopPropagation());
-}
-
-function startRowRename(id: string): void {
-  const meta = sessions.find((s) => s.id === id);
-  if (!meta) return;
-  rowRename = { id, value: meta.title, fresh: true };
-  renderSessionList();
-}
-
-function openSessionMenu(m: SessionMeta, anchor: HTMLElement | { x: number; y: number }, row: HTMLElement): void {
-  row.classList.add('menu-open');
-  // A running session is not forked or deleted (stop it first); any other one can be, whatever else runs.
-  const busy = statusOf(m.id).running;
-  openMenu(
-    [
-      {
-        items: [
-          { label: 'Rename', icon: 'pencil', hint: 'F2', onSelect: () => startRowRename(m.id) },
-          { label: 'Fork', icon: 'git-branch', disabled: busy, onSelect: () => void forkSession(m.id) },
-        ],
-      },
-      { items: [{ label: 'Delete', icon: 'trash', danger: true, disabled: busy, onSelect: () => void deleteSession(m.id) }] },
-    ],
-    { anchor, placement: 'bottom-start', minWidth: 200, onClose: () => row.classList.remove('menu-open') },
-  );
-}
-
-function renderSessionList(): void {
-  const q = sessionSearch.value.trim().toLowerCase();
-  sessionList.innerHTML = '';
-  let lastGroup = '';
-  let shown = 0;
-  for (const m of sessions) {
-    if (q && !m.title.toLowerCase().includes(q)) continue;
-    shown++;
-    const group = groupLabel(m.updatedAt);
-    if (group !== lastGroup) {
-      const g = document.createElement('div');
-      g.className = 'session-group';
-      g.textContent = group;
-      sessionList.appendChild(g);
-      lastGroup = group;
-    }
-    const st = statusOf(m.id);
-    const isRunning = st.running;
-    const row = document.createElement('div');
-    row.className = 'session-item' + (m.id === currentSessionId ? ' active' : '') + (isRunning ? ' running' : '');
-    row.dataset.id = m.id;
-    row.tabIndex = 0;
-    row.setAttribute('role', 'button');
-    if (m.id === currentSessionId) row.setAttribute('aria-current', 'true');
-    // One indicator: running, else waiting for the user, else unread, else the fork mark.
-    const meta = isRunning
-      ? `<span class="trail-meta"><span class="spinner sm" aria-label="Running"></span>${st.attention ? '<span class="status-dot attention" aria-label="Waiting for you"></span>' : ''}</span>`
-      : st.attention
-        ? `<span class="trail-meta" data-tip="${st.attention === 'plan' ? 'Plan waiting for review' : 'Waiting for your approval'}"><span class="status-dot attention" aria-label="Waiting for you"></span></span>`
-        : st.unread && m.id !== currentSessionId
-          ? '<span class="trail-meta" data-tip="Finished while you were away"><span class="status-dot unread" aria-label="Unread"></span></span>'
-          : m.forkedFrom
-        ? `<span class="trail-meta fork-mark" data-tip="Forked session">${icon('git-branch', 14)}</span>`
-        : '';
-    row.innerHTML =
-      `<span class="label">${escapeHtml(m.title)}</span>` +
-      `<span class="trail">${meta}<button type="button" class="icon-btn sm row-more" aria-label="Session actions" aria-haspopup="menu" data-tip="More">${icon('more')}</button></span>`;
-    row.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('.row-more, .rename-input')) return;
-      void switchSession(m.id);
-    });
-    row.addEventListener('dblclick', (e) => {
-      if ((e.target as HTMLElement).closest('.row-more, .rename-input')) return;
-      e.preventDefault();
-      startRowRename(m.id);
-    });
-    row.addEventListener('keydown', (e) => {
-      if (e.target !== row) return;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        void switchSession(m.id);
-      } else if (e.key === 'F2') {
-        e.preventDefault();
-        e.stopPropagation();
-        startRowRename(m.id);
-      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const rows = [...sessionList.querySelectorAll<HTMLElement>('.session-item')];
-        rows[rows.indexOf(row) + (e.key === 'ArrowDown' ? 1 : -1)]?.focus();
-      }
-    });
-    row.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      openSessionMenu(m, { x: e.clientX, y: e.clientY }, row);
-    });
-    const more = row.querySelector<HTMLButtonElement>('.row-more')!;
-    more.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (menuAnchoredTo(more)) return closeMenu();
-      openSessionMenu(m, more, row);
-    });
-    sessionList.appendChild(row);
-    if (rowRename?.id === m.id) mountRowRename(row);
-  }
-  if (!shown) {
-    const empty = document.createElement('div');
-    empty.className = 'session-empty';
-    empty.textContent = q ? 'No sessions match.' : 'Sessions you start appear here.';
-    sessionList.appendChild(empty);
-  }
-}
-sessionSearch.addEventListener('input', renderSessionList);
-sessionSearch.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    e.stopPropagation();
-    if (sessionSearch.value) {
-      sessionSearch.value = '';
-      renderSessionList();
-    } else inputEl.focus();
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    sessionList.querySelector<HTMLElement>('.session-item')?.focus();
-  }
-});
 
 /** Bumped by every showSession, so the slower of two quick switches gives way */
 let showSeq = 0;
@@ -3956,6 +3773,27 @@ window.__oc_debug = {
 // [feature:settings]
 
 // [feature:sidebar]
+sidebarView = createSidebar({
+  root: $('sidebar'),
+  sessions: () => sessions,
+  currentId: () => currentSessionId,
+  status: statusOf,
+  open: switchSession,
+  fork: forkSession,
+  remove: deleteSession,
+  rename: renameSession,
+  refresh: refreshSessions,
+  openSettings,
+  confirm: confirmAction,
+  showError: showInlineError,
+  cleanError,
+  flash: (text) => flashStatus(text),
+  focusComposer: () => inputEl.focus(),
+  expand: () => {
+    if (shell.classList.contains('sidebar-collapsed')) toggleSidebar();
+  },
+});
+Object.assign(window.__oc_debug!, { sidebar: sidebarView.debug });
 
 // [feature:tasks]
 

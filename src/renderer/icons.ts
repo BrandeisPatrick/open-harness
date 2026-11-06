@@ -75,6 +75,17 @@ const ICONS = {
   // Setup strip: the model server (two stacked units with their lights) and a download (arrow into a tray)
   server: `<rect x="2.25" y="2.5" width="11.5" height="4.75" rx="1.25"/><rect x="2.25" y="8.75" width="11.5" height="4.75" rx="1.25"/>${dot(4.75, 4.875, 0.8)}${dot(4.75, 11.125, 0.8)}`,
   download: '<path d="M8 2.25v8M4.75 7L8 10.25 11.25 7M2.75 11.25v1c0 .83.67 1.5 1.5 1.5h7.5c.83 0 1.5-.67 1.5-1.5v-1"/>',
+  // sidebar
+  // Navigation rows: Scheduled (a clock), Customize (two sliders); row glyphs: a sub-session (an arrow turning into
+  // an indented line), Merge (two branches joining); export (a page with an arrow out). Task card: to do (a dashed
+  // circle), done (a filled circle with the tick cut out in the card's colour).
+  clock: '<circle cx="8" cy="8" r="6"/><path d="M8 4.75V8l2.25 1.5"/>',
+  sliders: `<path d="M2.5 5h4.25M10.25 5h3.25M2.5 11h1.75M7.75 11h5.75"/><circle cx="8.5" cy="5" r="1.75"/><circle cx="6" cy="11" r="1.75"/>`,
+  'sub-session': '<path d="M4 2.5v5.25c0 1.1.9 2 2 2h6.5M10 7.25l2.5 2.5-2.5 2.5"/>',
+  'git-merge': '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="9" r="1.5"/><path d="M4.5 5v6M4.5 5.5c0 2 1.5 3.5 3.5 3.5h2"/>',
+  'file-export': `<path d="${PAGE}"/><path d="M9 1.75V6h4.25M8 13V8.5M6 10.25L8 8.25l2 2"/>`,
+  'circle-dashed': '<circle cx="8" cy="8" r="5.5" stroke-dasharray="2.4 2.2"/>',
+  'circle-check-filled': '<circle cx="8" cy="8" r="6.25" fill="currentColor" stroke="none"/><path d="M5.5 8.25l1.75 1.75 3.25-3.5" style="stroke: var(--task-check, #fff)"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

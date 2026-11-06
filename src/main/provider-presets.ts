@@ -62,12 +62,12 @@ type Field = { check: Check; types?: ProviderType[] };
 export const ENTRY_FIELDS: Record<keyof NamedProviderConfig, Field> = {
   type: { check: describe(oneOf(...PROVIDER_TYPES), 'The kind of service. Each type knows its base URL, its usual key variable and any headers.') },
   label: { check: describe(nonEmpty, "How the window names it (default: the type's name).") },
-  baseURL: { check: describe(httpUrl, "The OpenAI-compatible endpoint; overrides the type's. Required for openai-compatible.") },
+  baseURL: { check: describe(httpUrl, "The OpenAI-compatible endpoint; overrides the type's. Required for openai-compatible. In a project's settings.json only for services that take no key (ollama, lmstudio, or openai-compatible without a key).") },
   apiKey: { check: describe(nonEmpty, "The key itself. Only in your own settings.json or config.json, never in a project's file; prefer apiKeyEnv.") },
-  apiKeyEnv: { check: describe(envName, "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY.") },
+  apiKeyEnv: { check: describe(envName, "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY. A project's settings.json may name one only for a type with its own documented address.") },
   model: { check: describe(nonEmpty, 'The model to run, as the service names it.') },
   models: { check: describe(stringList, 'Models to offer in the model picker.') },
-  headers: { check: describe(headerMap, 'Extra request headers; ${VAR} is expanded in the values.') },
+  headers: { check: describe(headerMap, "Extra request headers; ${VAR} is expanded in the values (not in a project's settings.json).") },
   contextWindow: { check: describe(positiveInt, "The model's context window in tokens (default 128000); drives the context meter and auto-compaction.") },
   maxOutput: { check: describe(positiveInt, 'Most tokens one reply may have, sent as max_tokens (default: the service decides).') },
   virtualKey: { check: describe(nonEmpty, 'portkey: a virtual key (x-portkey-virtual-key).'), types: ['portkey'] },
@@ -129,7 +129,23 @@ export function validateProviderEntry(name: string, raw: unknown, opts: EntryOpt
       problems.push({ key, message: "a project's settings.json may not hold a key; name the variable with apiKeyEnv instead" });
       continue;
     }
-    const v = expandDeep(value);
+    // An openai-compatible entry always has an address of its own: from a project it may not take a key at all.
+    if (field === 'apiKeyEnv' && opts.scope === 'project' && type === 'openai-compatible') {
+      problems.push({ key, message: "a project's settings.json may not give a key to an address of its own; define this provider in your own settings.json and select it here with \"provider\"" });
+      continue;
+    }
+    let rawValue = value;
+    if (field === 'headers' && opts.scope === 'project' && isRecord(value)) {
+      // Checked before ${VAR} is expanded: a variable in a header would carry a secret to wherever the entry points.
+      const kept: Record<string, unknown> = {};
+      for (const [h, hv] of Object.entries(value)) {
+        if (typeof hv === 'string' && hv.includes('${')) problems.push({ key: `${key}.${h}`, message: "a project's settings.json may not put a variable in a header" });
+        else kept[h] = hv;
+      }
+      if (!Object.keys(kept).length) continue;
+      rawValue = kept;
+    }
+    const v = expandDeep(rawValue);
     const msg = spec.check(v);
     if (msg) {
       problems.push({ key, message: msg });
@@ -140,6 +156,14 @@ export function validateProviderEntry(name: string, raw: unknown, opts: EntryOpt
   if (out.apiKey !== undefined && out.apiKeyEnv !== undefined) problems.push({ key: `${base}.apiKeyEnv`, message: 'both apiKey and apiKeyEnv are set; apiKey is used' });
   if (type === 'openai-compatible' && !out.baseURL) {
     problems.push({ key: `${base}.baseURL`, message: 'type openai-compatible needs a baseURL, e.g. "https://gateway.example.com/v1"' });
+    return { entry: null, problems };
+  }
+  // Trusting a project's file is not consent to sending your key where it says: a service that takes a key (the
+  // type's own variable, or one the entry names) keeps its documented address when the entry comes from a project.
+  // Ollama and LM Studio take no key, so their address may be set there.
+  const keyed = PRESETS[type].keyRequired || out.apiKeyEnv !== undefined;
+  if (opts.scope === 'project' && keyed && raw.baseURL !== undefined && type !== 'openai-compatible') {
+    problems.push({ key: `${base}.baseURL`, message: "a project's settings.json may not point a keyed service at an address of its own; define this provider in your own settings.json and select it here with \"provider\"" });
     return { entry: null, problems };
   }
   return { entry: out as unknown as NamedProviderConfig, problems };

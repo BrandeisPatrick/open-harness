@@ -261,7 +261,7 @@
           "baseURL": {
             "type": "string",
             "pattern": "^https?://",
-            "description": "The OpenAI-compatible endpoint; overrides the type's. Required for openai-compatible."
+            "description": "The OpenAI-compatible endpoint; overrides the type's. Required for openai-compatible. In a project's settings.json only for services that take no key (ollama, lmstudio, or openai-compatible without a key)."
           },
           "apiKey": {
             "type": "string",
@@ -271,7 +271,7 @@
           "apiKeyEnv": {
             "type": "string",
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-            "description": "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY."
+            "description": "The environment variable that holds the key (the env block of settings.json counts). Default: the type's, e.g. OPENROUTER_API_KEY. A project's settings.json may name one only for a type with its own documented address."
           },
           "model": {
             "type": "string",
@@ -294,7 +294,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Extra request headers; ${VAR} is expanded in the values."
+            "description": "Extra request headers; ${VAR} is expanded in the values (not in a project's settings.json)."
           },
           "contextWindow": {
             "type": "integer",

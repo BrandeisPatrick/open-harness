@@ -32,6 +32,7 @@ const SCRIPTS = [
   { name: 'carry-over', shots: 'none' },
   { name: 'compaction', needsApi: true },
   { name: 'subagents' },
+  { name: 'names' },
   { name: 'tool-rows' },
   { name: 'mods', shots: 'env' },
   { name: 'mods-look', shots: 'env' },

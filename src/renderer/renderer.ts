@@ -474,7 +474,8 @@ function addUserMessage(text: string, images: BubbleImage[] = [], mentions?: str
 function addSystemMessage(text: string, kind: 'info' | 'error' | 'notice' = 'info'): HTMLElement {
   const el = document.createElement('div');
   el.className = `msg system${kind === 'info' ? '' : ` ${kind}`}`;
-  el.innerHTML = `${icon(kind === 'error' ? 'circle-alert' : 'info', kind === 'error' ? 16 : 14)}<span>${escapeHtml(text)}</span>`;
+  // Line breaks kept: /sessions, /merge and a name that fits several sessions answer with one session per line
+  el.innerHTML = `${icon(kind === 'error' ? 'circle-alert' : 'info', kind === 'error' ? 16 : 14)}<span>${escapeHtml(text).replace(/\n/g, '<br>')}</span>`;
   addNode(el);
   return el;
 }

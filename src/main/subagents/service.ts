@@ -491,7 +491,8 @@ export class Subagents {
   searchText(id: string, query: string, max = 15): string {
     const me = this.session(id);
     const key = unquote(query);
-    const hits = this.matches(key, me.id);
+    // This session is the header line, not a hit (its own first message often holds the name it is asked about)
+    const hits = this.matches(key, me.id).filter((s) => s.id !== me.id);
     const out: string[] = [`This session: ${me.id} "${me.title}"`];
     if (!hits.length) {
       // Nothing at any tier: find() words the refusal with the closest names (or finds an empty session by its id)

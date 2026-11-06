@@ -1,1 +1,128 @@
 /* Styles for the mod host: the rail, mod tabs, the composer strip, backgrounds. Tokens come from styles.css. */
+
+/* ---------- Top bar: icon-only buttons (rail, Terminal, Diff, Browser, ⋯) ---------- */
+.top-btn { position: relative; }
+.top-btn > span:first-child { display: inline-flex; }
+.top-btn.active, .top-btn[aria-pressed="true"] { background: var(--bg-300); color: var(--text-100); }
+.top-btn.active:hover, .top-btn[aria-pressed="true"]:hover { background: var(--bg-400); }
+.top-btn[aria-expanded="true"] { background: var(--hover); color: var(--text-100); }
+.top-btn .count-badge {
+  position: absolute; top: 0; right: -2px; min-width: 15px; height: 15px; padding: 0 4px; margin: 0;
+  background: var(--text-200); color: var(--bg-100); font-size: 10px; line-height: 15px;
+  box-shadow: 0 0 0 1.5px var(--bg-100); pointer-events: none;
+}
+.top-btn .busy-dot { position: absolute; top: 4px; right: 4px; box-shadow: 0 0 0 1.5px var(--bg-100); pointer-events: none; }
+
+/* ---------- The rail: sections between the chat and the side pane ---------- */
+.mod-rail {
+  position: relative; flex: 0 1 var(--rail-w, 300px); width: var(--rail-w, 300px); min-width: 240px; min-height: 0;
+  display: flex; flex-direction: column; background: var(--bg-100);
+}
+.mod-rail-edge { position: absolute; top: 0; bottom: 0; left: -3px; width: 6px; z-index: 5; cursor: col-resize; }
+.mod-rail-edge::before { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: var(--border-subtle); }
+.mod-rail-edge::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background-color 0.12s; }
+.mod-rail-edge:hover::after, .mod-rail-edge.dragging::after { background: var(--accent); }
+/* Sections keep their DOM order (moving a frame reloads it) and are sorted with `order`; the first section's
+   hairline lies on the top bar's own, so every section can draw the one above it. */
+.mod-rail-sections {
+  flex: 1; min-height: 0; margin-top: -1px; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; padding-bottom: 16px;
+}
+.rail-section { flex: none; border-top: 1px solid var(--border-subtle); }
+.rail-head { margin: 0; font: inherit; }
+.rail-head-btn {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 16px 10px 6px 12px;
+  font-size: 13px; line-height: 18px; font-weight: 500; color: var(--text-100); text-align: left; user-select: none;
+}
+.rail-head-btn:focus-visible { outline-offset: -2px; border-radius: var(--r-control); }
+.rail-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-badge {
+  flex: none; display: inline-flex; align-items: center; height: 18px; min-width: 18px; padding: 0 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--text-400) 14%, transparent); color: var(--text-200);
+  font-size: 11px; line-height: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.rail-chev {
+  display: inline-flex; flex: none; margin-left: auto; color: var(--text-400); opacity: 0;
+  transition: opacity 0.12s, transform 0.15s;
+}
+.rail-head-btn:hover .rail-chev, .rail-head-btn:focus-visible .rail-chev, .rail-section.collapsed .rail-chev { opacity: 1; }
+.rail-head-btn:hover .rail-title { color: var(--text-100); }
+.rail-section.collapsed .rail-chev { transform: rotate(-90deg); }
+.rail-section.collapsed .rail-head-btn { padding-bottom: 14px; color: var(--text-200); }
+.rail-body { position: relative; }
+
+/* ---------- Frames ---------- */
+.mod-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: inherit; }
+.rail-body > .mod-frame, .mod-strip-row > .mod-frame { height: 0; }
+.mod-frame.mod-frame-next { position: absolute; left: 0; top: 0; opacity: 0; pointer-events: none; }
+.mod-failed-view .mod-frame:not(.mod-frame-next) { display: none; }
+.mod-failed { display: flex; align-items: center; gap: 8px; padding: 2px 12px 12px; font-size: 13px; line-height: 18px; color: var(--text-400); }
+.mod-failed-text { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.mod-failed .link-btn { font-size: 13px; line-height: 18px; }
+.mod-icon-img { display: inline-block; flex: none; background: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+
+/* ---------- Mod tabs in the side pane ---------- */
+.mod-pane-tab { flex: 0 1 auto; min-width: 0; max-width: 180px; }
+.mod-pane-tab .mod-tab-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-pane-tab .icon, .mod-pane-tab .mod-icon-img { flex: none; }
+.mod-tab-panel { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.mod-tab-panel > .mod-frame { flex: 1; min-height: 0; height: 100%; }
+.mod-tab-panel > .mod-frame.mod-frame-next { bottom: 0; height: 100%; }
+.mod-tab-panel > .mod-failed { padding: 16px; }
+
+/* ---------- The composer strip ---------- */
+.mod-strip { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.mod-strip-row { position: relative; }
+.mod-strip-row > .mod-frame { max-height: 120px; }
+.mod-strip-row > .mod-failed { padding: 4px 4px; }
+
+/* ---------- The background: behind everything, and the large surfaces let it through ---------- */
+.mod-background {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+}
+.mod-background-view, .mod-background-view > .mod-frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* --mod-cover (0–100 %, from layout.backgroundDim) is how much of each surface's own colour stays; text, cards,
+   popovers, dialogs and the composer keep theirs. */
+:root.mod-bg .main { background: color-mix(in srgb, var(--bg-100) var(--mod-cover, 82%), transparent); }
+:root.mod-bg .sidebar { background: color-mix(in srgb, var(--bg-200) var(--mod-cover, 82%), transparent); }
+:root.mod-bg .side-pane, :root.mod-bg .mod-rail, :root.mod-bg .term-pane { background: transparent; }
+:root.mod-bg .status-line { background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg-100) var(--mod-cover, 82%), transparent) 35%); }
+
+/* ---------- The "turn on" card ---------- */
+.mod-offer {
+  margin-top: 8px; margin-bottom: 16px; padding: 16px;
+  background: var(--bg-000); border: 1px solid var(--border); border-radius: var(--r-pop); box-shadow: var(--shadow-pop);
+}
+.mod-offer-head { display: flex; align-items: center; gap: 12px; }
+.mod-offer-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: var(--r-control); background: var(--accent-soft); color: var(--accent); }
+.mod-offer-heading { display: flex; flex-direction: column; min-width: 0; }
+.mod-offer-kicker { font-size: 12px; line-height: 16px; color: var(--text-400); }
+.mod-offer-title { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text-100); overflow-wrap: anywhere; }
+.mod-offer-desc { margin: 12px 0 0; font-size: 13px; line-height: 18px; color: var(--text-200); overflow-wrap: anywhere; }
+.mod-offer-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 12px 0 0; font-size: 13px; line-height: 18px; }
+.mod-offer-facts dt { color: var(--text-400); }
+.mod-offer-facts dd { margin: 0; min-width: 0; color: var(--text-200); overflow-wrap: anywhere; }
+.mod-offer-facts code { font: 12px/18px var(--mono); color: var(--text-200); }
+.mod-offer-scope { color: var(--text-400); }
+.mod-offer-asks-label { margin-top: 12px; font-size: 13px; line-height: 18px; color: var(--text-400); }
+.mod-offer-asks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mod-offer-asks li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 18px; color: var(--text-200); }
+.mod-offer-asks li .icon { margin-top: 2px; color: var(--text-400); }
+.mod-offer-asks li.strong { color: var(--text-100); }
+.mod-offer-asks li.strong .icon { color: var(--git-mod); }
+.mod-offer-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.mod-offer-files { margin-left: -8px; padding: 0 8px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-200); }
+.mod-offer-files:hover { background: var(--hover); color: var(--text-100); }
+.mod-offer-files .icon { color: var(--text-400); }
+.mod-offer-error { margin: 12px 0 0; font-size: 12px; line-height: 16px; color: var(--danger); }
+.mod-offer.done { padding: 0; margin-top: 0; margin-bottom: 4px; background: none; border: none; box-shadow: none; }
+.mod-offer-decided { display: flex; align-items: center; gap: 8px; min-height: 32px; padding-left: 24px; font-size: 13px; line-height: 18px; color: var(--text-400); }
+.mod-offer-decided .ok { display: inline-flex; color: var(--success); }
+.mod-offer-decided .no { display: inline-flex; color: var(--text-400); }
+
+/* With the rail open the pane's default share is of what the rail leaves (a width the user dragged stays as it is). */
+.shell.rail-open .side-pane { width: var(--browser-w, calc((100% - var(--rail-w, 300px)) * 0.48)); }
+/* The rail scrolls as a whole without a permanent scrollbar eating into its sections (like an overlay scrollbar). */
+.mod-rail-sections { scrollbar-width: none; }
+.mod-rail-sections::-webkit-scrollbar { width: 0; height: 0; }

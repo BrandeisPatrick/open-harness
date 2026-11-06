@@ -70,6 +70,7 @@ import {
 import { bus } from './bus.js';
 import { onPush, rpc } from './rpc.js';
 import { setTranscriptSink, transcriptItemRenderer, type ExtraTranscriptItem } from './transcript-items.js';
+import { createModsHost, type ModPaneTabs } from './mods-host.js';
 
 declare global {
   interface Window {
@@ -3205,9 +3206,10 @@ function acceptSlashSelection(): void {
   inputEl.focus();
 }
 
-// ---------- Side pane: Browser, Diff and Terminal tabs ----------
+// ---------- Side pane: Browser, Diff and Terminal tabs, then the mods' tabs ----------
 
-type PaneTab = 'browser' | 'diff' | 'terminal';
+/** A built-in tab, or a mod's tab view as 'mod:<mod key>/<view id>' (mods-host.ts makes those). */
+type PaneTab = 'browser' | 'diff' | 'terminal' | `mod:${string}`;
 let paneVisible = true;
 let paneTab: PaneTab = 'browser';
 const PANE_TABS: readonly (readonly [PaneTab, HTMLButtonElement])[] = [
@@ -3215,32 +3217,60 @@ const PANE_TABS: readonly (readonly [PaneTab, HTMLButtonElement])[] = [
   ['diff', paneTabDiff],
   ['terminal', paneTabTerminal],
 ];
+/** The mod tabs, once the mod host is up (feature wiring below) */
+let paneMods: ModPaneTabs | null = null;
+/** A mod tab that was in front at the last quit: it comes back once its mod has loaded, unless another tab was chosen first */
+let pendingModTab: PaneTab | null = null;
+try {
+  const saved = localStorage.getItem('paneTab');
+  if (saved?.startsWith('mod:')) pendingModTab = saved as PaneTab;
+} catch {
+  /* ignore */
+}
+
+const modTabKey = (tab: PaneTab): string | null => (tab.startsWith('mod:') ? tab.slice(4) : null);
+
+/** Every tab in strip order with its button: the built-in ones, then the mods'. */
+function paneTabList(): (readonly [PaneTab, HTMLButtonElement])[] {
+  return [...PANE_TABS, ...(paneMods?.buttons() ?? []).map(({ key, el }) => [`mod:${key}` as PaneTab, el] as const)];
+}
 
 function browserShown(): boolean {
   return paneVisible && paneTab === 'browser';
 }
 
+/** What was last sent to the native browser view (for the live checks: __oc_debug.mods.browser()) */
+const browserSent = { bounds: null as { x: number; y: number; width: number; height: number } | null, visible: false };
+
 function reportBounds(): void {
   if (shell.classList.contains('browser-hidden')) return;
   const r = browserView.getBoundingClientRect();
-  oc.browser.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
+  browserSent.bounds = { x: r.left, y: r.top, width: r.width, height: r.height };
+  oc.browser.setBounds(browserSent.bounds);
 }
 new ResizeObserver(reportBounds).observe(browserView);
+
+function setBrowserVisible(v: boolean): void {
+  browserSent.visible = v;
+  oc.browser.setVisible(v);
+}
 
 /** The native browser view floats above the page: it is shown only while its tab is on screen and no dialog is open. */
 function syncBrowserView(): void {
   if (browserShown() && !dialogOpen()) {
     reportBounds();
-    oc.browser.setVisible(true);
+    setBrowserVisible(true);
     requestAnimationFrame(reportBounds);
-  } else oc.browser.setVisible(false);
+  } else setBrowserVisible(false);
 }
 
 function applyPane(persist = true): void {
+  // A mod tab whose mod went off or away: back to the Browser.
+  if (modTabKey(paneTab) && !paneMods?.has(modTabKey(paneTab)!)) paneTab = 'browser';
   const showBrowser = browserShown();
   const showDiff = paneVisible && paneTab === 'diff';
   const showTerminal = paneVisible && paneTab === 'terminal';
-  if (!showBrowser) oc.browser.setVisible(false);
+  if (!showBrowser) setBrowserVisible(false);
   // Focus would be lost with a hidden terminal: hand it back to the composer.
   if (!showTerminal && terminalPaneEl.contains(document.activeElement)) inputEl.focus();
   shell.classList.toggle('pane-hidden', !paneVisible);
@@ -3253,6 +3283,7 @@ function applyPane(persist = true): void {
     el.setAttribute('aria-selected', String(paneTab === tab));
     el.tabIndex = paneTab === tab ? 0 : -1;
   }
+  paneMods?.apply(modTabKey(paneTab), paneVisible);
   browserToggle.classList.toggle('active', showBrowser);
   browserToggle.setAttribute('aria-pressed', String(showBrowser));
   diffToggle.classList.toggle('active', showDiff);
@@ -3274,6 +3305,7 @@ function applyPane(persist = true): void {
 
 /** The top-bar toggles: show the pane on that tab, or hide it when that tab is already showing. */
 function togglePane(tab: PaneTab): void {
+  pendingModTab = null;
   if (paneVisible && paneTab === tab) paneVisible = false;
   else {
     paneVisible = true;
@@ -3283,10 +3315,30 @@ function togglePane(tab: PaneTab): void {
 }
 
 function showPaneTab(tab: PaneTab): void {
+  pendingModTab = null;
   if (paneVisible && paneTab === tab) return;
+  if (modTabKey(tab) && !paneMods?.has(modTabKey(tab)!)) return;
   paneVisible = true;
   paneTab = tab;
   applyPane();
+}
+
+/** The mod tabs changed: a tab remembered from the last run comes back once it exists; a vanished one falls back. */
+function paneTabsChanged(): void {
+  const key = pendingModTab ? modTabKey(pendingModTab) : null;
+  if (key && paneMods?.has(key)) {
+    paneTab = pendingModTab!;
+    pendingModTab = null;
+  }
+  applyPane(false);
+}
+
+/** The rail between the transcript and the pane opened, closed or was resized. */
+function paneLayoutChanged(): void {
+  const stored = sidePane.style.getPropertyValue('--browser-w');
+  if (stored) setBrowserWidth(parseFloat(stored));
+  reportBounds();
+  requestAnimationFrame(reportBounds);
 }
 
 browserToggle.onclick = () => togglePane('browser');
@@ -3299,17 +3351,17 @@ $('pane-close').onclick = () => {
   paneVisible = false;
   applyPane();
 };
-// ←/→ move between the pane tabs, wrapping around.
-for (const [, tabEl] of PANE_TABS) {
-  tabEl.addEventListener('keydown', (e) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const at = PANE_TABS.findIndex(([tab]) => tab === paneTab);
-    const [next, nextEl] = PANE_TABS[(at + (e.key === 'ArrowRight' ? 1 : -1) + PANE_TABS.length) % PANE_TABS.length];
-    showPaneTab(next);
-    nextEl.focus();
-  });
-}
+// ←/→ move between the pane tabs (the mods' ones too), wrapping around.
+sidePane.querySelector('.pane-tabs')!.addEventListener('keydown', (e) => {
+  const ke = e as KeyboardEvent;
+  if ((ke.key !== 'ArrowLeft' && ke.key !== 'ArrowRight') || !(ke.target as HTMLElement).matches('[role="tab"]')) return;
+  ke.preventDefault();
+  const list = paneTabList();
+  const at = Math.max(0, list.findIndex(([tab]) => tab === paneTab));
+  const [next, nextEl] = list[(at + (ke.key === 'ArrowRight' ? 1 : -1) + list.length) % list.length];
+  showPaneTab(next);
+  nextEl.focus();
+});
 
 // Diff tab
 let debugChanges: ChangesApi | null = null;
@@ -3446,7 +3498,10 @@ function openNewTerminal(): void {
 const BROWSER_MIN = 360;
 const TRANSCRIPT_MIN = 320;
 function clampBrowserWidth(px: number): number {
-  return Math.round(Math.max(BROWSER_MIN, Math.min(px, contentEl.clientWidth - TRANSCRIPT_MIN - resizer.offsetWidth)));
+  // The mods' rail sits between the transcript and the pane: what it takes is not the pane's to have.
+  const rail = document.getElementById('mod-rail');
+  const railW = rail && !rail.hidden ? rail.offsetWidth : 0;
+  return Math.round(Math.max(BROWSER_MIN, Math.min(px, contentEl.clientWidth - TRANSCRIPT_MIN - resizer.offsetWidth - railW)));
 }
 function setBrowserWidth(px: number | null): void {
   if (px === null) sidePane.style.removeProperty('--browser-w');
@@ -3952,6 +4007,24 @@ window.__oc_debug = {
 // ---------- Feature wiring: each feature keeps its code in its own module, only the hookup lives here ----------
 
 // [feature:mods]
+// The mod host: the rail, mod tabs, the composer strip, backgrounds, injected styles and the bridge (mods-host.ts).
+paneMods = createModsHost({
+  currentSessionId: () => currentSessionId,
+  sessions: () => sessions,
+  config: () => config,
+  running: () => running,
+  toast: (text, kind) => flashStatus(text, kind === 'error' ? 'circle-alert' : 'info'),
+  insertText: (text) => insertAtCursor(text),
+  openSettings: (section) => openSettings(section),
+  switchSession,
+  newSession,
+  openLightbox,
+  showPane: (tab) => showPaneTab(tab as PaneTab),
+  paneTabsChanged,
+  paneLayoutChanged,
+  syncBrowserView,
+  browserDebug: () => ({ ...browserSent, bounds: browserSent.bounds && { ...browserSent.bounds }, element: (() => { const r = browserView.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; })(), tab: paneTab, paneVisible, dialog: dialogOpen() }),
+}).pane;
 
 // [feature:settings]
 

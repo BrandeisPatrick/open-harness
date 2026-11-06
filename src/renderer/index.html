@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="settings.css">
 </head>
 <body>
+  <div id="mod-background" class="mod-background" aria-hidden="true" hidden></div>
   <div class="shell">
     <button id="sidebar-toggle" class="icon-btn sidebar-toggle" aria-label="Toggle sidebar" data-tip="Toggle sidebar" data-tip-kbd="⌘ B" data-icon="panel-left"></button>
 
@@ -40,9 +41,11 @@
         </div>
         <span class="spacer"></span>
         <div class="topbar-actions">
-          <button id="browser-toggle" class="toggle-btn active" aria-pressed="true" data-tip="Toggle browser" data-tip-kbd="⌘ ⇧ B"><span data-icon="globe"></span><span>Browser</span></button>
-          <button id="diff-toggle" class="toggle-btn" aria-pressed="false" data-tip="Toggle diff" data-tip-kbd="⌘ ⇧ D"><span data-icon="file-diff"></span><span>Diff</span><span id="diff-count" class="count-badge" hidden>0</span></button>
-          <button id="terminal-toggle" class="toggle-btn" aria-pressed="false" data-tip="Toggle terminal" data-tip-kbd="⌘ ⇧ T"><span data-icon="terminal"></span><span>Terminal</span><span id="terminal-busy" class="busy-dot" hidden></span></button>
+          <button id="rail-toggle" class="icon-btn top-btn" aria-label="Details panel" aria-pressed="false" data-tip="Toggle details" data-tip-kbd="⌘ ⇧ E" hidden><span data-icon="panel-right"></span></button>
+          <button id="terminal-toggle" class="icon-btn top-btn" aria-label="Terminal" aria-pressed="false" data-tip="Toggle terminal" data-tip-kbd="⌘ ⇧ T"><span data-icon="terminal"></span><span id="terminal-busy" class="busy-dot" hidden></span></button>
+          <button id="diff-toggle" class="icon-btn top-btn" aria-label="Diff" aria-pressed="false" data-tip="Toggle diff" data-tip-kbd="⌘ ⇧ D"><span data-icon="file-diff"></span><span id="diff-count" class="count-badge" hidden>0</span></button>
+          <button id="browser-toggle" class="icon-btn top-btn active" aria-label="Browser" aria-pressed="true" data-tip="Toggle browser" data-tip-kbd="⌘ ⇧ B"><span data-icon="globe"></span></button>
+          <button id="mods-more" class="icon-btn top-btn" aria-label="More panes and mods" aria-haspopup="menu" aria-expanded="false" data-tip="Mod tabs and mods"><span data-icon="more"></span></button>
         </div>
       </header>
 
@@ -83,6 +86,7 @@
             <div id="status-flash" class="status-flash" role="status" aria-live="polite"></div>
             <div id="slash-menu" class="slash-menu" role="listbox" hidden></div>
             <div id="mention-menu" class="slash-menu mention-menu" role="listbox" aria-label="Files" hidden></div>
+            <div id="mod-strip" class="mod-strip" role="region" aria-label="Mod strip" hidden></div>
             <div class="composer" id="composer">
               <div id="attachments" class="attachments" role="group" aria-label="Attached images" hidden></div>
               <div id="attach-note" class="attach-note" role="status" hidden></div>
@@ -99,6 +103,11 @@
             </div>
           </div>
         </section>
+
+        <aside class="mod-rail" id="mod-rail" aria-label="Details" hidden>
+          <div class="mod-rail-edge" id="mod-rail-edge" role="separator" aria-orientation="vertical" aria-label="Resize details panel" tabindex="-1"></div>
+          <div class="mod-rail-sections" id="mod-rail-sections"></div>
+        </aside>
 
         <div class="pane-resizer" id="pane-resizer" role="separator" aria-orientation="vertical" aria-label="Resize side pane" tabindex="-1"></div>
 

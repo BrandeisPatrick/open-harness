@@ -75,6 +75,13 @@ const ICONS = {
   // Setup strip: the model server (two stacked units with their lights) and a download (arrow into a tray)
   server: `<rect x="2.25" y="2.5" width="11.5" height="4.75" rx="1.25"/><rect x="2.25" y="8.75" width="11.5" height="4.75" rx="1.25"/>${dot(4.75, 4.875, 0.8)}${dot(4.75, 11.125, 0.8)}`,
   download: '<path d="M8 2.25v8M4.75 7L8 10.25 11.25 7M2.75 11.25v1c0 .83.67 1.5 1.5 1.5h7.5c.83 0 1.5-.67 1.5-1.5v-1"/>',
+  // mods: the rail toggle (panel-left mirrored), icons a manifest may name (gauge, message, clock) and the default
+  // for a mod without one (four blocks, one of them round)
+  'panel-right': '<rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M9.75 2.75v10.5"/>',
+  gauge: `<path d="M2.25 11.75a5.75 5.75 0 1 1 11.5 0"/><path d="M8 11.75l2.75-3.25"/>${dot(8, 11.75, 1.1)}`,
+  message: '<path d="M4.25 2.75h7.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5H7.5l-3.25 2.5v-2.5c-.83 0-1.5-.67-1.5-1.5v-5.5c0-.83.67-1.5 1.5-1.5z"/>',
+  clock: '<circle cx="8" cy="8" r="6"/><path d="M8 4.75V8l2.25 1.5"/>',
+  blocks: '<rect x="2.25" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="9" y="2.25" width="4.75" height="4.75" rx="1.25"/><rect x="2.25" y="9" width="4.75" height="4.75" rx="1.25"/><circle cx="11.375" cy="11.375" r="2.375"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

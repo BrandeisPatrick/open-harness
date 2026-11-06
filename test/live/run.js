@@ -16,19 +16,24 @@ if (!fs.existsSync(path.join(root, 'dist', 'main', 'index.js'))) {
   process.exit(1);
 }
 
-/** shots: how the script takes its screenshot folder. electron: it is itself an Electron main script. */
+/**
+ * shots: how the script takes its screenshot folder. electron: it is itself an Electron main script.
+ * needsApi: every check in it needs a model that calls tools, so without a key it is skipped.
+ */
 const SCRIPTS = [
   { name: 'smoke' },
   { name: 'concurrent' },
-  { name: 'regression' },
+  { name: 'regression', needsApi: true },
   { name: 'settings' },
   { name: 'settings-page' },
   { name: 'sidebar' },
   { name: 'images' },
   { name: 'history' },
-  { name: 'compaction' },
+  { name: 'carry-over', shots: 'none' },
+  { name: 'compaction', needsApi: true },
   { name: 'subagents' },
   { name: 'mods', shots: 'env' },
+  { name: 'mods-look', shots: 'env' },
   { name: 'mods-protocol', shots: 'none' },
   { name: 'remote-page', electron: true },
 ];
@@ -39,7 +44,13 @@ const shotsRoot = process.env.SHOTS ? path.resolve(process.env.SHOTS) : fs.mkdte
 console.log(`model: ${process.env.ANTHROPIC_API_KEY ? 'the real API' : 'the mock model (set ANTHROPIC_API_KEY for the real one)'}; screenshots: ${shotsRoot}\n`);
 
 let failed = 0;
+let skipped = 0;
 for (const s of chosen) {
+  if (s.needsApi && !process.env.ANTHROPIC_API_KEY) {
+    skipped++;
+    console.log(`SKIP  ${s.name.padEnd(16)} needs the real API (set ANTHROPIC_API_KEY)`);
+    continue;
+  }
   const file = path.join(__dirname, `${s.name}.js`);
   const shots = path.join(shotsRoot, s.name);
   fs.mkdirSync(shots, { recursive: true });
@@ -59,5 +70,5 @@ for (const s of chosen) {
     console.log(lines.length ? lines.map((l) => '      ' + l.slice(0, 400)).join('\n') : '      ' + (r.error ? String(r.error) : out.trim().split('\n').slice(-6).join('\n      ')));
   }
 }
-console.log(failed ? `\n${failed} live script(s) failed` : `\nall ${chosen.length} live scripts passed`);
+console.log(failed ? `\n${failed} live script(s) failed` : `\nall ${chosen.length - skipped} live scripts passed${skipped ? `, ${skipped} skipped` : ''}`);
 process.exit(failed ? 1 : 0);

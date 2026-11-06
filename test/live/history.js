@@ -20,6 +20,8 @@ const { launch, checker, sleep } = require('./rig.js');
       await app.send('Use the bash tool to run exactly this command: sleep 5 && echo slept. After it finishes, reply with one short sentence.');
       await app.waitFor(`oc.rpc('sessions.live', ${JSON.stringify(id)}).then((l) => l.tools.some((t) => t.name === 'bash'))`, 60_000, 'the bash call to start');
     } else {
+      // The mock answers at once, so its reply is held back: the kill has to land while the run is still going.
+      app.mock.state.replies.push({ content: 'Hello!', delayMs: 20_000 });
       await app.send('Hello there');
       await sleep(300);
     }

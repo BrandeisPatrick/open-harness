@@ -19,7 +19,12 @@ const ROWS = `[...document.querySelectorAll('#messages > *')].filter((e) => e.id
   const rows = () => app.evaluate(ROWS);
   const activeId = () => app.evaluate(`document.querySelector('.session-item.active')?.dataset.id ?? null`);
   try {
-    if (!app.live) console.log('No API key: running against the mock model (tool checks skipped).');
+    if (!app.live) {
+      console.log('No API key: running against the mock model (tool checks skipped).');
+      // Both sessions ask the one mock: each reply answers the session whose message it names, A's after a while.
+      const asks = (word) => (payload) => JSON.stringify(payload.messages).includes(word);
+      app.mock.state.replies.push({ content: 'A DONE', delayMs: 6000, when: asks('Hello from A') }, { content: 'B DONE', when: asks('B DONE') });
+    }
     // ---- A: a run that takes a while ----
     await app.send(app.live ? 'Use the bash tool to run exactly this command: sleep 6. When it has finished, reply with exactly: A DONE' : 'Hello from A');
     if (app.live) await app.waitFor(`Boolean(document.querySelector('.tool .tool-status.spin'))`, 30_000, 'the bash row to start');

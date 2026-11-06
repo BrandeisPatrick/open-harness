@@ -453,6 +453,7 @@ const BGS = ['aurora', 'constellation', 'grid', 'dusk'];
       // A real message through it, with a second one queued while the first runs
       await app.evaluate(`document.getElementById('new-session-btn').click()`);
       await sleep(800);
+      if (!app.live) app.mock.state.replies.push({ content: 'Here are the files.', delayMs: 5000 }); // a run long enough to queue behind
       await app.send(app.live ? 'Run `sleep 6` with bash, then reply with the single word: done.' : 'Run ls');
       await app.waitFor(`!document.querySelector('#status-line').hidden`, 20_000, 'the run to start').catch(() => {});
       await sleep(800);

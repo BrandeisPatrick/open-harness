@@ -282,6 +282,7 @@ function seed(profile) {
     // ---- one real message: the row spins while it runs ----
     await app.click('#new-session-btn');
     await app.waitFor(`document.querySelector('.session-item.active .label')?.innerText === 'New session'`, 5000, 'a new session');
+    if (!app.live) app.mock.state.replies.push({ content: 'OK', delayMs: 700 }); // slow enough for the spinner to be seen
     await app.send('Reply with the single word OK.');
     const spun = await app.waitFor(`Boolean(document.querySelector('.session-item.active.running .trail .spinner'))`, 15_000, 'the spinner in the row').catch(() => false);
     check(`the row shows the spinner while it runs (${app.live ? 'real API' : 'mock model'})`, spun);

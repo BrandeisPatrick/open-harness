@@ -15,6 +15,8 @@ function startMock() {
         res.end(JSON.stringify(obj));
       };
       if (req.url === '/api/show') return json(200, { capabilities: ['completion', 'tools'] });
+      // The local models, for the model menu: whatever `ollamaModels` lists (none unless a test sets it)
+      if (req.url === '/api/tags' && state.ollamaModels) return json(200, { models: state.ollamaModels.map((name) => ({ name, model: name })) });
       if (req.url === '/api/chat') {
         if (!payload.stream) {
           setTimeout(() => {
@@ -23,11 +25,18 @@ function startMock() {
           }, state.summaryDelayMs ?? 0);
           return;
         }
-        const reply = state.replies.shift() ?? { content: 'Done.' };
+        // As on the OpenAI-compatible path: a reply with `when(payload)` only answers requests it matches, and
+        // `delayMs` holds it back (a run that stays in progress). Replies without either answer in order, at once.
+        const at = state.replies.findIndex((r) => typeof r.when !== 'function' || r.when(payload));
+        const reply = at >= 0 ? state.replies.splice(at, 1)[0] : { content: 'Done.' };
         const message = { role: 'assistant', content: reply.content ?? '' };
         if (reply.toolCalls) message.tool_calls = reply.toolCalls.map((c) => ({ function: { name: c.name, arguments: c.args } }));
-        res.writeHead(200, { 'content-type': 'application/x-ndjson' });
-        res.end(JSON.stringify({ model: payload.model, message, done: true, done_reason: reply.toolCalls ? 'tool_calls' : 'stop', prompt_eval_count: state.ollamaPromptTokens, eval_count: 20 }) + '\n');
+        const answer = () => {
+          res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+          res.end(JSON.stringify({ model: payload.model, message, done: true, done_reason: reply.toolCalls ? 'tool_calls' : 'stop', prompt_eval_count: reply.promptTokens ?? state.ollamaPromptTokens, eval_count: 20 }) + '\n');
+        };
+        if (reply.delayMs) setTimeout(answer, reply.delayMs);
+        else answer();
         return;
       }
       if (req.url !== '/v1/chat/completions') return json(404, {});

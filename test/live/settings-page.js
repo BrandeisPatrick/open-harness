@@ -264,17 +264,19 @@ const js = (v) => JSON.stringify(v);
     check('the rules panel removes a rule', chips === 2 && (await app.count('#rules-programs .rule-chip')) === 1, chips);
     await app.evaluate(`window.__oc_debug.rules.mock(null)`);
 
-    // Mods (real backend)
+    // Mods (real backend). The built-in mods that restyle the app start off, so this follows one mod that is on.
     await open(app, 'mods');
     check('the bundled mods are listed', (await app.count('#sp-sec-mods .sp-mod')) >= 7);
-    await app.evaluate(`document.querySelector('#sp-sec-mods .sp-mod input.switch').click()`);
+    const modKey = await app.evaluate(`document.querySelector('#sp-sec-mods .sp-mod input.switch:checked').dataset.focusKey.split('|')[0]`);
+    const modSwitch = `#sp-sec-mods .sp-mod input.switch[data-focus-key=${JSON.stringify(modKey + '|switch')}]`;
+    await app.evaluate(`document.querySelector(${js(modSwitch)}).click()`);
     await sleep(400);
     let mods = await app.evaluate(`window.oc.rpc('mods.list')`);
-    check('turning a built-in mod off applies at once', mods.some((m) => m.scope === 'bundled' && m.state === 'off'));
-    await app.evaluate(`document.querySelector('#sp-sec-mods .sp-mod input.switch:not(:checked)').click()`);
+    check('turning a built-in mod off applies at once', mods.find((m) => m.key === modKey)?.scope === 'bundled' && mods.find((m) => m.key === modKey)?.state === 'off', modKey);
+    await app.evaluate(`document.querySelector(${js(modSwitch)}).click()`);
     await sleep(400);
     mods = await app.evaluate(`window.oc.rpc('mods.list')`);
-    check('… and back on without asking', mods.filter((m) => m.scope === 'bundled').every((m) => m.state === 'on') && !(await app.evaluate(`document.querySelector('#confirm-dialog').open`)));
+    check('… and back on without asking', mods.find((m) => m.key === modKey)?.state === 'on' && !(await app.evaluate(`document.querySelector('#confirm-dialog').open`)), modKey);
     // A mod written while the page is open shows up (as when the agent writes one)
     const modDir = path.join(app.profile, 'home-config', 'mods', 'word-count');
     fs.mkdirSync(modDir, { recursive: true });

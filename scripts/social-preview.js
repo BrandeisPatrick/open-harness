@@ -20,7 +20,7 @@ p { font-size: 25px; line-height: 1.35; margin: 30px 0 0; color: #c9c7bd; }
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); }
 </style></head><body>
 <div class="text">
-  <div class="brand"><img src="data:image/png;base64,${b64('build/icon.png')}"><h1>OpenAgent</h1></div>
+  <div class="brand"><img src="data:image/png;base64,${b64('build/icon.png')}"><h1>Open Harness</h1></div>
   <p>An open-source, Claude Code–style coding agent for macOS. Local models through Ollama, any provider through Portkey.</p>
   <div class="tags"><span class="tag">Built-in browser</span><span class="tag">MCP</span><span class="tag">Plan mode</span><span class="tag">Rewind</span><span class="tag">Terminal</span><span class="tag">Diff</span></div>
 </div>

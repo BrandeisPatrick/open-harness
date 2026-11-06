@@ -1,7 +1,7 @@
 // A Claude Code-style settings.json layer over the GUI's config.json.
 //
 //   <configDir>/settings.json                     user scope, always applied
-//   <workingDirectory>/.openagent/settings.json   project scope, wins over user, applied only once trusted
+//   <workingDirectory>/.open-harness/settings.json   project scope, wins over user, applied only once trusted
 //
 // Precedence: defaults < config.json < user settings.json < project settings.json.
 //
@@ -28,7 +28,7 @@ import { configDir, projectConfigDir } from './paths';
 type Scope = 'user' | 'project';
 type Check = (v: unknown) => string | null;
 
-/** The user's settings.json (read on every call, so OPENAGENT_CONFIG_DIR may be set late). */
+/** The user's settings.json (read on every call, so OPEN_HARNESS_CONFIG_DIR may be set late). */
 export function userSettingsPath(): string {
   return path.join(configDir(), 'settings.json');
 }

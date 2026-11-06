@@ -19,12 +19,12 @@ export function generalSection(ctx: Ctx): Section {
   const awake = ctx.segField({
     id: 'keepAwake',
     title: 'Keep awake',
-    desc: 'Stop this Mac from sleeping while the agent works, or whenever OpenAgent is open.',
+    desc: 'Stop this Mac from sleeping while the agent works, or whenever Open Harness is open.',
     keywords: 'sleep caffeinate power battery lid',
     field: 'keepAwake',
     choices: KEEP_AWAKE,
   });
-  const awakeBase = 'Stop this Mac from sleeping while the agent works, or whenever OpenAgent is open.';
+  const awakeBase = 'Stop this Mac from sleeping while the agent works, or whenever Open Harness is open.';
   const showPower = (p: PowerStatus | null) => awake.setDesc(p?.active ? `${awakeBase} Keeping it awake now.` : awakeBase);
   onPush('power:changed', (p) => showPower(p));
 
@@ -33,7 +33,7 @@ export function generalSection(ctx: Ctx): Section {
       null,
       folder,
       awake,
-      ctx.switchField({ id: 'notifications', title: 'Notifications', desc: 'Notify when a run finishes or needs your approval while OpenAgent is in the background.', keywords: 'alert notify banner sound', field: 'notifications' }),
+      ctx.switchField({ id: 'notifications', title: 'Notifications', desc: 'Notify when a run finishes or needs your approval while Open Harness is in the background.', keywords: 'alert notify banner sound', field: 'notifications' }),
       ctx.switchField({ id: 'autoTitles', title: 'Generated titles', desc: 'Name a session from its first exchange.', keywords: 'session name rename title', field: 'autoTitles' }),
       ctx.textField({ id: 'maxTurns', inputId: 'maxTurns', title: 'Max tool turns', desc: 'How many tool calls one request may make before it stops and asks you to continue.', keywords: 'limit steps iterations', field: 'maxTurns', type: 'number', width: 96, parse: (t) => parseInteger(t, 1, 500) }),
       ctx.textField({
@@ -84,7 +84,7 @@ export function modelSection(ctx: Ctx): Section {
   const provider = ctx.segField({
     id: 'provider',
     title: 'Provider',
-    desc: 'Where OpenAgent sends model requests: Ollama on this Mac, or an AI gateway such as Portkey.',
+    desc: 'Where Open Harness sends model requests: Ollama on this Mac, or an AI gateway such as Portkey.',
     keywords: 'ollama portkey gateway local cloud',
     field: 'provider',
     choices: [
@@ -167,7 +167,7 @@ export function modelSection(ctx: Ctx): Section {
   const gateway = group(
     null,
     pk({ id: 'portkey-baseURL', inputId: 'portkey-baseURL', title: 'Base URL', desc: 'The gateway endpoint: Portkey, or a gateway you host.', keywords: 'endpoint address server host', field: 'portkey.baseURL', placeholder: 'https://api.portkey.ai/v1', parse: parseUrl }),
-    pk({ id: 'portkey-apiKey', inputId: 'portkey-apiKey', title: 'API key', desc: 'Your gateway key. Without one, OpenAgent uses PORTKEY_API_KEY from the environment.', keywords: 'token secret password credential', field: 'portkey.apiKey', type: 'password', placeholder: 'pk-…', parse: parseText }),
+    pk({ id: 'portkey-apiKey', inputId: 'portkey-apiKey', title: 'API key', desc: 'Your gateway key. Without one, Open Harness uses PORTKEY_API_KEY from the environment.', keywords: 'token secret password credential', field: 'portkey.apiKey', type: 'password', placeholder: 'pk-…', parse: parseText }),
     pk({ id: 'portkey-model', inputId: 'portkey-model', title: 'Model', desc: 'A model-catalog id like @openai/gpt-4o-mini, or a plain id with a virtual key or provider below.', keywords: 'llm', field: 'portkey.model', placeholder: '@openai/gpt-4o-mini', parse: parseText }),
     pk({
       id: 'portkey-contextWindow',

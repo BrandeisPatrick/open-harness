@@ -27,9 +27,9 @@ const MAX_TEXT = 100_000;
 function appInfo(appRoot: string): { name: string; version: string } {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8')) as { productName?: string; name?: string; version?: string };
-    return { name: pkg.productName || pkg.name || 'OpenAgent', version: pkg.version || '' };
+    return { name: pkg.productName || pkg.name || 'Open Harness', version: pkg.version || '' };
   } catch {
-    return { name: 'OpenAgent', version: '' };
+    return { name: 'Open Harness', version: '' };
   }
 }
 

@@ -22,15 +22,16 @@ import { setupSubagents } from './subagents';
 import { setupRemote } from './remote';
 import { setupPower } from './power';
 
-// The app was renamed from OpenCoder: on the first launch after that, the old data folder (settings, sessions,
-// artifacts) is carried over so nothing is lost. Runs before anything reads the data folder.
+// The app has been renamed (OpenCoder, then OpenAgent, now Open Harness): on the first launch under a new name the
+// old data folder (settings, sessions, history, artifacts, …) is carried over so nothing is lost. Runs before
+// anything reads the data folder.
 (function carryOverDataFolder(): void {
   const next = app.getPath('userData');
   if (fs.existsSync(path.join(next, 'config.json'))) return; // already set up under the new name
-  const prev = ['opencoder', 'OpenCoder'].map((n) => path.join(path.dirname(next), n)).find((p) => fs.existsSync(path.join(p, 'config.json')));
+  const prev = ['OpenAgent', 'opencoder', 'OpenCoder'].map((n) => path.join(path.dirname(next), n)).find((p) => fs.existsSync(path.join(p, 'config.json')));
   if (!prev) return;
   fs.mkdirSync(next, { recursive: true });
-  for (const entry of ['config.json', 'sessions', 'artifacts']) {
+  for (const entry of ['config.json', 'sessions', 'artifacts', 'history', 'trash', 'schedules.json', 'skill-usage.json', 'mods-data', 'backgrounds', 'remote.json']) {
     const from = path.join(prev, entry);
     const to = path.join(next, entry);
     if (!fs.existsSync(from) || fs.existsSync(to)) continue;
@@ -49,7 +50,7 @@ let browser: BrowserController | null = null;
 /** Blocked project MCP servers the user was told about, as "<cwd>:<name>" */
 const notifiedBlocked = new Set<string>();
 
-const APP_NAME = 'OpenAgent';
+const APP_NAME = 'Open Harness';
 // Packaged builds keep build/icon.png outside the asar (see asarUnpack) so native APIs can read it.
 const ICON_PATH = path.join(app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'), 'build', 'icon.png');
 
@@ -74,11 +75,11 @@ function windowBackground(): string {
 }
 
 /**
- * Live tests (test/live) drive the real app over the DevTools protocol. With OPENAGENT_LIVE_TEST set the window is
+ * Live tests (test/live) drive the real app over the DevTools protocol. With OPEN_HARNESS_LIVE_TEST set the window is
  * never shown and the app keeps out of the Dock, so a test run does not take over the screen; it still lays out and
  * paints, which is what screenshots need.
  */
-const LIVE_TEST = Boolean(process.env.OPENAGENT_LIVE_TEST);
+const LIVE_TEST = Boolean(process.env.OPEN_HARNESS_LIVE_TEST);
 
 function createWindow(): void {
   const icon = nativeImage.createFromPath(ICON_PATH);
@@ -175,10 +176,10 @@ function notify(a: AppHost, sessionId: string, ev: AgentEvent): void {
   let body: string;
   if (ev.type === 'run_end') {
     if (ev.reason === 'aborted') return;
-    title = ev.reason === 'error' ? 'OpenAgent hit an error' : ev.reason === 'plan' ? 'OpenAgent has a plan for you' : ev.reason === 'max_turns' ? 'OpenAgent stopped at the turn limit' : 'OpenAgent finished';
+    title = ev.reason === 'error' ? 'Open Harness hit an error' : ev.reason === 'plan' ? 'Open Harness has a plan for you' : ev.reason === 'max_turns' ? 'Open Harness stopped at the turn limit' : 'Open Harness finished';
     body = name;
   } else if (ev.type === 'approval_request') {
-    title = 'OpenAgent needs your approval';
+    title = 'Open Harness needs your approval';
     body = `${name}: ${ev.detail.split('\n')[0].slice(0, 120)}`;
   } else return;
   try {

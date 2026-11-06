@@ -1,7 +1,7 @@
 /*
  * Midnight: a cool blue-black dark theme, a matching cool light theme, and a blue accent.
  *
- * This is the reference for theming OpenAgent; copy it and change the values.
+ * This is the reference for theming Open Harness; copy it and change the values.
  *
  * 1. Override tokens, not elements. Every surface, text colour, border and highlight in the app (and in every mod
  *    page, through harness.css and theme.changed) reads these custom properties, so changing them on :root reaches

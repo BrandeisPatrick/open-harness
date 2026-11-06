@@ -92,15 +92,15 @@ Settings → Remote control turns on a small web page, served by the app, for fo
 
 Settings is the place for all of it. On disk:
 
-- Data folder `~/Library/Application Support/OpenAgent/`: `config.json`, `sessions/`, `history/`, `trash/`, `artifacts/` (with each session's images), `schedules.json`, mod storage.
-- Config folder `~/.openagent/` (or `OPENAGENT_CONFIG_DIR`): `settings.json`, `skills/`, `mods/`, `OPENAGENT.md`.
-- In a project: `.openagent/settings.json`, `.openagent/skills/`, `.openagent/mods/`, `.mcp.json`, and an instructions file (`OPENAGENT.md`, `AGENTS.md` or `CLAUDE.md`).
+- Data folder `~/Library/Application Support/Open Harness/`: `config.json`, `sessions/`, `history/`, `trash/`, `artifacts/` (with each session's images), `schedules.json`, mod storage.
+- Config folder `~/.open-harness/` (or `OPEN_HARNESS_CONFIG_DIR`): `settings.json`, `skills/`, `mods/`, `OPENHARNESS.md`.
+- In a project: `.open-harness/settings.json`, `.open-harness/skills/`, `.open-harness/mods/`, `.mcp.json`, and an instructions file (`OPENHARNESS.md`, `AGENTS.md` or `CLAUDE.md`).
 
 A project's `.mcp.json` servers, its mods and its `settings.json` all stay off until you turn them on.
 
 ### settings.json
 
-`~/.openagent/settings.json`, then `<project>/.openagent/settings.json`, layer over `config.json`. Precedence: defaults < `config.json` < user < project.
+`~/.open-harness/settings.json`, then `<project>/.open-harness/settings.json`, layer over `config.json`. Precedence: defaults < `config.json` < user < project.
 
 ```json
 {

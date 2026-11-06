@@ -17,7 +17,7 @@ import type {
   McpServerInfo,
   MessageOrigin,
   ModelCapabilities,
-  OpenAgentApi,
+  OpenHarnessApi,
   PermissionMode,
   PlanInfo,
   ProjectRules,
@@ -77,7 +77,7 @@ import { createSettingsPage } from './settings-page.js';
 
 declare global {
   interface Window {
-    oc: OpenAgentApi;
+    oc: OpenHarnessApi;
     __oc_debug?: {
       /**
        * A user bubble, optionally with images (data: URLs), the mentioned paths a reloaded transcript would carry and
@@ -284,7 +284,7 @@ function composerEmpty(): boolean {
 function cleanError(err: unknown): string {
   let msg = err instanceof Error ? err.message : String(err);
   msg = msg.replace(/^Error invoking remote method '[^']+':\s*/, '').replace(/^(?:Error:\s*)+/, '');
-  if (/No handler registered/.test(msg)) return 'this needs the updated app. Restart OpenAgent and try again.';
+  if (/No handler registered/.test(msg)) return 'this needs the updated app. Restart Open Harness and try again.';
   return msg;
 }
 
@@ -893,7 +893,7 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
 }
 
 // Plan cards: the newest proposed plan has the buttons; Enter builds and Esc keeps planning while it is the last card.
-const KEEP_PLACEHOLDER = 'Tell OpenAgent what to change in the plan…';
+const KEEP_PLACEHOLDER = 'Tell Open Harness what to change in the plan…';
 const DEFAULT_PLACEHOLDER = inputEl.placeholder;
 const RUNNING_PLACEHOLDER = 'Send a message — it reaches the agent after its current step';
 /** The placeholder while no run is going (the default, or the "keep planning" prompt) */
@@ -956,7 +956,7 @@ async function respondPlan(card: PlanCard, decision: PlanDecision, btn: HTMLElem
     }
     if (currentMode() === 'plan' && before === 'plan') {
       // An older main process does not switch modes itself.
-      showInlineError(modeBtn, 'Still in Plan mode: switch the mode to let OpenAgent make changes.');
+      showInlineError(modeBtn, 'Still in Plan mode: switch the mode to let Open Harness make changes.');
     }
   }
   return true;
@@ -1242,7 +1242,7 @@ async function rewindTo(msg: HTMLElement, button: HTMLElement): Promise<void> {
   };
   if (busy()) return;
   if (typeof oc.sessions?.rewind !== 'function') {
-    addSystemMessage('Rewinding needs the updated app. Restart OpenAgent and try again.', 'error');
+    addSystemMessage('Rewinding needs the updated app. Restart Open Harness and try again.', 'error');
     return;
   }
   const ok = await confirmAction({ title: 'Rewind to this message?', quote: rewindQuote(msg), description: REWIND_DESCRIPTION, confirmLabel: 'Rewind', danger: true });
@@ -1433,7 +1433,7 @@ function endCompaction(): void {
 /** /compact and the context meter's "Compact now": failures show as an error notice in the transcript. */
 async function compactNow(focus?: string): Promise<void> {
   if (typeof oc.compact !== 'function') {
-    addSystemMessage('Compacting needs the updated app. Restart OpenAgent and try again.', 'error');
+    addSystemMessage('Compacting needs the updated app. Restart Open Harness and try again.', 'error');
     return;
   }
   compactErrorShown = false;
@@ -1555,7 +1555,7 @@ async function addToInstructions(memory: string): Promise<void> {
   mentionPicker.close();
   const api = oc.instructions;
   if (!api || typeof api.append !== 'function') {
-    addSystemMessage("Adding to the project's instructions needs the updated app. Restart OpenAgent and try again.", 'error');
+    addSystemMessage("Adding to the project's instructions needs the updated app. Restart Open Harness and try again.", 'error');
     return;
   }
   const typed = inputEl.value;
@@ -1568,7 +1568,7 @@ async function addToInstructions(memory: string): Promise<void> {
   const ok = await confirmAction({
     title: "Add to the project's instructions?",
     quote: { label: file, text: `- ${oneLine(memory)}`, mono: true },
-    description: `OpenAgent reads ${file} at the start of every run in this project.${imageNote}`,
+    description: `Open Harness reads ${file} at the start of every run in this project.${imageNote}`,
     confirmLabel: 'Add',
     icon: 'file-plus',
   });
@@ -1635,7 +1635,7 @@ async function sendComposer(): Promise<void> {
     addNoticeCard(
       list.length
         ? `**Skills**\n\n${list.map((sk) => `- \`/${sk.name}\` ${sk.description || 'No description'} *(${sk.source})*`).join('\n')}`
-        : 'No skills found. Add a folder with a `SKILL.md` under `.openagent/skills` in your project or `~/.openagent/skills`.',
+        : 'No skills found. Add a folder with a `SKILL.md` under `.open-harness/skills` in your project or `~/.open-harness/skills`.',
     );
     return;
   }
@@ -2295,7 +2295,7 @@ async function setMode(mode: PermissionMode): Promise<void> {
     return;
   }
   applyConfigToUi();
-  if (currentMode() !== mode) showInlineError(modeBtn, `${MODES[mode].label} needs the updated app. Restart OpenAgent and try again.`);
+  if (currentMode() !== mode) showInlineError(modeBtn, `${MODES[mode].label} needs the updated app. Restart Open Harness and try again.`);
   if (currentMode() === 'bypass') pendingApproval?.allow();
   announceMode(before);
 }
@@ -2366,7 +2366,7 @@ modelBtn.onclick = async () => {
 
 // ---------- Header / config ----------
 
-/** "~/Documents/openagent"; long paths keep the root and the last two folders: "~/…/audit/playground". */
+/** "~/Documents/open-harness"; long paths keep the root and the last two folders: "~/…/audit/playground". */
 function shortPath(p: string): string {
   const home = p.replace(/^\/Users\/[^/]+/, '~');
   if (home.length <= 40) return home;
@@ -2518,7 +2518,7 @@ function setupLines(): SetupLine[] {
     if (!checks.ollama) lines.push(ollamaLine());
     if (!checks.model) lines.push(modelLine());
   }
-  if (!checks.folder) lines.push({ id: 'folder', icon: 'folder', title: 'Working in your home folder', action: 'Choose folder', actionTip: 'Choose the project folder OpenAgent works in' });
+  if (!checks.folder) lines.push({ id: 'folder', icon: 'folder', title: 'Working in your home folder', action: 'Choose folder', actionTip: 'Choose the project folder Open Harness works in' });
   return lines;
 }
 
@@ -2702,7 +2702,7 @@ let titleEditing = false;
 
 function setTitle(text: string): void {
   if (!titleEditing) sessionTitle.textContent = text;
-  document.title = text && text !== 'New session' ? `${text} — OpenAgent` : 'OpenAgent';
+  document.title = text && text !== 'New session' ? `${text} — Open Harness` : 'Open Harness';
 }
 
 async function renameSession(id: string, title: string, anchor: HTMLElement): Promise<boolean> {
@@ -3503,7 +3503,7 @@ async function addMcpCard(): Promise<void> {
   const api = mcpSource();
   let servers: McpServerInfo[] = mcpPanel.servers();
   let note: string | undefined;
-  if (!api) note = 'MCP servers need the updated app. Restart OpenAgent and try again.';
+  if (!api) note = 'MCP servers need the updated app. Restart Open Harness and try again.';
   else {
     try {
       servers = await api.list();

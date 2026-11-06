@@ -68,7 +68,7 @@ const HELLO = {
   protocol: 1,
   mod: { id: 'demo', name: 'Demo', version: '1.0.0', scope: 'user' },
   view: { id: 'main', seat: 'rail', title: 'Demo' },
-  app: { name: 'OpenAgent', version: '0.1.0' },
+  app: { name: 'Open Harness', version: '0.1.0' },
   granted: ['session:read'],
   theme: { scheme: 'dark', tokens: { '--bg-100': '#262624', '--text-100': '#faf9f5', color: 'red' } },
   settings: { unit: 'words' },
@@ -374,7 +374,7 @@ async function readyPage(hello = HELLO) {
     try { p = page({ noParent: true }); } catch (e) { threw = e; }
     check('loading without a parent does not throw', !threw, threw && threw.message);
     check('harness exists without a parent', p && typeof p.h.session.get === 'function');
-    check('a console warning explains it', p.warnings.some((w) => /not inside OpenAgent/.test(w)));
+    check('a console warning explains it', p.warnings.some((w) => /not inside Open Harness/.test(w)));
     check('nothing is posted and no listener is added', p.sent.length === 0 && !p.listeners.message);
     let settled = false;
     p.h.ready.then(() => { settled = true; });
@@ -652,7 +652,7 @@ async function readyPage(hello = HELLO) {
     const man = m.manifest || {};
     const exp = EXPECTED[m.folder] || {};
     check(`${m.folder}: mod.json has no problems`, m.valid && m.problems.length === 0, m.problems);
-    check(`${m.folder}: metadata`, man.version === '1.0.0' && man.author === 'OpenAgent' && man.license === 'MIT' && typeof man.description === 'string' && man.description.length > 10 && typeof man.icon === 'string');
+    check(`${m.folder}: metadata`, man.version === '1.0.0' && man.author === 'Open Harness' && man.license === 'MIT' && typeof man.description === 'string' && man.description.length > 10 && typeof man.icon === 'string');
     const views = (man.contributes && man.contributes.views) || [];
     if (exp.styles) check(`${m.folder}: styles only, no views`, views.length === 0 && same(man.contributes.styles, exp.styles) && exp.styles.every((f) => fs.existsSync(path.join(m.dir, f))), man.contributes);
     else if (exp.seat === 'background') check(`${m.folder}: background views ${exp.views.join(', ')}, with no rail-only fields`, same(views.map((v) => v.id), exp.views) && views.every((v) => v.seat === 'background' && v.order === undefined && v.maxHeight === undefined), views);

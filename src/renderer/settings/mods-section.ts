@@ -11,7 +11,7 @@ import type { Ctx, Section } from './ctx.js';
 
 export function modsSection(ctx: Ctx): Section {
   const el = h('section', {}, sectionTitle('Mods'));
-  el.append(note('Mods add panels, tabs, styles and commands to OpenAgent. Built-in mods are on; mods of yours and of a project stay off until you turn them on.', 'sp-intro'));
+  el.append(note('Mods add panels, tabs, styles and commands to Open Harness. Built-in mods are on; mods of yours and of a project stay off until you turn them on.', 'sp-intro'));
 
   let mods: ModInfo[] = [];
   const expanded = new Set<string>();

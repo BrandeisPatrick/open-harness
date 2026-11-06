@@ -940,13 +940,13 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
 /** Title for the approval card. */
 export function approvalTitle(name: string, detail: string, args?: Args): string {
   const target = (args && str(args, 'path')) || detail.split('\n')[0] || '';
-  if (name === 'bash') return 'Allow OpenAgent to run this command?';
-  if (name === 'terminal_run') return 'Allow OpenAgent to run this command in the terminal?';
-  if (name === 'edit_file') return `Allow OpenAgent to edit ${basename(target) || 'this file'}?`;
-  if (name === 'write_file') return `Allow OpenAgent to write ${basename(target) || 'this file'}?`;
+  if (name === 'bash') return 'Allow Open Harness to run this command?';
+  if (name === 'terminal_run') return 'Allow Open Harness to run this command in the terminal?';
+  if (name === 'edit_file') return `Allow Open Harness to edit ${basename(target) || 'this file'}?`;
+  if (name === 'write_file') return `Allow Open Harness to write ${basename(target) || 'this file'}?`;
   const mcp = mcpParts(name);
-  if (mcp) return `Allow OpenAgent to call ${mcp.tool} on ${mcp.server}?`;
-  return `Allow OpenAgent to use ${name}?`;
+  if (mcp) return `Allow Open Harness to call ${mcp.tool} on ${mcp.server}?`;
+  return `Allow Open Harness to use ${name}?`;
 }
 
 /** Line number where an edit's old text starts, from known file contents. */

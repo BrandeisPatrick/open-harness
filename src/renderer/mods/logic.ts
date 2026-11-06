@@ -231,7 +231,7 @@ export function askLines(mod: ModInfo): AskLine[] {
   const hasStyles = !!c?.styles?.length;
   const hasBackground = !!c?.views?.some((v) => v.seat === 'background');
   if ((mod.state !== 'paused' || mod.wantsStyles) && (hasStyles || hasBackground)) {
-    const what = hasStyles && hasBackground ? 'restyle OpenAgent and draw behind it' : hasStyles ? 'restyle OpenAgent itself' : 'draw behind the whole window';
+    const what = hasStyles && hasBackground ? 'restyle Open Harness and draw behind it' : hasStyles ? 'restyle Open Harness itself' : 'draw behind the whole window';
     lines.push({ text: `It can ${what}: its stylesheet applies to the app's own page, approval cards included. Turn it on only if you trust where it came from.`, strong: true });
   }
   if (perms.includes('network')) {

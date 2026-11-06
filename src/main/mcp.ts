@@ -328,7 +328,7 @@ export class McpManager extends EventEmitter {
 
   constructor(private readonly opts: McpManagerOptions) {
     super();
-    this.clientInfo = { name: 'OpenAgent', version: opts.version ?? '0.1.0' };
+    this.clientInfo = { name: 'Open Harness', version: opts.version ?? '0.1.0' };
   }
 
   list(): McpServerInfo[] {

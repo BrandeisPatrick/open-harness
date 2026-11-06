@@ -212,7 +212,7 @@ function cleanCut(msgs, cut) {
   const model = await startModel();
   const { state } = model;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-compaction-'));
-  process.env.OPENAGENT_CONFIG_DIR = path.join(tmp, 'home-config');
+  process.env.OPEN_HARNESS_CONFIG_DIR = path.join(tmp, 'home-config');
   const cwd = path.join(tmp, 'project');
   fs.mkdirSync(cwd);
   for (const name of 'abcdefghij') fs.writeFileSync(path.join(cwd, `${name}.txt`), `${name.toUpperCase()}-START ` + `${name}word `.repeat(900) + `${name.toUpperCase()}-END`);

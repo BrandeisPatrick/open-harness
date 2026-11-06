@@ -39,7 +39,7 @@ function raw(port, lines) {
   });
 }
 
-const POST_HEADERS = { 'content-type': 'application/json', 'x-openagent-remote': '1' };
+const POST_HEADERS = { 'content-type': 'application/json', 'x-open-harness-remote': '1' };
 const post = (base, route, body, headers = POST_HEADERS) => fetch(base + route, { method: 'POST', headers, body: JSON.stringify(body) });
 
 /** An SSE reader: collects { event, data } in order. */
@@ -165,7 +165,7 @@ function seedSession(store, title, extra = []) {
   {
     const r = await fetch(base + 'api/state');
     const body = await r.json();
-    check('api/state shape', body.app.name === 'OpenAgent' && typeof body.app.version === 'string' && body.foreground === s1.id && body.model === '@anthropic/claude-sonnet-5' && body.provider === 'portkey' && body.permissionMode === 'ask', body);
+    check('api/state shape', body.app.name === 'Open Harness' && typeof body.app.version === 'string' && body.foreground === s1.id && body.model === '@anthropic/claude-sonnet-5' && body.provider === 'portkey' && body.permissionMode === 'ask', body);
     check('api/state lists sessions with status', body.sessions.length === 2 && body.sessions.every((s) => s.status && typeof s.status.running === 'boolean'));
     check('api/state has exactly the listed fields', Object.keys(body).sort().join(',') === 'app,foreground,model,permissionMode,provider,sessions', Object.keys(body));
     const text = JSON.stringify(body);
@@ -294,12 +294,12 @@ function seedSession(store, title, extra = []) {
     check('foreign Origin → 403', foreign.status === 403 && nullOrigin.status === 403, foreign.status);
     check('own Origin accepted', own.status === 200);
     const before = calls.length;
-    const form = await request(base + 'api/send', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-openagent-remote': '1' }, body: 'session=x&text=rm' });
-    const textPlain = await request(base + 'api/send', { method: 'POST', headers: { 'content-type': 'text/plain', 'x-openagent-remote': '1' }, body: JSON.stringify({ session: s1.id, text: 'hi' }) });
+    const form = await request(base + 'api/send', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-open-harness-remote': '1' }, body: 'session=x&text=rm' });
+    const textPlain = await request(base + 'api/send', { method: 'POST', headers: { 'content-type': 'text/plain', 'x-open-harness-remote': '1' }, body: JSON.stringify({ session: s1.id, text: 'hi' }) });
     const noHeader = await request(base + 'api/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: s1.id, text: 'hi' }) });
     const crossSite = await request(base + 'api/send', { method: 'POST', headers: { ...POST_HEADERS, origin: 'http://192.168.1.66:8080' }, body: JSON.stringify({ session: s1.id, text: 'hi' }) });
     check('POST without application/json → refused (415)', form.status === 415 && textPlain.status === 415, [form.status, textPlain.status]);
-    check('POST without x-openagent-remote: 1 → 403', noHeader.status === 403, noHeader.status);
+    check('POST without x-open-harness-remote: 1 → 403', noHeader.status === 403, noHeader.status);
     check('POST from another origin → 403', crossSite.status === 403);
     check('none of them reached the runtime', calls.length === before);
   }

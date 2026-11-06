@@ -179,7 +179,7 @@ function appInfo(app: App): AppInfo {
     }
   }
   return {
-    name: ea?.getName() ?? 'OpenAgent',
+    name: ea?.getName() ?? 'Open Harness',
     version,
     electron: process.versions.electron ?? '',
     chrome: process.versions.chrome ?? '',

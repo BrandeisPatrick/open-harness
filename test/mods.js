@@ -10,7 +10,7 @@ const { startMock } = require('./support/mock-model.js');
 
 const tmp = (p = 'oa-mods-') => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), p)));
 const HOME = tmp('oa-mods-home-');
-process.env.OPENAGENT_CONFIG_DIR = HOME;
+process.env.OPEN_HARNESS_CONFIG_DIR = HOME;
 
 const dist = (f) => require(path.join(projectDir, 'dist', 'main', f));
 const { createMods, checkLayout, serveModRequest } = dist('mods.js');
@@ -135,7 +135,7 @@ function fakeApp() {
   };
   const trashed = [];
   const host = { trash: async (d) => (trashed.push(d), fs.rmSync(d, { recursive: true, force: true })), reveal: () => {}, chooseImage: async () => host.picked ?? null };
-  const roots = { bundled: path.join(appRoot, 'mods'), user: path.join(HOME, 'mods'), project: path.join(project, '.openagent', 'mods') };
+  const roots = { bundled: path.join(appRoot, 'mods'), user: path.join(HOME, 'mods'), project: path.join(project, '.open-harness', 'mods') };
   return { app, host, userData, appRoot, project, roots, pushes, handlers, evSubs, tools, prompts, commands, services, quits, store, session, sent, stopped, compacted, runtime, setConfig: (c) => (config = c) };
 }
 
@@ -386,17 +386,17 @@ const resetHome = () => {
     check('turning it off does not offer it', !h.pushes.some((p) => p.channel === 'mods:offer'));
     hc.close();
 
-    // The home folder as the working directory: its .openagent/mods is the user folder, listed once.
+    // The home folder as the working directory: its .open-harness/mods is the user folder, listed once.
     const hm = fakeApp();
     const home = tmp('oa-mods-homeproj-');
-    process.env.OPENAGENT_CONFIG_DIR = path.join(home, '.openagent');
-    writeMod(path.join(home, '.openagent', 'mods'), 'solo', man('solo'), { 'panel.html': page });
+    process.env.OPEN_HARNESS_CONFIG_DIR = path.join(home, '.open-harness');
+    writeMod(path.join(home, '.open-harness', 'mods'), 'solo', man('solo'), { 'panel.html': page });
     hm.app.updateConfig({ workingDirectory: home });
     const hmc = createMods(hm.app, hm.host);
     const solos = rpc(hm, 'mods.list').filter((m) => m.id === 'solo');
     check('the user folder is not also listed as a project folder', solos.length === 1 && solos[0].scope === 'user', solos.map((m) => m.key));
     hmc.close();
-    process.env.OPENAGENT_CONFIG_DIR = HOME;
+    process.env.OPEN_HARNESS_CONFIG_DIR = HOME;
 
     // A root that does not exist yet (the project's) is picked up when it appears.
     const g = fakeApp();
@@ -406,7 +406,7 @@ const resetHome = () => {
     check('a root that appears later is watched', await waitFor(() => rpc(g, 'mods.list').some((m) => m.id === 'late'), 5000));
     // The working directory changes: the project mods follow.
     const other = tmp('oa-mods-project2-');
-    writeMod(path.join(other, '.openagent', 'mods'), 'elsewhere', man('elsewhere'), { 'panel.html': page });
+    writeMod(path.join(other, '.open-harness', 'mods'), 'elsewhere', man('elsewhere'), { 'panel.html': page });
     g.app.updateConfig({ workingDirectory: other });
     const l = rpc(g, 'mods.list');
     check('changing the working directory rescans project mods', l.some((m) => m.id === 'elsewhere') && !l.some((m) => m.id === 'late'), l.map((m) => m.key));

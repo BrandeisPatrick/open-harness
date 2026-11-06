@@ -10,7 +10,7 @@ import type { SearchHit } from './history';
 
 export type ModProtocolVersion = 1;
 
-/** bundled: ships in the app's mods/ folder. user: <configDir>/mods. project: <project>/.openagent/mods. */
+/** bundled: ships in the app's mods/ folder. user: <configDir>/mods. project: <project>/.open-harness/mods. */
 export type ModScope = 'bundled' | 'user' | 'project';
 
 export type ModPermission =

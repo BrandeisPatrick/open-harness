@@ -4,7 +4,7 @@
   "name": "Tasks",
   "version": "1.0.0",
   "description": "The agent's task list for the session on screen, as it works through it.",
-  "author": "OpenAgent",
+  "author": "Open Harness",
   "license": "MIT",
   "icon": "list-checks",
   "permissions": ["session:read"],

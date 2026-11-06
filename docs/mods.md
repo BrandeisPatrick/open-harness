@@ -1,6 +1,6 @@
 # Mods
 
-A mod is a folder of web files that adds something to OpenAgent: a panel in the right-hand rail, a tab beside the Browser, a strip above the composer, a background behind the app, a theme, a slash command. The panels the app ships with (Context, Outputs, Tasks, Skills, Side chat, …) are mods written against this same protocol, so anything they do, yours can do.
+A mod is a folder of web files that adds something to Open Harness: a panel in the right-hand rail, a tab beside the Browser, a strip above the composer, a background behind the app, a theme, a slash command. The panels the app ships with (Context, Outputs, Tasks, Skills, Side chat, …) are mods written against this same protocol, so anything they do, yours can do.
 
 A mod page is an ordinary HTML page. It runs in a sandboxed frame, talks to the app through one small object (`harness`), and reloads the moment one of its files is saved. That last part is the point: the agent can write a mod for you in the middle of a session, you turn it on, and from then on every edit shows up live.
 
@@ -9,7 +9,7 @@ Protocol version: **1**.
 ## A mod in two files
 
 ```
-~/.openagent/mods/word-count/
+~/.open-harness/mods/word-count/
   mod.json
   panel.html
 ```
@@ -54,8 +54,8 @@ Save the two files, turn the mod on in Settings → Mods (or on the card that ap
 | Scope | Folder | Starts |
 | --- | --- | --- |
 | bundled | `mods/` inside the app | on (you can turn one off); a bundled mod that restyles the app (a theme, the compact chat bar) starts off |
-| user | `~/.openagent/mods/<id>/` | off until you turn it on once |
-| project | `<project>/.openagent/mods/<id>/` | off until you turn it on for that project |
+| user | `~/.open-harness/mods/<id>/` | off until you turn it on once |
+| project | `<project>/.open-harness/mods/<id>/` | off until you turn it on for that project |
 
 A user mod with the id of a bundled one replaces it, which is how you customise a built-in panel: Settings → Mods → Customise copies it into your folder, and you edit the copy.
 
@@ -273,7 +273,7 @@ By hand: Settings → Mods → New mod writes a starter folder and opens it. `mo
 
 ## Installing and sharing
 
-A mod is its folder. Copy it into `~/.openagent/mods/`, or use Settings → Mods → Install and give it a folder or a Git URL (the repository is cloned into the mods folder). To share one, publish the folder; adding the `openagent-mod` topic on GitHub makes it findable.
+A mod is its folder. Copy it into `~/.open-harness/mods/`, or use Settings → Mods → Install and give it a folder or a Git URL (the repository is cloned into the mods folder). To share one, publish the folder; adding the `open-harness-mod` topic on GitHub makes it findable.
 
 ## What keeps this safe
 

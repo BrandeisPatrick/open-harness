@@ -21,7 +21,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** The model live checks use unless a test asks for another one: the cheapest that handles tools well. */
-const LIVE_MODEL = process.env.OPENAGENT_LIVE_MODEL || 'claude-haiku-5-5';
+const LIVE_MODEL = process.env.OPEN_HARNESS_LIVE_MODEL || 'claude-haiku-5-5';
 
 async function freePort() {
   const net = require('node:net');
@@ -85,9 +85,9 @@ async function launch(opts = {}) {
   const electron = require(path.join(root, 'node_modules', 'electron'));
   const env = {
     ...process.env,
-    OPENAGENT_LIVE_TEST: '1',
+    OPEN_HARNESS_LIVE_TEST: '1',
     // The app's own config directory (settings.json, skills, mods) is redirected too, so a test never reads yours.
-    OPENAGENT_CONFIG_DIR: home,
+    OPEN_HARNESS_CONFIG_DIR: home,
     PORTKEY_API_KEY: key || 'mock-key',
     ...(opts.env || {}),
   };

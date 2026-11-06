@@ -37,7 +37,7 @@ export const MODES: Record<PermissionMode, ModeInfo> = {
   auto: {
     label: 'Auto',
     desc: 'Runs on its own; risky actions still ask',
-    hint: 'OpenAgent works on its own and pauses only for risky actions',
+    hint: 'Open Harness works on its own and pauses only for risky actions',
     icon: 'zap',
     tone: 'accent',
     chipClass: 'auto',
@@ -45,7 +45,7 @@ export const MODES: Record<PermissionMode, ModeInfo> = {
   plan: {
     label: 'Plan',
     desc: 'Read-only; propose a plan to approve',
-    hint: 'OpenAgent explores read-only and proposes a plan for you to approve',
+    hint: 'Open Harness explores read-only and proposes a plan for you to approve',
     icon: 'clipboard',
     tone: 'success',
     chipClass: 'plan',

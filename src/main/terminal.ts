@@ -93,28 +93,28 @@ function programName(command: string): string {
 }
 
 /** The zsh startup shim: runs the user's own startup files, then adds the prompt/command hooks. */
-const ZSHENV = `# OpenAgent terminal: zsh startup shim. It loads your own startup files and adds shell integration
+const ZSHENV = `# Open Harness terminal: zsh startup shim. It loads your own startup files and adds shell integration
 # (prompt and command markers) so the app can tell when a command finished. Nothing is stored here.
-OPENAGENT_ZDOTDIR="\${ZDOTDIR}"
-if [[ -f "\${OPENAGENT_USER_ZDOTDIR}/.zshenv" ]]; then
-  ZDOTDIR="\${OPENAGENT_USER_ZDOTDIR}"
-  . "\${OPENAGENT_USER_ZDOTDIR}/.zshenv"
-  OPENAGENT_USER_ZDOTDIR="\${ZDOTDIR}"
-  ZDOTDIR="\${OPENAGENT_ZDOTDIR}"
+OPEN_HARNESS_ZDOTDIR="\${ZDOTDIR}"
+if [[ -f "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshenv" ]]; then
+  ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
+  . "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshenv"
+  OPEN_HARNESS_USER_ZDOTDIR="\${ZDOTDIR}"
+  ZDOTDIR="\${OPEN_HARNESS_ZDOTDIR}"
 fi
 `;
-const ZPROFILE = `if [[ -f "\${OPENAGENT_USER_ZDOTDIR}/.zprofile" ]]; then
-  ZDOTDIR="\${OPENAGENT_USER_ZDOTDIR}"
-  . "\${OPENAGENT_USER_ZDOTDIR}/.zprofile"
-  ZDOTDIR="\${OPENAGENT_ZDOTDIR}"
+const ZPROFILE = `if [[ -f "\${OPEN_HARNESS_USER_ZDOTDIR}/.zprofile" ]]; then
+  ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
+  . "\${OPEN_HARNESS_USER_ZDOTDIR}/.zprofile"
+  ZDOTDIR="\${OPEN_HARNESS_ZDOTDIR}"
 fi
 `;
-const ZSHRC = `if [[ -f "\${OPENAGENT_USER_ZDOTDIR}/.zshrc" ]]; then
-  ZDOTDIR="\${OPENAGENT_USER_ZDOTDIR}"
-  . "\${OPENAGENT_USER_ZDOTDIR}/.zshrc"
-  ZDOTDIR="\${OPENAGENT_ZDOTDIR}"
+const ZSHRC = `if [[ -f "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshrc" ]]; then
+  ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
+  . "\${OPEN_HARNESS_USER_ZDOTDIR}/.zshrc"
+  ZDOTDIR="\${OPEN_HARNESS_ZDOTDIR}"
 fi
-if [[ -o interactive && "\${OPENAGENT_TERMINAL}" == "1" ]]; then
+if [[ -o interactive && "\${OPEN_HARNESS_TERMINAL}" == "1" ]]; then
   typeset -g __oc_ran=0
   __oc_preexec() {
     __oc_ran=1
@@ -134,7 +134,7 @@ if [[ -o interactive && "\${OPENAGENT_TERMINAL}" == "1" ]]; then
   add-zsh-hook precmd __oc_precmd
 fi
 # Hand ZDOTDIR back so .zlogin and nested shells use your own files.
-ZDOTDIR="\${OPENAGENT_USER_ZDOTDIR}"
+ZDOTDIR="\${OPEN_HARNESS_USER_ZDOTDIR}"
 `;
 
 export class TerminalManager extends EventEmitter {
@@ -309,13 +309,13 @@ export class TerminalManager extends EventEmitter {
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RUN_AS_NODE') env[k] = v;
     env.TERM = 'xterm-256color';
     env.COLORTERM = 'truecolor';
-    env.TERM_PROGRAM = 'OpenAgent';
-    env.OPENAGENT_TERMINAL = '1';
+    env.TERM_PROGRAM = 'Open Harness';
+    env.OPEN_HARNESS_TERMINAL = '1';
     env.LANG ||= 'en_US.UTF-8';
     if (shell === 'zsh') {
       const dir = this.ensureShim();
-      env.OPENAGENT_USER_ZDOTDIR = process.env.ZDOTDIR || os.homedir();
-      env.OPENAGENT_ZDOTDIR = dir;
+      env.OPEN_HARNESS_USER_ZDOTDIR = process.env.ZDOTDIR || os.homedir();
+      env.OPEN_HARNESS_ZDOTDIR = dir;
       env.ZDOTDIR = dir;
     }
     return env;

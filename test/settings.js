@@ -24,7 +24,7 @@ async function waitFor(fn, ms = 4000) {
   }
 }
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-settings-'));
-process.env.OPENAGENT_CONFIG_DIR = path.join(root, 'home-config');
+process.env.OPEN_HARNESS_CONFIG_DIR = path.join(root, 'home-config');
 let n = 0;
 const tmp = () => {
   const d = path.join(root, `d${++n}`);
@@ -37,7 +37,7 @@ const write = (dir, name, obj) => {
   fs.writeFileSync(p, typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
   return p;
 };
-const PROJECT = path.join('.openagent', 'settings.json');
+const PROJECT = path.join('.open-harness', 'settings.json');
 const writeProject = (cwd, obj) => write(cwd, PROJECT, obj);
 const trustedFor = (cwd) => ({ [trustKey(cwd)]: contentHash(fs.readFileSync(path.join(cwd, PROJECT), 'utf8')) });
 
@@ -438,9 +438,9 @@ const fileOf = (layer, scope) => layer.info().files.find((f) => f.scope === scop
     await app.invokeRpc('settings.open', ['user']);
     check('settings.open leaves an existing file alone', fs.readFileSync(userFile, 'utf8') === '{"maxTurns": 34}' && opened.at(-1) === userFile);
     const ai = await app.invokeRpc('app.info', []);
-    check('app.info', ai.name && typeof ai.version === 'string' && ai.version.length > 0 && ai.node === process.versions.node && ai.platform === process.platform && ai.userData === app.userData && ai.configDir === path.resolve(process.env.OPENAGENT_CONFIG_DIR), ai);
+    check('app.info', ai.name && typeof ai.version === 'string' && ai.version.length > 0 && ai.node === process.versions.node && ai.platform === process.platform && ai.userData === app.userData && ai.configDir === path.resolve(process.env.OPEN_HARNESS_CONFIG_DIR), ai);
     await app.invokeRpc('app.reveal', ['configDir']);
-    check('app.reveal opens the folder', opened.at(-1) === path.resolve(process.env.OPENAGENT_CONFIG_DIR) && fs.existsSync(opened.at(-1)));
+    check('app.reveal opens the folder', opened.at(-1) === path.resolve(process.env.OPEN_HARNESS_CONFIG_DIR) && fs.existsSync(opened.at(-1)));
     check('owned values never saved, across every path', leaks().length === 0 && saved.length > 5, { leaks: leaks().length, saves: saved.length });
 
     svc.dispose();

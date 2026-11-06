@@ -1,7 +1,7 @@
 // What fills the context window, for the Context panel and the context meter. Types only.
 
 /**
- * system: the app's own instructions. instructions: OPENAGENT.md / AGENTS.md / CLAUDE.md files. skills: the skill list.
+ * system: the app's own instructions. instructions: OPENHARNESS.md / AGENTS.md / CLAUDE.md files. skills: the skill list.
  * tools: built-in tool definitions. mcpTools: MCP tool definitions. summary: the brief a compaction left.
  * messages: what the user and the assistant wrote. toolResults: tool calls and their output.
  * reserve: the part of the window kept free so a compaction can still run. free: the rest.

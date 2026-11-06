@@ -140,7 +140,7 @@ export function appearanceSection(ctx: Ctx): Section {
   const bgRow = row({ id: 'background', title: 'Background', desc: 'A picture or a mod’s live background behind the window. The app’s surfaces turn translucent over it.', keywords: 'wallpaper image picture mod' }, bgSelect);
   const pictureName = h('span', { class: 'sp-file-name' });
   const pictureRow = row(
-    { id: 'background-image', title: 'Your picture', desc: 'A PNG, JPEG, WebP or GIF. OpenAgent keeps its own copy.', keywords: 'wallpaper image picture choose' },
+    { id: 'background-image', title: 'Your picture', desc: 'A PNG, JPEG, WebP or GIF. Open Harness keeps its own copy.', keywords: 'wallpaper image picture choose' },
     h('span', { class: 'sp-control-group' }, pictureName, button('Choose image…', () => void chooseImage(), { icon: 'image' })),
   );
   const dim = h('input', { type: 'range', min: '0', max: '100', step: '5', class: 'sp-range' });
@@ -248,10 +248,10 @@ export function appearanceSection(ctx: Ctx): Section {
 
 export function filesSection(ctx: Ctx, onInfo: (info: SettingsInfo | null) => void): Section {
   const el = h('section', {}, sectionTitle('Configuration files'));
-  el.append(note('OpenAgent also reads settings from settings.json files: yours, then the project’s, which needs your approval first. A field a file sets is read-only on this page; change it in the file.', 'sp-intro'));
+  el.append(note('Open Harness also reads settings from settings.json files: yours, then the project’s, which needs your approval first. A field a file sets is read-only on this page; change it in the file.', 'sp-intro'));
   const filesEl = h('div', {});
   const reloadRow = row(
-    { id: 'files-reload', title: 'Read the files again', desc: 'After you edit a file outside OpenAgent.', keywords: 'reload refresh settings.json' },
+    { id: 'files-reload', title: 'Read the files again', desc: 'After you edit a file outside Open Harness.', keywords: 'reload refresh settings.json' },
     button('Reload', async (b) => {
       b.disabled = true;
       try {
@@ -369,7 +369,7 @@ export function filesSection(ctx: Ctx, onInfo: (info: SettingsInfo | null) => vo
 
 export function aboutSection(ctx: Ctx): Section {
   const el = h('section', {}, sectionTitle('About'));
-  const app = row({ id: 'about-app', title: 'OpenAgent', desc: '', keywords: 'version' });
+  const app = row({ id: 'about-app', title: 'Open Harness', desc: '', keywords: 'version' });
   const versions = row({ id: 'about-versions', title: 'Runtime', desc: '', keywords: 'electron chrome node version' });
   const reveal = (which: 'userData' | 'configDir', r: () => Row) => button('Reveal', async () => {
     try {
@@ -397,7 +397,7 @@ export function aboutSection(ctx: Ctx): Section {
         app.problem(ctx.cleanError(err));
         return 'ok';
       }
-      app.el.querySelector('.sp-row-name')!.textContent = info.name || 'OpenAgent';
+      app.el.querySelector('.sp-row-name')!.textContent = info.name || 'Open Harness';
       app.setDesc(`Version ${info.version} · ${info.platform === 'darwin' ? 'macOS' : info.platform} ${info.arch}`);
       versions.setDesc(`Electron ${info.electron} · Chrome ${info.chrome} · Node ${info.node}`);
       data.setDesc(tildePath(info.userData));

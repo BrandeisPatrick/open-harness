@@ -10,7 +10,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-images-'));
 // ~ in a path is this folder, not the real home
 process.env.HOME = path.join(tmp, 'home');
 fs.mkdirSync(process.env.HOME);
-process.env.OPENAGENT_CONFIG_DIR = path.join(tmp, 'home-config');
+process.env.OPEN_HARNESS_CONFIG_DIR = path.join(tmp, 'home-config');
 const { createApp } = require(path.join(projectDir, 'dist/main/app.js'));
 const { ArtifactStore } = require(path.join(projectDir, 'dist/main/artifacts.js'));
 const { SessionStore, toTranscript } = require(path.join(projectDir, 'dist/main/sessions.js'));

@@ -1,4 +1,4 @@
-// OpenAgent remote: follow and steer the app's sessions from a phone. Plain script, no framework, no build step,
+// Open Harness remote: follow and steer the app's sessions from a phone. Plain script, no framework, no build step,
 // nothing from the network. Served by the app under /r/<token>/, so every URL here is relative.
 //
 // How the view stays exact: the page opens the event stream first, then loads a snapshot of the session
@@ -253,7 +253,7 @@
     const init = { cache: 'no-store', referrerPolicy: 'no-referrer', credentials: 'omit' };
     if (body !== undefined) {
       init.method = 'POST';
-      init.headers = { 'content-type': 'application/json', 'x-openagent-remote': '1' };
+      init.headers = { 'content-type': 'application/json', 'x-open-harness-remote': '1' };
       init.body = JSON.stringify(body);
     }
     let res;
@@ -827,8 +827,8 @@
 
   function renderTop() {
     const meta = currentMeta();
-    el.title.textContent = meta ? meta.title : S.current ? 'Session' : 'OpenAgent';
-    document.title = meta ? `${meta.title} · OpenAgent` : 'OpenAgent';
+    el.title.textContent = meta ? meta.title : S.current ? 'Session' : 'Open Harness';
+    document.title = meta ? `${meta.title} · Open Harness` : 'Open Harness';
     let state = stateOf(meta);
     if (state === 'idle' && S.running) state = 'running';
     el.mark.className = 'mark ' + state;
@@ -1054,8 +1054,8 @@
     clearTimeout(retryTimer);
     showConn(false);
     el.transcript.textContent = '';
-    el.transcript.append(h('div', 'empty', '<strong>This link no longer works</strong>Open the current link from OpenAgent on your Mac.'));
-    el.title.textContent = 'OpenAgent';
+    el.transcript.append(h('div', 'empty', '<strong>This link no longer works</strong>Open the current link from Open Harness on your Mac.'));
+    el.title.textContent = 'Open Harness';
     el.mark.hidden = true;
     el.model.hidden = true;
     $('open-sessions').hidden = true;

@@ -252,8 +252,8 @@ export interface FileHit {
 
 export interface InstructionsApi {
   /**
-   * Appends a bullet to the project's instructions file (the first of OPENAGENT.md, OPENCODER.md, AGENTS.md, CLAUDE.md
-   * in the working directory; OPENAGENT.md is created when none exists). Returns the file and its short label.
+   * Appends a bullet to the project's instructions file (the first of OPENHARNESS.md, OPENCODER.md, AGENTS.md, CLAUDE.md
+   * in the working directory; OPENHARNESS.md is created when none exists). Returns the file and its short label.
    */
   append(text: string): Promise<{ path: string; label: string }>;
 }
@@ -541,7 +541,7 @@ export interface ArtifactsApi {
 }
 
 /** The API the preload script exposes to the renderer as window.oc */
-export interface OpenAgentApi {
+export interface OpenHarnessApi {
   getConfig(): Promise<AppConfig>;
   setConfig(cfg: AppConfig): Promise<AppConfig>;
   chooseDirectory(): Promise<string | null>;

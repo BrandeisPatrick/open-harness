@@ -4,7 +4,7 @@
   "name": "Outputs",
   "version": "1.0.0",
   "description": "What the session produced: artifacts, images and changed files, newest first.",
-  "author": "OpenAgent",
+  "author": "Open Harness",
   "license": "MIT",
   "icon": "files",
   "permissions": ["session:read"],

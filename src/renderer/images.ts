@@ -154,7 +154,7 @@ function flash(button: HTMLButtonElement): void {
 
 function cleanError(err: unknown): string {
   const msg = (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+':\s*/, '').replace(/^(?:Error:\s*)+/, '');
-  return /No handler registered/.test(msg) ? 'this needs the updated app. Restart OpenAgent and try again.' : msg;
+  return /No handler registered/.test(msg) ? 'this needs the updated app. Restart Open Harness and try again.' : msg;
 }
 
 // ---------- Clicks: thumbnails and Markdown images open the lightbox ----------

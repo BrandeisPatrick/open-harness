@@ -10,7 +10,7 @@
   "permissions": ["session:read"],
   "contributes": {
     "views": [
-      { "id": "starfield", "title": "Hyperspace", "entry": "hyperspace.html", "seat": "background" }
+      { "id": "starfield", "title": "Starfield", "entry": "hyperspace.html", "seat": "background" }
     ],
     "looks": [
       { "id": "holo", "title": "Holo terminal", "target": "conversation", "styles": ["glow.css", "holo.css"], "description": "Transmission panels for your messages, instrument readouts for tool calls, code as instrument panels." },

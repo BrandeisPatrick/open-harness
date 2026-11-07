@@ -98,6 +98,8 @@ export function createQuestionCard(o: QuestionCardOptions): QuestionCard {
   el.className = 'question-card prompt-card';
   el.setAttribute('role', 'group');
   el.setAttribute('aria-labelledby', `${uid}-title`);
+  // The header and where it stands ("Library · 1 of 3") are read after the question
+  el.setAttribute('aria-describedby', `${uid}-chip`);
   const picked: Set<string>[] = questions.map(() => new Set());
   const typed: string[] = questions.map(() => '');
   /** The Other row of each question is on (single choice: it replaces the options) */
@@ -176,7 +178,7 @@ export function createQuestionCard(o: QuestionCardOptions): QuestionCard {
     const several = questions.length > 1;
     head.innerHTML =
       `<div class="title" id="${uid}-title">${escapeHtml(q.question || q.header)}</div>` +
-      `<span class="q-chip">${escapeHtml(q.header)}${several ? `<span class="q-step"> · ${step + 1} of ${questions.length}</span>` : ''}</span>`;
+      `<span class="q-chip" id="${uid}-chip">${escapeHtml(q.header)}${several ? `<span class="q-step"> · ${step + 1} of ${questions.length}</span>` : ''}</span>`;
     body.innerHTML = '';
     const list = document.createElement('div');
     list.className = 'q-options';

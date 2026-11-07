@@ -22,7 +22,7 @@ html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; backgrou
 .brand { display: flex; align-items: center; gap: 20px; }
 .brand img { width: 76px; height: 76px; border-radius: 19px; }
 h1 { font-size: 60px; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
-p { font-size: 25px; line-height: 1.35; margin: 30px 0 0; color: #c9c7bd; }
+p { font-size: 25px; line-height: 1.35; margin: 30px 0 0; color: #c9c7bd; text-wrap: pretty; }
 .tags { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 10px; }
 .tag { font-size: 17px; padding: 7px 13px; border: 1px solid #4a4845; border-radius: 999px; color: #ebe9df; }
 .shot { position: absolute; left: 660px; top: 84px; width: 920px; border-radius: 14px; border: 1px solid #3a3835;
@@ -30,8 +30,8 @@ p { font-size: 25px; line-height: 1.35; margin: 30px 0 0; color: #c9c7bd; }
 </style></head><body>
 <div class="text">
   <div class="brand"><img src="data:image/png;base64,${b64('build/icon.png')}"><h1>Silo Harness</h1></div>
-  <p>An open-source agent harness for macOS, in the style of Claude Code. Sessions side by side, mods you can ask the agent to build, local models or any provider.</p>
-  <div class="tags"><span class="tag">Mods</span><span class="tag">Sub-sessions</span><span class="tag">Scheduled tasks</span><span class="tag">Built-in browser</span><span class="tag">MCP</span><span class="tag">Plan mode</span><span class="tag">Remote control</span></div>
+  <p>The self-improving agent harness, for macOS and in the style of Claude Code. Dreaming proposes skills, memory and mods from your past sessions, and the agent builds mods on request.</p>
+  <div class="tags"><span class="tag">Dreaming</span><span class="tag">Mods</span><span class="tag">Sub-sessions</span><span class="tag">Scheduled tasks</span><span class="tag">Built-in browser</span><span class="tag">MCP</span><span class="tag">Plan mode</span><span class="tag">Remote control</span></div>
 </div>
 <img class="shot" src="data:image/png;base64,${b64('docs/screenshots/hero.png')}">
 </body></html>`;

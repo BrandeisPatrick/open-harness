@@ -48,11 +48,11 @@ const READ = `(() => {
     railShown: !!document.querySelector('#mod-rail') && document.querySelector('#mod-rail').getClientRects().length > 0,
     sidebar: css('.sidebar', 'backgroundColor'),
     bubble: css('.msg.user .bubble', 'backgroundColor'),
-    btn: css('.approval .row-main .btn:not(.primary)', 'backgroundColor'),
-    btnBorder: css('.approval .row-main .btn:not(.primary)', 'borderTopColor'),
-    btnText: css('.approval .row-main .btn:not(.primary)', 'color'),
-    primary: css('.approval .btn.primary', 'backgroundColor'),
-    primaryText: css('.approval .btn.primary', 'color'),
+    deny: css('.approval .prompt-foot .btn:not(.primary)', 'backgroundColor'),
+    denyText: css('.approval .prompt-foot .btn:not(.primary)', 'color'),
+    answer: css('.approval .split-btn', 'backgroundColor'),
+    answerText: css('.approval .split-btn', 'color'),
+    btn: (() => { const e = [...document.querySelectorAll('#settings .btn:not(.primary):not(.danger)')].find((x) => x.getClientRects().length); return e ? { bg: rgb(getComputedStyle(e).backgroundColor), border: rgb(getComputedStyle(e).borderTopColor), text: rgb(getComputedStyle(e).color) } : null; })(),
     spinner: css('.status-line .spinner', 'borderTopColor'),
     toolSpin: css('.tool-status.spin', 'borderTopColor', '::after'),
     mark: (() => { const r = document.querySelector('.model-mark .brand-mark rect'); return r ? rgb(getComputedStyle(r).fill) : null; })(),
@@ -95,8 +95,8 @@ async function setTheme(app, scheme) {
       check(`${scheme}: the rail is on the page colour`, r.railShown && same(r.rail && r.rail.c, W.page), { shown: r.railShown, rail: r.rail });
       check(`${scheme}: the sidebar is ${W.sidebar}`, same(r.sidebar && r.sidebar.c, W.sidebar), r.sidebar);
       check(`${scheme}: the user's bubble is ${W.bubble}`, same(r.bubble && r.bubble.c, W.bubble), r.bubble);
-      check(`${scheme}: a default button is the raised surface with a neutral hairline and the text colour`, same(r.btn && r.btn.c, W.raised) && grey(r.btnBorder && r.btnBorder.c) && same(r.btnText && r.btnText.c, W.text), { btn: r.btn, border: r.btnBorder, text: r.btnText });
-      check(`${scheme}: the button that confirms is a grey fill (${W.fill}) with the text colour`, same(r.primary && r.primary.c, W.fill) && same(r.primaryText && r.primaryText.c, W.text), { fill: r.primary, text: r.primaryText });
+      check(`${scheme}: the approval card's Deny is the quiet grey fill (${W.fill}) with the text colour`, same(r.deny && r.deny.c, W.fill) && same(r.denyText && r.denyText.c, W.text), { fill: r.deny, text: r.denyText });
+      check(`${scheme}: its Allow once is inverted: the text colour as fill, the page as label`, same(r.answer && r.answer.c, W.text) && same(r.answerText && r.answerText.c, W.page), { fill: r.answer, text: r.answerText });
       check(`${scheme}: the spinners are neutral`, grey(r.spinner && r.spinner.c) && grey(r.toolSpin && r.toolSpin.c), { status: r.spinner, tool: r.toolSpin });
       check(`${scheme}: the mark beside the model name is neutral`, grey(r.mark && r.mark.c), r.mark);
       const hot = terracotta(r.all);
@@ -111,6 +111,7 @@ async function setTheme(app, scheme) {
         const p = await app.evaluate(READ);
         const h = terracotta(p.all);
         check(`${scheme}: Settings → ${s}: nothing visible is the old terracotta`, p.all.length > 100 && h.length === 0, { read: p.all.length, hot: h.slice(0, 8) });
+        if (s === 'general') check(`${scheme}: a default button is the raised surface with a neutral hairline and the text colour`, p.btn && same(p.btn.bg && p.btn.bg.c, W.raised) && grey(p.btn.border && p.btn.border.c) && same(p.btn.text && p.btn.text.c, W.text), p.btn);
         if (s === 'mods') {
           await app.screenshot(path.join(SHOTS, `palette-settings-mods-${scheme}.png`));
           const sw = await app.evaluate(`(() => { const e = [...document.querySelectorAll('#settings input.switch:checked')].find((x) => x.getClientRects().length); return e ? getComputedStyle(e).backgroundColor : null; })()`);
@@ -137,7 +138,7 @@ async function setTheme(app, scheme) {
       await app.screenshot(path.join(SHOTS, `palette-paper-${scheme}.png`));
       const page = scheme === 'light' ? [250, 249, 245] : [38, 38, 36];
       check(`Paper ${scheme}: the warm page is back`, same(p.page && p.page.c, page), p.page);
-      check(`Paper ${scheme}: the button that confirms is terracotta with a white label`, same(p.primary && p.primary.c, TERRACOTTA[0]) && same(p.primaryText && p.primaryText.c, [255, 255, 255]), { fill: p.primary, text: p.primaryText });
+      check(`Paper ${scheme}: Allow once is terracotta with a white label, Deny stays grey`, same(p.answer && p.answer.c, TERRACOTTA[0]) && same(p.answerText && p.answerText.c, [255, 255, 255]) && grey(p.deny && p.deny.c), { answer: p.answer, text: p.answerText, deny: p.deny });
       check(`Paper ${scheme}: the mark is terracotta again`, same(p.mark && p.mark.c, TERRACOTTA[0]), p.mark);
       check(`Paper ${scheme}: the scan for terracotta finds it (so the scans above can see it)`, terracotta(p.all).length >= 3, terracotta(p.all).length);
     }
@@ -146,7 +147,7 @@ async function setTheme(app, scheme) {
     await app.waitFor(`!document.querySelector('style[data-mod="theme-paper"]')`, 10_000, 'the Paper theme to go').catch(() => {});
     await sleep(900);
     const off = await app.evaluate(READ);
-    check('Paper off: the white page and the grey button are back', same(off.page && off.page.c, WANT.light.page) && same(off.primary && off.primary.c, WANT.light.fill), { page: off.page, fill: off.primary });
+    check('Paper off: the white page and the inverted Allow once are back', same(off.page && off.page.c, WANT.light.page) && same(off.answer && off.answer.c, WANT.light.text), { page: off.page, answer: off.answer });
 
     const errors = app.console.filter((l) => /^\[(error|exception)\]/.test(l));
     check('no renderer errors', errors.length === 0, errors.slice(0, 3));

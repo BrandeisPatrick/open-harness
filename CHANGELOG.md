@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Hooks
+
+- **Hooks, as in Claude Code.** Put `"hooks"` in `~/.silo-harness/settings.json` and a command, a script or an HTTP endpoint runs at fixed points of the agent's work: before a tool call (it can refuse it, ask you first, let it through without asking, or change what it does), after one, when you send a message, when a run ends (it can send the agent back to work), around a compaction, when a session starts and ends, and when an approval waits. The format is Claude Code's, so the hooks you already have work as they are: the same events, matchers, `if` rules, input on stdin and exit codes, and tool names like `Bash`, `Read`, `Write` and `Edit`. docs/hooks.md has the details and what is not supported.
+- **A project's hooks wait for your trust.** A project's `settings.json` with hooks runs nothing until you trust the file in Settings → Configuration files, which says before you do that it defines hooks that run commands, and lists them.
+- **Settings → Hooks** lists the hooks in effect, by event, with where each comes from, and the hooks that ran since the app started: what they decided, their exit code, how long they took and what they printed on stderr.
+- **In the conversation**, a hook that blocks something or fails leaves a quiet note saying so, and the status line says what a hook is doing while it runs, when it has a status message.
+- **Mods can handle hooks** with the new `hooks` permission: `harness.hooks.on('PreToolUse', handler)` gets the same input and returns the same answer as a command hook. A new `worker` seat loads a hidden page whenever the mod is on, for a mod that has nothing to show. The card that turns a mod on says plainly what the permission allows. Older mods are unaffected.
+
 ### Closer to Claude Code
 
 - **The rail.** Environment shows the folder with its path, the repository and the branch when the folder is a git repository, the provider and model, and Remote control with a small switch; the mode row and Keep awake are gone from it (the mode stays in the footer, Keep awake in Settings → General). Context shows a plain title, a 4 px bar in the legend's order, coloured squares, the percentage column in strong text, a chevron row for each slice that opens, "Last updated … Refreshes when this turn ends", and "Nk until auto-compact" with a Compact session button, as Claude Code lays it out.

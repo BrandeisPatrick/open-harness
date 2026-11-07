@@ -84,6 +84,7 @@ Settings → Mods has a tab for each kind of mod, by what its manifest contribut
 | `contributes.looks` | | stylesheets for one region of the window each: the conversation or the chat bar (see Looks) |
 | `contributes.commands` | | slash commands |
 | `contributes.settings` | | options shown under the mod in Settings |
+| `contributes.hooks` | | hook events its views handle, e.g. `["PreToolUse", "Stop"]` or `[{ "event": "PreToolUse", "timeout": 30 }]`; needs the `hooks` permission (see Hooks) |
 
 Unknown fields are ignored, so a mod written for a later protocol still loads with what this version understands. A look for a region this version does not know is left out with a warning (shown in Settings → Mods and by `mod_check`), and the rest of the mod loads.
 
@@ -100,6 +101,7 @@ A view is one HTML page in one seat.
 | `rail` | a section in the right-hand rail, between the chat and the side pane | sized to its content up to `maxHeight` (default 360); `order` sorts sections, lower first (bundled ones use 10 to 90); the user can collapse a section |
 | `tab` | a tab in the side pane, next to Browser, Diff and Terminal | fills the pane; it is not sized to its content, so make the page `height: 100%` and scroll inside it (the `--h-inset-*` padding is for rail sections) |
 | `composer` | a strip directly above the composer | one row, sized to its content up to 120 px |
+| `worker` | nowhere: a hidden page, loaded whenever the mod is on | for a mod that handles hooks (or listens to events) without a panel; it is never visible, takes no input and does not report a size. *Added in 0.8.0.* |
 | `background` | behind the whole window | takes no clicks, but can follow the pointer (the `pointer` event); only one background is active, chosen in Settings → Mods → Backgrounds (with Your picture and Dim); the app's surfaces turn translucent over it |
 
 View fields: `id` (unique in the mod), `title`, `entry` (a file in the mod), `seat`, and optionally `order`, `maxHeight`, `icon`.
@@ -326,6 +328,24 @@ Events: `session.changed` (another session came on screen, or this one's title o
 
 No call: with this permission the page may load and fetch `https:` resources.
 
+### hooks
+
+*Added in 0.8.0. An older app ignores `contributes.hooks`, the `hooks` permission and the `worker` seat, so the protocol version stays 1.*
+
+A mod can handle the same hook events as a command in `settings.json` ([hooks.md](hooks.md)): see a tool call before it runs and deny it, ask for the approval card, allow it or rewrite its input; add context to a prompt; keep a turn going. List the events in `contributes.hooks` (Settings shows them, and the app sends no others), ask for the `hooks` permission, and register a handler in a view:
+
+```js
+harness.hooks.on('PreToolUse', (input) => {
+  if (input.tool_name === 'Bash' && /\brm\b/.test(input.tool_input.command)) {
+    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'No rm here' } };
+  }
+}); // returns an off function; harness.hooks.off('PreToolUse') does the same
+```
+
+`handler(input)` receives the object a command hook reads on stdin (`session_id`, `cwd`, `hook_event_name`, `tool_name`, `tool_input`, … ) and returns, or resolves to, the object a command hook would print, or nothing (no decision). A handler that throws is a non-blocking error. The answers merge with the settings hooks' by the same rule (deny over ask over allow, any block blocks), and Settings → Hooks lists the mod's hooks with its name as their source, and their runs.
+
+The host sends each request to every view of the mod that registered a handler for the event, in the order `contributes.views` lists them, and takes the first answer that is not empty. It waits at most 10 seconds in all (or the entry's `timeout`, up to 600); a mod that does not answer in time is skipped, with a log line and a "skipped" run in Settings → Hooks, and decides nothing. A view only receives requests while it is loaded: a `worker` view always is while the mod is on, a rail section is, a tab only once it was opened. Without the window (the app has no window) mods' hooks are skipped.
+
 ## Permissions
 
 | Permission | Lets the mod |
@@ -341,6 +361,7 @@ No call: with this permission the page may load and fetch `https:` resources.
 | `schedules` | list, create, change and delete scheduled tasks |
 | `remote` | see and switch remote control |
 | `network` | reach the internet |
+| `hooks` | react to the agent's actions before and after they happen, and block them: tool calls, prompts, the end of a turn. It sees every tool call's input, file contents included (0.8.0) |
 
 Not available to any mod, whatever it asks for: answering approval cards, changing the permission mode, reading API keys, trusting MCP servers, settings files or other mods, and reading or writing files outside its own folder.
 
@@ -358,6 +379,16 @@ app → page   { "jsonrpc": "2.0", "id": 2, "result": { "tasks": [] } }
 page → app   { "jsonrpc": "2.0", "id": 3, "method": "events.subscribe", "params": { "events": ["tasks.changed"] } }
 app → page   { "jsonrpc": "2.0", "method": "event", "params": { "name": "tasks.changed", "data": { "tasks": [] } } }
 ```
+
+Hooks go the other way: the app sends the request and the page answers it.
+
+```
+page → app   { "jsonrpc": "2.0", "id": 4, "method": "hooks.subscribe", "params": { "events": ["PreToolUse"] } }
+app → page   { "jsonrpc": "2.0", "id": "hook-7", "method": "hook", "params": { "event": "PreToolUse", "input": { "tool_name": "Bash", … } } }
+page → app   { "jsonrpc": "2.0", "id": "hook-7", "result": { "hookSpecificOutput": { "permissionDecision": "ask" } } }
+```
+
+The answer is `result` (the output object, or `null` for no decision) or `error`. A page that never answers is skipped when the time runs out; `hooks.unsubscribe` takes a registration back. Both need the `hooks` permission.
 
 Method names are the call names above (`ui.setBadge`, `storage.get`, `session.transcript`, `model.complete`, …) with their arguments as a `params` object. Every result is an object or nothing; `harness.js` hands most of them back as they are and unwraps three: `storage.get` (`{ value }`), `storage.keys` (`{ keys }`) and `skills.list` (`{ skills }`). `events.subscribe` for an event the mod has no permission for is refused with `4003`. Errors use `{ "code", "message", "data" }` with these codes: `-32601` unknown method, `-32602` bad params, `4003` permission needed (`data.permission`), `4004` not available right now, `4008` timed out, `4000` anything else. The app identifies the caller by the frame the message came from, never by what the message says.
 

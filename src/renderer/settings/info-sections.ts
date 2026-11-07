@@ -235,7 +235,9 @@ export function filesSection(ctx: Ctx, onInfo: (info: SettingsInfo | null) => vo
     fileRow.el.querySelector('.sp-row-title')!.append(chip(st.label, st.tone));
     if (f.error) fileRow.problem(`It is not a JSON object: ${f.error}`);
 
-    const keys = f.keys.filter((k) => !k.startsWith('env.'));
+    const keys = f.keys.filter((k) => !k.startsWith('env.')).map((k) => (k.startsWith('hooks.') ? `${k} (runs commands)` : k));
+    const commands = f.hookCommands ?? [];
+    const runsWhat = commands.length ? `It defines hooks that run commands on your Mac: ${commands.slice(0, 3).join('; ')}${commands.length > 3 ? ` and ${commands.length - 3} more` : ''}.` : '';
     const envs = f.keys.filter((k) => k.startsWith('env.')).map((k) => k.slice(4));
     const setsRow = row({ id: `file-${f.scope}-keys`, title: 'What it sets', desc: !f.exists ? 'Nothing: the file does not exist.' : [keys.length ? keys.join(', ') : '', envs.length ? `environment: ${envs.join(', ')}` : ''].filter(Boolean).join(' · ') || 'Nothing.', keywords: 'fields' });
     setsRow.descEl.classList.add('sp-mono-list');
@@ -252,12 +254,12 @@ export function filesSection(ctx: Ctx, onInfo: (info: SettingsInfo | null) => vo
         {
           id: 'file-project-trust',
           title: trusted ? 'Applied to this project' : f.changed ? 'Changed since you approved it' : 'Apply this file',
-          desc: trusted ? 'Its values are in effect while this project is open.' : 'A project file can change the model, the permission mode and more. Read it, then apply it as it is right now.',
+          desc: trusted ? `Its values are in effect while this project is open.${commands.length ? ' Its hooks run commands.' : ''}` : `A project file can change the model, the permission mode and more.${runsWhat ? ` ${runsWhat}` : ''} Read it, then apply it as it is right now.`,
           keywords: 'trust approve apply project',
         },
         button(trusted ? 'Stop applying' : 'Trust and apply', async (b) => {
           if (!trusted) {
-            const ok = await ctx.confirm({ title: 'Apply the project’s settings.json?', description: `Its values take effect now and every time this project opens, until the file changes. ${keys.length ? `It sets ${keys.join(', ')}.` : ''}`, confirmLabel: 'Trust and apply', icon: 'shield-check' });
+            const ok = await ctx.confirm({ title: 'Apply the project’s settings.json?', description: `Its values take effect now and every time this project opens, until the file changes. ${keys.length ? `It sets ${keys.join(', ')}.` : ''}${runsWhat ? ` ${runsWhat}` : ''}`, confirmLabel: 'Trust and apply', icon: 'shield-check' });
             if (!ok) return;
           }
           b.disabled = true;

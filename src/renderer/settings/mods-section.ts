@@ -653,6 +653,8 @@ export function modsSection(ctx: Ctx): Section {
     for (const v of m.manifest?.contributes?.views ?? []) adds.push(`${v.title}: ${SEAT_WORDS[v.seat] ?? v.seat}${v.seat === 'background' ? ' (pick it on the Backgrounds tab)' : ''}`);
     for (const l of m.manifest?.contributes?.looks ?? []) adds.push(`${l.title}: ${LOOK_WORDS[l.target] ?? l.target} (pick it on the ${l.target === 'composer' ? 'Chat bar' : 'Conversation'} tab)`);
     for (const c of m.manifest?.contributes?.commands ?? []) adds.push(`/${c.name}: ${c.description}`);
+    const hooks = m.manifest?.contributes?.hooks ?? [];
+    if (hooks.length) adds.push(`Hooks: ${hooks.map((x) => x.event).join(', ')} (listed in Settings → Hooks)`);
     const styles = m.manifest?.contributes?.styles ?? [];
     if (styles.length) adds.push(`Styles for the whole app: ${styles.join(', ')} (in order on the Themes tab)`);
     d.append(block('What it adds', adds.length ? h('ul', { class: 'sp-detail-list' }, ...adds.map((a) => h('li', {}, a))) : h('p', { class: 'sp-detail-muted' }, 'Nothing yet.')));

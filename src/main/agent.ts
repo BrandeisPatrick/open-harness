@@ -47,6 +47,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { listChanges, snapshotBeforeChange } from './changes';
 import type { App } from './app';
+import { FAILED_RESULT, HOOK_NOTE_PREFIX } from './compact';
+import type { HookEvent } from '../shared/hooks';
+import type { FireContext, HookEngine, HookOutcome } from './hooks/engine';
+import { claudeToolInput, claudeToolName, nativeToolInput, toolMatchNames } from './hooks/tools';
 
 type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 type ToolSpec = OpenAI.Chat.Completions.ChatCompletionTool;
@@ -63,6 +67,8 @@ const PLAN_CUSTOM_BLOCKED = 'Not permitted in plan mode: this action needs the u
 /** What a browser_* call from a session that is not on screen gets back (the pane belongs to the session on screen). */
 export const BROWSER_BACKGROUND = 'Error: the built-in browser is only available while this session is on screen, and the user is looking at another session. Continue without the browser (use bash with curl for plain pages), or say that the user should open this session to let you browse.';
 const SUMMARY_TIMEOUT_MS = 240_000;
+/** How many times Stop hooks may send one run back to work (a hook that keeps blocking is stopped here) */
+const MAX_STOP_CONTINUES = 8;
 const MIN_COMPACT_MESSAGES = 2;
 
 const CHANGING_TOOLS = new Set(['write_file', 'edit_file', 'bash', 'terminal_run']);
@@ -242,7 +248,12 @@ export interface AgentOptions {
   tools?: () => Tool[];
   /** Extra system-prompt text (app.prompt sections, already joined) */
   prompt?: (info: { cwd: string; mode: PermissionMode; sessionId: string; essential?: boolean; restricted?: boolean }) => string;
+  /** The hook engine (default: the app's 'hooks' service; none in bare tests) */
+  hooks?: HookEngine | null;
 }
+
+/** What a PreToolUse hook decided about the approval card: skip it, or show it whatever the mode says. */
+type HookApproval = 'allow' | 'ask' | null;
 
 export class Agent {
   session: Session;
@@ -286,6 +297,10 @@ export class Agent {
   running = false;
   /** True while /compact runs outside a run (stop() cancels it). */
   compacting = false;
+  /** SessionStart fired for this session in this app session (SessionEnd fires only then) */
+  private sessionStarted = false;
+  /** A hook said continue: false; the run stops after the current step */
+  private hookStop: string | null = null;
 
   constructor(
     private readonly getConfig: () => AppConfig,
@@ -445,8 +460,11 @@ export class Agent {
     return s;
   }
 
-  /** Decides, per permission mode, whether an action runs, asks, or is refused. */
-  private requestApproval(name: string, detail: string, target?: string, opts: ApproveOptions = {}): Promise<ApprovalResult> {
+  /**
+   * Decides, per permission mode, whether an action runs, asks, or is refused. `hookAllowed`: a PreToolUse hook allowed
+   * the call, so no card is shown (what the mode refuses outright, plan mode's edits, stays refused).
+   */
+  private requestApproval(name: string, detail: string, target?: string, opts: ApproveOptions = {}, hookAllowed = false): Promise<ApprovalResult> {
     const cfg = this.sessionConfig();
     const mode = cfg.permissionMode;
     const cwd = cfg.workingDirectory;
@@ -454,10 +472,11 @@ export class Agent {
     const isCmd = name === 'bash' || name === 'terminal_run';
     const allow = Promise.resolve<ApprovalResult>({ ok: true });
     const refuse = (message: string) => Promise.resolve<ApprovalResult>({ ok: false, message });
+    const ask = (...a: Parameters<Agent['ask']>) => (hookAllowed ? allow : this.ask(...a));
     if (opts.custom) {
       if (mode === 'plan') return refuse(PLAN_CUSTOM_BLOCKED);
       if (mode === 'bypass' && !opts.alwaysAsk) return allow;
-      return this.ask(name, detail, mode, null, [], true);
+      return ask(name, detail, mode, null, [], true);
     }
     if (mode === 'bypass') return allow;
     const rules = cfg.allowRules?.[cwd];
@@ -466,8 +485,8 @@ export class Agent {
       // MCP tools: read-only ones run everywhere; the rest ask once per server (auto mode asks only for destructive ones).
       if (mode === 'plan') return ref.readOnly ? allow : refuse(PLAN_MCP_BLOCKED);
       if (ref.readOnly || this.sessionSet(this.mcpAllowed).has(ref.server) || rules?.mcp?.includes(ref.server)) return allow;
-      if (mode === 'auto') return ref.destructive ? this.ask(name, detail, mode, 'destructive MCP tool', [ref.server]) : allow;
-      return this.ask(name, detail, mode, null, [ref.server]);
+      if (mode === 'auto') return ref.destructive ? ask(name, detail, mode, 'destructive MCP tool', [ref.server]) : allow;
+      return ask(name, detail, mode, null, [ref.server]);
     }
     if (mode === 'plan') {
       if (isEdit) return refuse(PLAN_EDIT_BLOCKED);
@@ -477,20 +496,21 @@ export class Agent {
     if (!isEdit && !isCmd) return allow;
     const reason = isCmd ? guardCommand(detail, cwd) : target ? guardWrite(target, cwd) : null;
     const programs = isCmd ? programsOf(detail) : [];
-    if (reason && !this.sessionSet(this.allowedReasons).has(reason) && !rules?.reasons?.includes(reason)) return this.ask(name, detail, mode, reason, programs);
+    if (reason && !this.sessionSet(this.allowedReasons).has(reason) && !rules?.reasons?.includes(reason)) return ask(name, detail, mode, reason, programs);
     if (mode === 'auto') return allow;
     if (isEdit && (mode === 'acceptEdits' || rules?.edits)) return allow;
     if (isCmd && programs.length && programs.every((p) => this.sessionSet(this.allowedPrograms).has(p) || rules?.programs?.includes(p))) return allow;
-    return this.ask(name, detail, mode, null, programs);
+    return ask(name, detail, mode, null, programs);
   }
 
   private ask(name: string, detail: string, mode: PermissionMode, reason: string | null, programs: string[], custom = false): Promise<ApprovalResult> {
     const id = randomUUID();
+    this.notifyHook('permission_prompt', `Silo Harness needs your permission to use ${claudeToolName(name)}`);
     if (custom) {
       // Only Allow and Deny: the renderer hides the buttons whose label is empty.
       return new Promise((resolve) => {
         this.pendingApprovals.set(id, { resolve, name, programs, reason, custom: true });
-        this.emit({ type: 'approval_request', id, name, detail, mode, alwaysLabel: '', projectLabel: '' });
+        this.emit({ type: 'approval_request', id, name, detail, mode, ...(reason ? { reason } : {}), alwaysLabel: '', projectLabel: '' });
       });
     }
     const what = name.startsWith('mcp__')
@@ -536,6 +556,127 @@ export class Agent {
       .catch((err: unknown) => console.warn('[changes] listing failed:', errorMessage(err)));
   }
 
+  // ---------- Hooks ----------
+
+  private hookEngine(): HookEngine | null {
+    if (this.opts.hooks !== undefined) return this.opts.hooks;
+    const app = this.opts.app;
+    return app && typeof app.service === 'function' ? (app.service<HookEngine>('hooks') ?? null) : null;
+  }
+
+  /** Whether any hook could fire for the event in this session's folder. */
+  private hasHooks(event: HookEvent): boolean {
+    try {
+      return !!this.hookEngine()?.has(event, this.cwd());
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Runs the hooks of one event for this session, when there are any. Their messages and non-blocking errors become
+   * quiet notices; a handler's statusMessage shows in the status line while it runs.
+   */
+  private async fireHook(event: HookEvent, fields: Record<string, unknown>, opts: Pick<FireContext, 'match' | 'tool' | 'signal' | 'budgetMs'> & { sessionId?: string; transcriptPath?: string } = {}): Promise<HookOutcome | null> {
+    const engine = this.hookEngine();
+    const cwd = this.cwd();
+    if (!engine) return null;
+    try {
+      if (!engine.has(event, cwd)) return null;
+      const { sessionId, transcriptPath, ...rest } = opts;
+      const out = await engine.fire(event, {
+        sessionId: sessionId ?? this.session.id,
+        cwd,
+        projectDir: cwd,
+        transcriptPath: transcriptPath ?? this.store.file(this.session.id),
+        permissionMode: this.getConfig().permissionMode,
+        fields,
+        ...rest,
+        status: (text) => this.emit({ type: 'hook_status', text }),
+      });
+      for (const n of out.notices) this.emit({ type: 'error', kind: 'notice', message: n });
+      if (out.stop) this.hookStop = out.stop.reason || `A ${event} hook stopped the run.`;
+      return out;
+    } catch (err) {
+      console.warn(`[hooks] ${event} failed:`, errorMessage(err));
+      return null;
+    }
+  }
+
+  private windowFocused(): boolean {
+    try {
+      const w = this.opts.app?.window();
+      return !!w && w.isFocused();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Stop at the end of a run (SubagentStop for a sub-session, with the parent's session as the hook's own). Returns
+   * the reason to keep working when a hook blocked the stop, else null. Exit code 2 sends the run back once; after
+   * that (stop_hook_active true) only a JSON decision "block" does, and never more than MAX_STOP_CONTINUES times.
+   */
+  private async stopHooks(last: string, continues: number): Promise<string | null> {
+    const active = continues > 0;
+    const parent = this.session.parentId;
+    const fields: Record<string, unknown> = { stop_hook_active: active, last_assistant_message: last };
+    const out = parent
+      ? await this.fireHook('SubagentStop', { ...fields, agent_id: this.session.id, agent_type: 'sub-session', agent_transcript_path: this.store.file(this.session.id) }, { match: ['sub-session'], sessionId: parent, transcriptPath: this.store.file(parent) })
+      : await this.fireHook('Stop', fields);
+    if (!out?.block) return null;
+    const event = parent ? 'SubagentStop' : 'Stop';
+    if (continues >= MAX_STOP_CONTINUES) {
+      this.emit({ type: 'error', kind: 'notice', message: `A ${event} hook kept blocking the end of the run; it was let end after ${MAX_STOP_CONTINUES} more rounds.` });
+      return null;
+    }
+    if (active && !out.jsonBlock) return null;
+    this.emit({ type: 'error', kind: 'notice', message: `A ${event} hook sent the model back to work: ${out.block}` });
+    return out.block;
+  }
+
+  /** A Notification hook, not waited for: permission_prompt when an approval card waits, idle_prompt when a run ends unseen. */
+  private notifyHook(type: 'permission_prompt' | 'idle_prompt', message: string): void {
+    void this.fireHook('Notification', { message, notification_type: type, title: 'Silo Harness' }, { match: [type] });
+  }
+
+  /** A hook's context for the model: a user-role note the transcript does not show. */
+  private addHookNote(event: HookEvent, lines: string[], what = 'context'): void {
+    const text = lines.map((l) => l.trim()).filter(Boolean).join('\n\n');
+    if (text) this.store.append(this.session, { role: 'user', content: `${HOOK_NOTE_PREFIX}${what}: ${event}]\n${text}` });
+  }
+
+  /** SessionStart, once per session in this app session: startup for a new session, resume for one that has messages. */
+  private async startSessionHooks(): Promise<void> {
+    if (this.sessionStarted) return;
+    this.sessionStarted = true;
+    const source = this.session.messages.length ? 'resume' : 'startup';
+    const out = await this.fireHook('SessionStart', { source }, { match: [source] });
+    if (out?.context.length) this.addHookNote('SessionStart', out.context);
+    if (out?.block) this.emit({ type: 'error', kind: 'notice', message: out.block });
+  }
+
+  /** SessionEnd: the session was closed or the app quits. Only for a session whose SessionStart fired. */
+  async endSession(reason: 'deleted' | 'quit'): Promise<void> {
+    if (!this.sessionStarted) return;
+    this.sessionStarted = false;
+    await this.fireHook('SessionEnd', { reason: 'other', silo_reason: reason }, { match: ['other', reason] });
+  }
+
+  /**
+   * UserPromptSubmit for a message about to enter the conversation. Returns false when a hook blocked it (the message is
+   * dropped and the reason shown); its context follows the message as a note.
+   */
+  private async promptHooks(text: string): Promise<{ ok: boolean; context: string[] }> {
+    const out = await this.fireHook('UserPromptSubmit', { prompt: text });
+    if (!out) return { ok: true, context: [] };
+    if (out.block) {
+      this.emit({ type: 'error', kind: 'notice', message: `A UserPromptSubmit hook blocked this message, so it was not sent: ${out.block}` });
+      return { ok: false, context: [] };
+    }
+    return { ok: true, context: out.context };
+  }
+
   async run(userText: string, attachments: ImageAttachment[] = [], opts: SendOptions = {}): Promise<void> {
     if (this.running) throw new Error('A run is already in progress.');
     this.running = true;
@@ -553,12 +694,31 @@ export class Agent {
     const { content } = expandSlashCommand(expandMentions(userText, cfg.workingDirectory).content, skills);
     this.repairTail(); // a session saved mid-run (rename, generated title) and then quit may end in unanswered tool calls
     const origin = opts.origin ?? 'user';
+    this.hookStop = null;
+    // Hooks: SessionStart the first time this session runs, then UserPromptSubmit, which may drop the message. Without
+    // any, nothing here waits, so the message is in the conversation by the time send() returns.
+    const early = (!this.sessionStarted && this.hasHooks('SessionStart')) || this.hasHooks('UserPromptSubmit');
+    let accepted: { ok: boolean; context: string[] } = { ok: true, context: [] };
+    if (early) {
+      this.emit({ type: 'run_start' });
+      await this.startSessionHooks();
+      accepted = await this.promptHooks(userText);
+      if (!accepted.ok || signal.aborted) {
+        this.running = false;
+        this.abortController = null;
+        this.runCwd = null;
+        this.dropQueue();
+        this.emit({ type: 'run_end', reason: signal.aborted ? 'aborted' : 'done' });
+        return;
+      }
+    } else this.sessionStarted = true;
     this.startTurn(userText, origin, opts.from);
     this.store.append(this.session, userMessage(content, attachments));
+    this.addHookNote('UserPromptSubmit', accepted.context);
     this.autoCompactFailed = false;
     this.compactedAt = -1;
     this.stuckAt = -1;
-    this.emit({ type: 'run_start' });
+    if (!early) this.emit({ type: 'run_start' });
     this.emitUserMessage(userText, attachments.length, origin, opts.from);
     // Saved now, not only at the end: the session gets its title from this message at once, so a sidebar with
     // several running sessions does not show several "New session" rows.
@@ -608,6 +768,8 @@ export class Agent {
       };
 
       let nudged = false;
+      /** Times a Stop hook sent this run back to work */
+      let stopContinues = 0;
       for (let turn = 0; ; turn++) {
         if (turn >= cfg.maxTurns) {
           reason = 'max_turns';
@@ -617,7 +779,7 @@ export class Agent {
           reason = 'aborted';
           break;
         }
-        this.drainQueue(skills);
+        if (this.queued.length) await this.drainQueue(skills);
         await this.autoCompactIfNeeded(cfg, client, model, signal);
         if (signal.aborted) {
           reason = 'aborted';
@@ -659,12 +821,20 @@ export class Agent {
         this.emit({ type: 'assistant_message', text, toolCalls: toolCalls.length });
         if (!toolCalls.length) {
           // A message queued during the run keeps it going instead of ending it.
-          if (this.drainQueue(skills)) continue;
+          if (this.queued.length && (await this.drainQueue(skills))) continue;
+          if (this.hookStop || signal.aborted) break;
+          // Stop hooks may send the model back to work with a reason.
+          const more = await this.stopHooks(lastText, stopContinues);
+          if (more && !signal.aborted && !this.hookStop) {
+            stopContinues++;
+            this.addHookNote(this.session.parentId ? 'SubagentStop' : 'Stop', [more], 'feedback');
+            continue;
+          }
           break;
         }
 
         for (const call of toolCalls) {
-          if (signal.aborted) break;
+          if (signal.aborted || this.hookStop) break;
           const result = await this.execTool(call, tools, ctx);
           this.store.append(this.session, { role: 'tool', tool_call_id: call.id, content: result.content });
           const used = tools.find((t) => t.name === call.function.name);
@@ -683,7 +853,9 @@ export class Agent {
           reason = 'plan';
           break;
         }
+        if (this.hookStop) break;
       }
+      if (this.hookStop) this.emit({ type: 'error', kind: 'notice', message: `Stopped by a hook: ${this.hookStop}` });
     } catch (err) {
       if (signal.aborted) reason = 'aborted';
       else {
@@ -700,6 +872,7 @@ export class Agent {
       this.dropQueue();
       this.emit({ type: 'session_changed', session: toMeta(this.session) });
       this.emit(lastText ? { type: 'run_end', reason, text: lastText } : { type: 'run_end', reason });
+      if (reason !== 'aborted' && !this.windowFocused()) this.notifyHook('idle_prompt', 'Silo Harness is waiting for your input');
       if (reason === 'done' || reason === 'max_turns' || reason === 'plan') {
         this.generateSessionTitle(this.session).catch((err: unknown) => console.warn('[agent] title generation failed:', errorMessage(err)));
       }
@@ -938,14 +1111,24 @@ export class Agent {
     const trySummary = cut > 0 && !(reason === 'auto' && (this.autoCompactFailed || recent));
     let error: string | undefined;
     if (trySummary) {
+      // PreCompact: a hook may block the summary, and what it prints is instructions for it.
+      const pre = await this.fireHook('PreCompact', { trigger: reason, custom_instructions: focus ?? '' }, { match: [reason], signal });
+      if (pre?.block) {
+        const message = `A PreCompact hook blocked the compaction: ${pre.block}`;
+        this.emit({ type: 'error', kind: 'notice', message });
+        if (reason === 'auto') this.autoCompactFailed = true;
+        return { ok: false, error: message };
+      }
+      const instructions = [focus?.trim(), ...(pre?.context ?? [])].filter(Boolean).join('\n\n') || undefined;
       this.emit({ type: 'compact_start', reason });
       try {
         const folded = s.messages.slice(0, cut);
-        const summary = await this.summarize(cfg, client, model, folded, focus, signal);
+        const summary = await this.summarize(cfg, client, model, folded, instructions, signal);
         if (signal.aborted) throw new Error('Compaction was stopped.');
         const brief = compactedPreamble(summary, filesTouched(folded), this.requestToCarry(folded));
         if (estimateMessageTokens({ role: 'user', content: brief }) >= estimateTokens(folded)) throw new Error('The summary was not smaller than the messages it would replace.');
         const info = this.fold(cut, brief, summary, { reason, before, pruned, stage: 'summary' });
+        await this.fireHook('PostCompact', { trigger: reason, compact_summary: summary }, { match: [reason] });
         return { ok: true, info };
       } catch (err) {
         error = signal.aborted ? 'Compaction was stopped.' : errorMessage(err);
@@ -1119,20 +1302,31 @@ export class Agent {
     return this.queued.map((m) => ({ ...m, attachments: [...m.attachments] }));
   }
 
-  /** Moves queued messages into the conversation (in order). Returns true when any was delivered. */
-  private drainQueue(skills: Skill[]): boolean {
+  /**
+   * Moves queued messages into the conversation (in order), each past the UserPromptSubmit hooks. Returns true when
+   * any was delivered.
+   */
+  private async drainQueue(skills: Skill[]): Promise<boolean> {
     if (!this.queued.length) return false;
     const batch = this.queued.splice(0);
     const cwd = this.cwd();
+    let delivered = false;
     for (const m of batch) {
+      const accepted = await this.promptHooks(m.text);
+      if (!accepted.ok) {
+        this.emit({ type: 'queue_dropped', id: m.id });
+        continue;
+      }
       const { content } = expandSlashCommand(expandMentions(m.text, cwd).content, skills);
       const origin = m.origin ?? 'queue';
       this.startTurn(m.text, origin, m.from);
       this.store.append(this.session, userMessage(content, m.attachments));
+      this.addHookNote('UserPromptSubmit', accepted.context);
       this.emit({ type: 'queue_delivered', id: m.id });
       this.emitUserMessage(m.text, m.attachments.length, origin, m.from);
+      delivered = true;
     }
-    return true;
+    return delivered;
   }
 
   /** The run ended with messages still queued: hand them back to the renderer. */
@@ -1375,17 +1569,48 @@ export class Agent {
       this.emit({ type: 'tool_end', id: call.id, name, result: content, ok: false, durationMs: 0 });
       return { content };
     }
-    this.emit({ type: 'tool_start', id: call.id, name, args });
     if (name.startsWith('browser_') && !this.isForeground()) {
+      this.emit({ type: 'tool_start', id: call.id, name, args });
       this.emit({ type: 'tool_end', id: call.id, name, result: BROWSER_BACKGROUND, ok: false, durationMs: 0 });
       return { content: BROWSER_BACKGROUND };
     }
     const tool = tools.find((t) => t.name === name);
     if (!tool) {
+      this.emit({ type: 'tool_start', id: call.id, name, args });
       const content = `Error: unknown tool "${name}". Available tools: ${tools.map((t) => t.name).join(', ')}`;
       this.emit({ type: 'tool_end', id: call.id, name, result: content, ok: false, durationMs: 0 });
       return { content };
     }
+
+    // PreToolUse: before the tool's own approval check. deny refuses the call, ask forces the card, allow skips it,
+    // updatedInput replaces the arguments.
+    const claudeName = claudeToolName(name);
+    const names = toolMatchNames(name);
+    const toolInput = () => claudeToolInput(name, args, ctx.cwd);
+    const hookFields = () => ({ tool_name: claudeName, tool_input: toolInput(), tool_use_id: call.id, silo_tool_name: name, silo_tool_input: args });
+    const pre = await this.fireHook('PreToolUse', hookFields(), { match: names, tool: { names, input: toolInput() }, signal: ctx.signal });
+    if (pre?.updatedInput && !pre.block && pre.permission !== 'deny') args = nativeToolInput(name, pre.updatedInput);
+    this.emit({ type: 'tool_start', id: call.id, name, args });
+    if (pre?.block || pre?.permission === 'deny') {
+      const content = pre.block ?? `PreToolUse:${claudeName} hook denied this tool call${pre.permissionReason ? `: ${pre.permissionReason}` : '.'}`;
+      this.emit({ type: 'tool_end', id: call.id, name, result: content, ok: false, durationMs: 0 });
+      this.emit({ type: 'error', kind: 'notice', message: `A PreToolUse hook blocked ${name}: ${pre.block ? content.replace(/^PreToolUse:\S+ hook error: /, '') : pre.permissionReason || 'denied'}` });
+      return { content };
+    }
+    const hookContext = pre?.context ?? [];
+    let hookApproval: HookApproval = pre?.permission === 'allow' ? 'allow' : pre?.permission === 'ask' ? 'ask' : null;
+    if (hookApproval === 'ask') {
+      // The card comes up whatever the mode says; once answered, the tool's own check asks no more.
+      const input = toolInput();
+      const what = typeof input.command === 'string' ? input.command : typeof input.file_path === 'string' ? input.file_path : truncate(JSON.stringify(args ?? {}), 800);
+      const answer = await this.ask(name, what, this.getConfig().permissionMode, pre?.permissionReason || 'a PreToolUse hook asks you to confirm this call', [], true);
+      if (!answer.ok) {
+        this.emit({ type: 'tool_end', id: call.id, name, result: answer.message, ok: false, durationMs: 0 });
+        return { content: answer.message };
+      }
+      hookApproval = 'allow';
+    }
+
     // durationMs covers the tool's own work: time spent waiting on an approval card is left out.
     let waited = 0;
     const timedCtx: ToolContext = {
@@ -1393,7 +1618,7 @@ export class Agent {
       approve: async (toolName, detail, target, approveOpts) => {
         const askedAt = Date.now();
         try {
-          return await ctx.approve(toolName, detail, target, approveOpts);
+          return hookApproval === 'allow' ? await this.requestApproval(toolName, detail, target, approveOpts, true) : await ctx.approve(toolName, detail, target, approveOpts);
         } finally {
           waited += Date.now() - askedAt;
         }
@@ -1401,17 +1626,31 @@ export class Agent {
     };
     const started = Date.now();
     const elapsed = () => Math.max(0, Date.now() - started - waited);
+    let result: ToolResult;
     try {
-      const result = await tool.run(args, timedCtx);
+      result = await tool.run(args, timedCtx);
       result.content = truncate(result.content);
-      // The same rule the saved transcript applies when it is shown again (sessions.ts).
-      const ok = !/^(Error:|Not permitted|Tool call was interrupted)/.test(result.content);
-      this.emit({ type: 'tool_end', id: call.id, name, result: result.content, ok, image: result.image, durationMs: elapsed() });
-      return result;
     } catch (err) {
-      const content = `Error: ${errorMessage(err)}`;
-      this.emit({ type: 'tool_end', id: call.id, name, result: content, ok: false, durationMs: elapsed() });
-      return { content };
+      result = { content: `Error: ${errorMessage(err)}` };
     }
+    const durationMs = elapsed();
+    // The same rule the saved transcript applies when it is shown again (sessions.ts).
+    const ok = !FAILED_RESULT.test(result.content);
+
+    // PostToolUse / PostToolUseFailure: what they say reaches the model with the result.
+    const extra: string[] = hookContext.length ? [`${HOOK_NOTE_PREFIX}context: PreToolUse]\n${hookContext.join('\n\n')}`] : [];
+    const interrupted = result.content.startsWith('Tool call was interrupted') || !!ctx.signal?.aborted;
+    const post = ok
+      ? await this.fireHook('PostToolUse', { ...hookFields(), tool_response: result.content }, { match: names, tool: { names, input: toolInput() } })
+      : await this.fireHook('PostToolUseFailure', { ...hookFields(), error: result.content, is_interrupt: interrupted }, { match: names, tool: { names, input: toolInput() } });
+    const event = ok ? 'PostToolUse' : 'PostToolUseFailure';
+    if (post?.block) {
+      extra.push(post.block);
+      this.emit({ type: 'error', kind: 'notice', message: `A ${event} hook flagged ${name}: ${post.block.replace(/^\S+ hook error: /, '')}` });
+    }
+    if (post?.context.length) extra.push(`${HOOK_NOTE_PREFIX}context: ${event}]\n${post.context.join('\n\n')}`);
+    if (extra.length) result = { ...result, content: `${result.content}\n\n${extra.join('\n\n')}` };
+    this.emit({ type: 'tool_end', id: call.id, name, result: result.content, ok, image: result.image, durationMs });
+    return result;
   }
 }

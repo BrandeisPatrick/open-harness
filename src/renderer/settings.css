@@ -241,3 +241,8 @@ textarea.sp-input { height: auto; min-height: 92px; padding: 8px 10px; line-heig
 .sp-content:not(.searching) .sp-tab-out { display: none; }
 .sp-tab-head > .sp-row:first-child, .sp-tab-head > .sp-note:first-child { border-top: none; }
 .sp-mod-set { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- Hooks ---------- */
+.sp-hook .sp-hook-cmd { font-family: var(--mono); font-size: var(--fs-code); overflow-wrap: anywhere; }
+.sp-hook .sp-row-desc, .sp-hook-run .sp-row-desc { overflow-wrap: anywhere; }
+.sp-hook-run { min-height: 56px; }

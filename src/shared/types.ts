@@ -407,6 +407,8 @@ export type AgentEvent =
   | { type: 'approval_resolved'; id: string; ok: boolean; scope: 'once' | 'session' | 'project' }
   /** The model showed an image with show_image; it appears inline in the reply */
   | { type: 'image'; image: ImageInfo }
+  /** A hook with a statusMessage is running (text), or it finished (null): the status line says so meanwhile */
+  | { type: 'hook_status'; text: string | null }
   /** `text` is the last assistant text of the run, when it had any */
   | { type: 'run_end'; reason: 'done' | 'aborted' | 'max_turns' | 'error' | 'plan'; text?: string };
 

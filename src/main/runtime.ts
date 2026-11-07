@@ -173,7 +173,9 @@ export class SessionRuntime {
 
   /** Stops and forgets a deleted session's agent. The caller deletes the session from the store. */
   forget(id: string): void {
-    this.agents.get(id)?.stop();
+    const agent = this.agents.get(id);
+    agent?.stop();
+    void agent?.endSession('deleted').catch(() => undefined);
     this.agents.delete(id);
     this.lives.delete(id);
     this.listChanged();
@@ -203,6 +205,11 @@ export class SessionRuntime {
 
   stop(id: string): void {
     this.agents.get(id)?.stop();
+  }
+
+  /** SessionEnd for every session that started in this app session (the app quits); resolves when their hooks are done. */
+  async endSessions(reason: 'quit' | 'deleted' = 'quit'): Promise<void> {
+    await Promise.all([...this.agents.values()].map((a) => a.endSession(reason).catch(() => undefined)));
   }
 
   stopAll(): void {

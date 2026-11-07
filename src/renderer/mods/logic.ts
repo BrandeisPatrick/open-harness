@@ -252,6 +252,7 @@ const PERMISSION_WORDS: Record<ModPermission, string> = {
   schedules: 'List, create, change and delete scheduled tasks',
   remote: 'See and switch remote control',
   network: 'Reach the internet',
+  hooks: "React to the agent's actions before and after they happen, and block them: tool calls, prompts, the end of a turn",
 };
 
 export interface AskLine {
@@ -267,7 +268,9 @@ export function askLines(mod: ModInfo): AskLine[] {
   for (const p of perms) {
     if (p === 'network') continue;
     const text = PERMISSION_WORDS[p];
-    if (text) lines.push({ text });
+    // Hooks see every tool call's input (commands, file contents) and can stop it: said as plainly as the network.
+    if (p === 'hooks') lines.push({ text: `${text}. It sees what each tool call is given, file contents included.`, strong: true });
+    else if (text) lines.push({ text });
   }
   const c = mod.manifest?.contributes;
   const hasStyles = !!c?.styles?.length;
@@ -322,4 +325,21 @@ export function frameSrc(mod: Pick<ModInfo, 'origin' | 'rev'>, entry: string): s
 /** What makes a mod's views reload: its files (rev) or what it was granted. */
 export function modSignature(mod: ModInfo): string {
   return JSON.stringify([mod.rev, mod.state, [...mod.granted].sort(), mod.origin]);
+}
+
+// ---------- Hooks ----------
+
+/** The frames of a mod that registered a handler for `event`, in the order the manifest lists the views. */
+export function hookViewOrder<T extends { view: string; hooks: Iterable<string> }>(mod: Pick<ModInfo, 'manifest'>, frames: readonly T[], event: string): T[] {
+  const order = (mod.manifest?.contributes?.views ?? []).map((v) => v.id);
+  const at = (id: string) => {
+    const i = order.indexOf(id);
+    return i < 0 ? order.length : i;
+  };
+  return frames.filter((f) => [...f.hooks].includes(event)).sort((a, b) => at(a.view) - at(b.view));
+}
+
+/** A hook answer that decides nothing: null, undefined or an empty object (the host then asks the next view). */
+export function isEmptyHookResult(r: unknown): boolean {
+  return r === null || r === undefined || (typeof r === 'object' && !Array.isArray(r) && Object.keys(r as object).length === 0);
 }

@@ -14,6 +14,7 @@ import { TerminalManager } from './terminal';
 import { createApp, type AppHost } from './app';
 import { registerCoreIpc } from './ipc';
 import { setupSettings } from './settings-service';
+import { setupHooks } from './hooks';
 import { setupHistory } from './history';
 import { setupContext } from './context-service';
 import { setupImages } from './images';
@@ -241,6 +242,7 @@ app.whenReady().then(() => {
   registerCoreIpc(a, { browser: () => browser });
   // The features, in this order. Each keeps its code in its own file and never needs to edit this one.
   setupSettings(a);
+  setupHooks(a);
   setupHistory(a);
   setupContext(a);
   setupImages(a);

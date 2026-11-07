@@ -5,6 +5,7 @@
 
 import type { AgentEvent, AppConfig, SessionMeta } from '../shared/types';
 import type { ModInfo, ModLayout, ModLookTarget, ModRpcRequest, ModSeat, ModTheme, ModCaller } from '../shared/mods';
+import type { ModHookRequest } from '../shared/hooks';
 import { bus } from './bus.js';
 import { onPush, rpc } from './rpc.js';
 import { escapeHtml, writeClipboard } from './dom.js';
@@ -26,7 +27,9 @@ import {
   eventsFromAgent,
   frameHeight,
   frameSrc,
+  hookViewOrder,
   iconSource,
+  isEmptyHookResult,
   pointerFraction,
   isHttpUrl,
   isWindowMethod,
@@ -95,6 +98,8 @@ interface Frame {
   /** When it said hello (0: not yet) */
   helloAt: number;
   subs: Set<string>;
+  /** Hook events it registered a handler for (harness.hooks.on) */
+  hooks: Set<string>;
   timer: number | undefined;
   /** The rev it was made for */
   sig: string;
@@ -469,6 +474,12 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
       return;
     }
     const m = e.data as ModRpcRequest | null;
+    // A frame's answer to a hook request the host sent it
+    if (isObj(m) && m.jsonrpc === '2.0' && m.method === undefined && (typeof m.id === 'string' || typeof m.id === 'number')) {
+      const waiting = hookCalls.get(`${f.id}:${m.id}`);
+      if (waiting) waiting(m as unknown as { result?: unknown; error?: { message?: unknown } });
+      return;
+    }
     if (!isObj(m) || m.jsonrpc !== '2.0' || typeof m.method !== 'string' || m.method === 'event') return;
     if (m.id === undefined || m.id === null || (typeof m.id !== 'number' && typeof m.id !== 'string')) return;
     void answer(f, m);
@@ -527,6 +538,16 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
         if (missing) throw new BridgeError(ERR.permission, `Receiving these events needs the ${missing} permission; add it to "permissions" in mod.json.`, { permission: missing });
         for (const n of names as string[]) f.subs.add(n);
         flushQueued(f);
+        return null;
+      }
+      case 'hooks.subscribe':
+      case 'hooks.unsubscribe': {
+        const names = p.events;
+        if (!Array.isArray(names) || names.some((n) => typeof n !== 'string')) throw bad('events: must be a list of hook event names, e.g. ["PreToolUse"]');
+        for (const n of names as string[]) {
+          if (method === 'hooks.unsubscribe') f.hooks.delete(n);
+          else f.hooks.add(n);
+        }
         return null;
       }
       case 'log.error': {
@@ -699,8 +720,8 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     iframe.setAttribute('sandbox', 'allow-scripts allow-forms');
     iframe.setAttribute('referrerpolicy', 'no-referrer');
     iframe.title = `${s.ref.view.title || mod.manifest?.name || mod.id} (mod ${mod.manifest?.name ?? mod.id})`;
-    if (s.seat === 'background') iframe.tabIndex = -1;
-    const f: Frame = { id: nextFrameId++, slot: s, iframe, helloAt: 0, subs: new Set(), timer: undefined, sig: modSignature(mod), visible: slotVisible(s) };
+    if (s.seat === 'background' || s.seat === 'worker') iframe.tabIndex = -1;
+    const f: Frame = { id: nextFrameId++, slot: s, iframe, helloAt: 0, subs: new Set(), hooks: new Set(), timer: undefined, sig: modSignature(mod), visible: slotVisible(s) };
     if (s.seat === 'rail' || s.seat === 'composer') iframe.style.height = `${s.height}px`;
     iframe.src = frameSrc(mod, s.ref.view.entry);
     f.timer = window.setTimeout(() => helloMissing(f), HELLO_TIMEOUT_MS);
@@ -794,6 +815,8 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
         return railShown() && !layout.collapsed.includes(s.ref.key);
       case 'tab':
         return paneVisible && paneActive === s.ref.key;
+      case 'worker':
+        return false;
       default:
         return true;
     }
@@ -1125,6 +1148,87 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     strip.hidden = !any;
   }
 
+  // ---------- Workers: views with no place in the window, loaded while their mod is on ----------
+
+  let workersEl: HTMLElement | null = null;
+  function makeWorkerSlot(ref: ViewRef): Slot {
+    if (!workersEl) {
+      workersEl = document.createElement('div');
+      workersEl.id = 'mod-workers';
+      workersEl.hidden = true;
+      workersEl.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(workersEl);
+    }
+    const el = document.createElement('div');
+    el.className = 'mod-worker';
+    el.dataset.view = ref.key;
+    workersEl.appendChild(el);
+    return { ref, seat: 'worker', el, body: el, frame: null, next: null, title: ref.view.title, badge: null, height: 0, failedEl: null, queued: [] };
+  }
+
+  // ---------- Hooks: the main process asks a mod's views to handle a hook ----------
+
+  const hookCalls = new Map<string, (m: { result?: unknown; error?: { message?: unknown } }) => void>();
+  let hookSeq = 0;
+
+  /** Sends one hook request to a frame and waits up to `ms` for its answer. */
+  function askFrame(f: Frame, event: string, input: unknown, ms: number): Promise<{ result?: unknown; error?: string } | 'timeout'> {
+    const id = `hook-${++hookSeq}`;
+    const key = `${f.id}:${id}`;
+    note({ t: Date.now(), view: f.slot.ref.key, kind: 'request', method: 'hook', id });
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => {
+        hookCalls.delete(key);
+        note({ t: Date.now(), view: f.slot.ref.key, kind: 'error', method: 'hook', id, error: { code: ERR.timeout, message: 'no answer' } });
+        resolve('timeout');
+      }, ms);
+      hookCalls.set(key, (m) => {
+        window.clearTimeout(timer);
+        hookCalls.delete(key);
+        note({ t: Date.now(), view: f.slot.ref.key, kind: m.error ? 'error' : 'response', method: 'hook', id });
+        resolve(m.error ? { error: String(m.error.message ?? 'The handler failed') } : { result: m.result });
+      });
+      post(f, { jsonrpc: '2.0', id, method: 'hook', params: { event, input } });
+    });
+  }
+
+  /** Every view of the mod that registered for the event, in manifest order, until one decides something. */
+  async function runHook(req: ModHookRequest): Promise<{ result?: unknown; error?: string; skipped?: string }> {
+    await whenReady();
+    const mod = currentMod(req.mod);
+    if (!mod || mod.state !== 'on' || !mod.granted.includes('hooks')) return { skipped: 'the mod is not on' };
+    const live = frames()
+      .filter((f) => f.slot.ref.mod.key === req.mod && f.helloAt && f.slot.frame === f)
+      .map((f) => ({ view: f.slot.ref.view.id, hooks: f.hooks, f }));
+    const views = hookViewOrder(mod, live, req.event);
+    if (!views.length) return { skipped: `no view of the mod handles ${req.event} (a view registers with harness.hooks.on)` };
+    const deadline = Date.now() + Math.max(1, Number(req.timeoutMs) || 10_000);
+    let answered = false;
+    let firstError: string | undefined;
+    for (const v of views) {
+      const left = deadline - Date.now();
+      if (left <= 0) break;
+      const r = await askFrame(v.f, req.event, req.input, left);
+      if (r === 'timeout') continue;
+      answered = true;
+      if (r.error !== undefined) {
+        firstError ??= r.error;
+        continue;
+      }
+      if (!isEmptyHookResult(r.result)) return { result: r.result };
+    }
+    if (!answered) return { skipped: `no view answered within ${Math.round(Number(req.timeoutMs) / 100) / 10} s` };
+    return firstError !== undefined ? { error: firstError } : { result: null };
+  }
+
+  onPush('mods:hook', (req) => {
+    if (!isObj(req) || typeof req.id !== 'string' || typeof req.mod !== 'string' || typeof req.event !== 'string') return;
+    void runHook(req as ModHookRequest).then(
+      (reply) => rpc('mods.hookResult', req.id, reply).catch(() => undefined),
+      (err: unknown) => rpc('mods.hookResult', req.id, { error: err instanceof Error ? err.message : String(err) }).catch(() => undefined),
+    );
+  });
+
   // ---------- The background ----------
 
   let bgSlot: Slot | null = null;
@@ -1173,7 +1277,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
   function applyMods(list: ModInfo[]): void {
     mods = Array.isArray(list) ? list : [];
     const wanted = new Map<string, ViewRef>();
-    for (const seat of ['rail', 'tab', 'composer'] as const) for (const r of viewsFor(mods, seat)) wanted.set(r.key, r);
+    for (const seat of ['rail', 'tab', 'composer', 'worker'] as const) for (const r of viewsFor(mods, seat)) wanted.set(r.key, r);
     let tabsChanged = false;
     // Gone, off, paused or no longer that seat: removed at once.
     for (const s of [...slots.values()]) {
@@ -1208,6 +1312,10 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
           slots.set(r.key, s);
           sidePane?.appendChild(s.el);
           tabsChanged = true;
+        } else if (r.view.seat === 'worker') {
+          s = makeWorkerSlot(r);
+          slots.set(r.key, s);
+          mountFrame(s);
         } else {
           s = makeStripSlot(r);
           strip?.appendChild(s.el);
@@ -1429,7 +1537,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
     const lines = askLines(info)
       .map((l) => `<li class="${l.strong ? 'strong' : ''}">${l.strong ? icon('triangle-alert', 14) : icon('check', 14)}<span>${escapeHtml(l.text)}</span></li>`)
       .join('');
-    const seats = [...new Set((m?.contributes?.views ?? []).map((v) => ({ rail: 'a panel in the right-hand rail', tab: 'a tab in the side pane', composer: 'a strip above the composer', background: 'a background' })[v.seat]).filter(Boolean))];
+    const seats = [...new Set((m?.contributes?.views ?? []).map((v) => ({ rail: 'a panel in the right-hand rail', tab: 'a tab in the side pane', composer: 'a strip above the composer', background: 'a background', worker: 'a hidden page that handles hooks' })[v.seat]).filter(Boolean))];
     const lookWords = [...new Set((m?.contributes?.looks ?? []).map((l) => (l.target === 'composer' ? 'a look for the chat bar' : 'a look for the conversation')))];
     const adds = [...seats, ...lookWords, ...(m?.contributes?.styles?.length ? ['styles for the app'] : []), ...(m?.contributes?.commands?.length ? [`${m.contributes.commands.length === 1 ? 'a slash command' : 'slash commands'}`] : [])];
     el.innerHTML = `
@@ -1556,6 +1664,7 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
         visible: slotVisible(s),
         collapsed: layout.collapsed.includes(s.ref.key),
         subs: s.frame ? [...s.frame.subs] : [],
+        hooks: s.frame ? [...s.frame.hooks] : [],
         src: s.frame?.iframe.src ?? null,
       })),
     emit: (name: string, data: unknown) => deliver(String(name), data),

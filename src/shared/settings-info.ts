@@ -17,6 +17,8 @@ export interface SettingsFileInfo {
   error?: string;
   /** What it sets: field paths ("portkey.model", "permissionMode") and "env.NAME" for each variable. Values are never included. */
   keys: string[];
+  /** The commands and URLs its hooks run (the trust prompt says it runs commands) */
+  hookCommands?: string[];
   /** Entries that were skipped, and why ("maxTurns: expected a number") */
   invalid: { key: string; message: string }[];
 }

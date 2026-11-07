@@ -2001,6 +2001,10 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       statusTokens.hidden = !running;
       break;
     }
+    case 'hook_status':
+      // A hook's statusMessage while it runs (one line; the status text never wraps)
+      setStatusText(typeof ev.text === 'string' && ev.text.trim() ? ev.text.replace(/\s+/g, ' ').trim().slice(0, 120) : baseVerb());
+      break;
     case 'approval_request':
       setStatusText('Waiting for approval');
       addApprovalCard(ev, synthetic);
@@ -3998,7 +4002,9 @@ function noticeProjectSettings(info: SettingsInfo | null | undefined): void {
   settingsNoticed.add(key);
   const env = f.keys.filter((k) => k.startsWith('env.')).length;
   const fields = f.keys.filter((k) => !k.startsWith('env.'));
-  const sets = [fields.slice(0, 4).join(', ') + (fields.length > 4 ? ` and ${fields.length - 4} more` : ''), env ? `${env} environment variable${env === 1 ? '' : 's'}` : ''].filter(Boolean).join(', plus ');
+  const hooks = f.hookCommands?.length ? 'hooks that run commands' : '';
+  const plain = fields.filter((k) => !k.startsWith('hooks.'));
+  const sets = [plain.slice(0, 4).join(', ') + (plain.length > 4 ? ` and ${plain.length - 4} more` : ''), hooks, env ? `${env} environment variable${env === 1 ? '' : 's'}` : ''].filter(Boolean).join(', plus ');
   addSystemMessage(
     f.changed
       ? `This project's settings.json changed since you approved it (it sets ${sets}), so it is no longer applied. Review it in Settings → Configuration files.`

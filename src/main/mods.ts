@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { dialog, protocol, shell } from 'electron';
 import type { App } from './app';
 import type { ModCaller, ModInfo, ModLayout, ModLookTarget, ModPermission, ModSeat, ModsConfig } from '../shared/mods';
@@ -23,6 +24,7 @@ import { ManageError, createMod, customiseMod, installMod } from './mods/manage'
 import { installModLockdown } from './mods/lockdown';
 import { MOD_EVENT_PERMISSIONS, MOD_LOOK_TARGETS, MOD_METHOD_PERMISSIONS } from './mods/permissions';
 import { LOOK_ROOTS, cleanCss, modUrlRewriter, scopeCss } from './mods/css';
+import { MOD_HOOK_TIMEOUT_MS, type HookEngine, type ModHookReply, type ModHookSet } from './hooks/engine';
 
 export { MOD_SCHEME, MOD_SCHEME_PRIVILEGES };
 export { MOD_METHOD_PERMISSIONS } from './mods/permissions';
@@ -339,6 +341,45 @@ export function createMods(app: App, host: ModsHost = electronHost(app)): ModsCo
     }
     return out;
   }
+
+  // ---------- Hooks: mods with the hooks permission handle the events their manifest lists ----------
+
+  const pendingHooks = new Map<string, (reply: ModHookReply) => void>();
+  /** The on mods that handle hooks, in list order */
+  const hookMods = (): ModHookSet[] =>
+    registry
+      .list()
+      .filter((m) => m.state === 'on' && m.granted.includes('hooks') && m.manifest?.contributes?.hooks?.length)
+      .map((m) => ({ key: m.key, name: m.manifest?.name ?? m.id, events: m.manifest!.contributes!.hooks!.map((h) => ({ event: h.event, timeoutMs: h.timeout ? h.timeout * 1000 : MOD_HOOK_TIMEOUT_MS })) }));
+  /** Asks the window to hand the hook to the mod's views; a view that does not answer in time is skipped. */
+  const runModHook = (mod: string, event: ModHookSet['events'][number]['event'], input: Record<string, unknown>, timeoutMs: number): Promise<ModHookReply> =>
+    new Promise((resolve) => {
+      if (!app.window()) return resolve({ skipped: 'the window is not open, so its views are not loaded' });
+      const id = randomUUID();
+      const timer = setTimeout(() => {
+        pendingHooks.delete(id);
+        resolve({ skipped: `did not answer within ${Math.round(timeoutMs / 100) / 10} s` });
+      }, timeoutMs);
+      pendingHooks.set(id, (reply) => {
+        clearTimeout(timer);
+        pendingHooks.delete(id);
+        resolve(reply);
+      });
+      app.push('mods:hook', { id, mod, event, input, timeoutMs });
+    });
+  const engine = app.service<HookEngine>('hooks');
+  if (engine) disposers.push(engine.attachMods(hookMods, runModHook));
+  disposers.push(
+    h('mods.hookResult', (id, reply) => {
+      const done = pendingHooks.get(String(id));
+      if (!done) return;
+      const r = isObj(reply) ? reply : {};
+      done({ result: r.result, ...(typeof r.error === 'string' ? { error: r.error.slice(0, REPORT_MAX_CHARS) } : {}), ...(typeof r.skipped === 'string' ? { skipped: r.skipped.slice(0, 300) } : {}) });
+    }),
+    () => {
+      for (const done of [...pendingHooks.values()]) done({ skipped: 'the mods were closed' });
+    },
+  );
 
   // ---------- For the agent ----------
 

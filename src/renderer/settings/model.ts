@@ -6,11 +6,12 @@ import type { AppConfig } from '../../shared/types';
 import type { ModInfo, ModLayout, ModLookTarget, ModPermission, ModSeat } from '../../shared/mods';
 import type { ScheduleWhen } from '../../shared/schedules';
 import type { SettingsFileInfo } from '../../shared/settings-info';
+import type { HookEntryInfo, HookEvent, HookRunInfo } from '../../shared/hooks';
 import type { IconName } from '../icons.js';
 
 // ---------- Sections ----------
 
-export type SectionId = 'general' | 'model' | 'permissions' | 'context' | 'mods' | 'mcp' | 'skills' | 'scheduled' | 'dreaming' | 'remote' | 'history' | 'appearance' | 'files' | 'about';
+export type SectionId = 'general' | 'model' | 'permissions' | 'context' | 'mods' | 'mcp' | 'skills' | 'scheduled' | 'dreaming' | 'remote' | 'history' | 'appearance' | 'files' | 'hooks' | 'about';
 
 export interface SectionInfo {
   id: SectionId;
@@ -34,6 +35,7 @@ export const SECTIONS: SectionInfo[] = [
   { id: 'history', title: 'History', icon: 'archive', group: 2 },
   { id: 'appearance', title: 'Appearance', icon: 'palette', group: 2 },
   { id: 'files', title: 'Configuration files', icon: 'file-text', group: 2 },
+  { id: 'hooks', title: 'Hooks', icon: 'zap', group: 2 },
   { id: 'about', title: 'About', icon: 'info', group: 3 },
 ];
 
@@ -195,6 +197,7 @@ export const PERMISSION_WORDS: Record<ModPermission, string> = {
   schedules: 'List, create, change and delete scheduled tasks',
   remote: 'See and switch remote control',
   network: 'Reach the internet',
+  hooks: "React to the agent's actions before and after they happen, and block them: tool calls, prompts, the end of a turn",
 };
 
 export function permissionWords(p: string): string {
@@ -206,6 +209,7 @@ export const SEAT_WORDS: Record<ModSeat, string> = {
   tab: 'a tab in the side pane',
   composer: 'a strip above the composer',
   background: 'a background behind the window',
+  worker: 'a hidden page that handles its hooks',
 };
 
 export const LOOK_WORDS: Record<ModLookTarget, string> = {
@@ -454,6 +458,33 @@ export function fileState(f: SettingsFileInfo): { label: string; tone: ChipTone 
   if (f.scope === 'project' && !f.trusted) return { label: 'Needs your approval', tone: 'warn' };
   if (f.applied) return { label: 'Applied', tone: 'ok' };
   return { label: 'Not applied', tone: 'neutral' };
+}
+
+// ---------- Hooks ----------
+
+export const HOOK_EVENT_ORDER: HookEvent[] = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification', 'Stop', 'SubagentStop', 'PreCompact', 'PostCompact', 'SessionEnd'];
+
+/** "Bash · command · if Bash(rm *) · 60 s · ~/.silo-harness/settings.json" */
+export function hookEntryLine(e: HookEntryInfo, tilde: (p: string) => string = (p) => p): string {
+  const parts = [e.matcher && e.matcher !== '*' ? `matcher ${e.matcher}` : 'every occurrence', e.type === 'mod' ? 'mod' : e.type];
+  if (e.if) parts.push(`if ${e.if}`);
+  if (e.async) parts.push('in the background');
+  if (e.onFailure === 'block') parts.push('blocks when it fails');
+  parts.push(`${e.timeout} s`);
+  parts.push(e.source === 'mod' ? `from the mod ${e.sourceLabel}` : tilde(e.sourceLabel));
+  return parts.join(' · ');
+}
+
+/** "exit 2 · 34 ms · Blocked: rm is not allowed" */
+export function hookRunLine(r: HookRunInfo, now = Date.now()): string {
+  const parts: string[] = [];
+  parts.push(r.type === 'mod' ? `mod ${r.command}` : r.command);
+  if (r.exitCode !== undefined) parts.push(r.type === 'http' ? `HTTP ${r.exitCode === 0 ? '2xx' : r.exitCode}` : `exit ${r.exitCode}`);
+  parts.push(r.durationMs < 1000 ? `${r.durationMs} ms` : `${(r.durationMs / 1000).toFixed(1)} s`);
+  const ago = Math.max(0, Math.round((now - r.at) / 1000));
+  parts.push(ago < 60 ? `${ago} s ago` : `${Math.round(ago / 60)} min ago`);
+  if (r.stderr) parts.push(r.stderr);
+  return parts.join(' · ');
 }
 
 // ---------- Schedules ----------

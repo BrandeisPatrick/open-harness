@@ -645,6 +645,7 @@ async function readyPage(hello = HELLO) {
     backgrounds: { seat: 'background', views: ['aurora', 'constellation', 'grid', 'dusk'], permissions: [] },
     'theme-midnight': { styles: ['theme.css'], permissions: [] },
     'theme-paper': { styles: ['theme.css'], permissions: [] },
+    'theme-glass': { styles: ['theme.css'], permissions: [] },
     hyperspace: { seat: 'background', views: ['starfield'], looks: { holo: 'conversation', cockpit: 'composer' }, permissions: ['session:read'] },
   };
   const mods = listMods(path.join(ROOT, 'mods'));
@@ -807,6 +808,57 @@ async function readyPage(hello = HELLO) {
       contrast(`${mod} light`, decls[0], appLight, opts.light);
       contrast(`${mod} dark`, { ...decls[0], ...decls[2] }, { ...appLight, ...appDarkDecls }, opts.light);
     }
+  }
+
+  // --- Glass: materials, not colours ------------------------------------------------------------------------
+  // Its tokens come first, with the app's three selectors and the same dark values twice, and are only its own
+  // --glass-… ones plus the shadows, the backdrop and three radii (no colour of text or surface changes, so the
+  // app's contrast holds); with Reduce transparency on, every tint is an app surface and the blur is 0. The rules
+  // after them give the sidebar, the side pane and the rail, the chat bar, the cards, menus and dialogs a tint and a
+  // backdrop filter; the reading column is the page colour; nothing touches the transcript's text.
+  {
+    const css = fs.readFileSync(path.join(ROOT, 'mods/theme-glass/theme.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    /** Top-level statements: { prelude, body } */
+    const statements = (text) => {
+      const out = [];
+      let depth = 0;
+      let start = 0;
+      let open = -1;
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] === '{') {
+          if (depth++ === 0) open = i;
+        } else if (text[i] === '}' && --depth === 0) {
+          out.push({ prelude: text.slice(start, open).trim(), body: text.slice(open + 1, i) });
+          start = i + 1;
+        }
+      }
+      return out;
+    };
+    const decls = (body) => Object.fromEntries(body.split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()]));
+    /** Every rule, with @media and @supports opened: [prelude, declarations] */
+    const flat = (text) => statements(text).flatMap((s) => (/^@(media|supports)/.test(s.prelude) ? flat(s.body) : [[s.prelude, decls(s.body)]]));
+    const top = statements(css);
+    const darkMedia = top[1] && /^@media \(prefers-color-scheme: dark\)$/.test(top[1].prelude) ? statements(top[1].body) : [];
+    check('glass: its tokens come first, with the three selectors the app declares its tokens with', top[0].prelude === ':root' && darkMedia.length === 1 && darkMedia[0].prelude === ':root:not([data-theme="light"])' && top[2].prelude === ':root[data-theme="dark"]', top.slice(0, 3).map((s) => s.prelude));
+    const [light, darkA, darkB] = [decls(top[0].body), decls(darkMedia[0]?.body || ''), decls(top[2].body)];
+    check('glass: the two dark blocks are the same, and set what the light one sets', same(darkA, darkB) && same(Object.keys(light).sort(), Object.keys(darkB).sort()), Object.keys(light).filter((k) => !(k in darkB)));
+    const allowed = /^--(glass-[\w-]+|shadow-(sm|bar|pop|dialog)|backdrop|r-(composer|pop|card-lg))$/;
+    const names = [...new Set([...Object.keys(light), ...Object.keys(darkB)])];
+    check('glass: changes no colour of text or surface: only its own --glass-… tokens, the shadows, the backdrop and three radii', names.length > 20 && names.every((n) => allowed.test(n)), names.filter((n) => !allowed.test(n)));
+    check('glass: the reading column is the page colour in both schemes', light['--glass-page'] === 'var(--bg-100)' && darkB['--glass-page'] === 'var(--bg-100)');
+    const reduced = top.find((s) => /^@media \(prefers-reduced-transparency: reduce\)$/.test(s.prelude));
+    const reducedDecls = reduced ? decls(statements(reduced.body)[0].body) : {};
+    check('glass: with Reduce transparency on, every tint is an app surface and the blur is 0', reduced && statements(reduced.body)[0].prelude === ':root, :root:not([data-theme="light"]), :root[data-theme="dark"]' && reducedDecls['--glass-blur'] === '0px' && Object.entries(reducedDecls).every(([k, v]) => k === '--glass-blur' || /^var\(--(bg-\d{3}|field-bg|surface-hover|bubble)\)$/.test(v)), reducedDecls);
+    const tokenSelectors = [':root', ':root:not([data-theme="light"])', ':root[data-theme="dark"]', ':root, :root:not([data-theme="light"]), :root[data-theme="dark"]'];
+    const rules = flat(css).filter(([sel]) => !tokenSelectors.includes(sel));
+    const has = (part, prop) => rules.some(([sel, d]) => sel.split(',').some((s) => s.trim() === part) && prop in d);
+    const material = (part) => has(part, 'background') && has(part, 'backdrop-filter') && has(part, '-webkit-backdrop-filter');
+    check('glass: the sidebar, the side pane, the rail, the chat bar, the approval card, menus and dialogs are tinted and blurred', ['.sidebar', '.side-pane', '.mod-rail', '.composer', '.approval', '.popover', 'dialog.dialog'].every(material), ['.sidebar', '.side-pane', '.mod-rail', '.composer', '.approval', '.popover', 'dialog.dialog'].filter((p) => !material(p)));
+    check('glass: the canvas is the theme\'s, the window\'s own surface is clear, the reading column is the veil', has('html', 'background') && has('body', 'background') && rules.some(([sel, d]) => sel === '.main' && d.background === 'transparent') && rules.some(([sel, d]) => sel === '.transcript-wrap' && d.background === 'var(--glass-page)'));
+    check('glass: with a background mod the reading column lets it through and the panes keep their tint', rules.some(([sel, d]) => sel === ':root.mod-bg .transcript-wrap' && d.background === 'transparent') && rules.some(([sel]) => sel === ':root.mod-bg .sidebar'));
+    const text = rules.map(([sel]) => sel).filter((sel) => /\.md\b|\.msg\.assistant|\.code-block|\.thinking|\.tool\b|\.tool-group|\.diff\b|\.transcript >|#messages/.test(sel));
+    check('glass: nothing touches the transcript\'s text', text.length === 0, text);
+    check('glass: every backdrop filter has its -webkit- twin', rules.every(([, d]) => ('backdrop-filter' in d) === ('-webkit-backdrop-filter' in d)), rules.filter(([, d]) => ('backdrop-filter' in d) !== ('-webkit-backdrop-filter' in d)).map(([s]) => s));
   }
 
   // --- the manifest rules themselves -----------------------------------------------------------------------

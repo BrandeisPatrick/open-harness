@@ -899,8 +899,12 @@ function finishToolCard(ev: { id?: string; name: string; result: string; ok: boo
 // and the call's own row says what was decided (a call without a row keeps a one-line decided card).
 let promptSeq = 0;
 
-/** Why a card asks although the mode would have run it: "Auto mode stopped to ask: it pushes to a remote." */
-function stopNote(mode: PermissionMode, reason: string): string {
+/**
+ * Why a card asks although the mode would have run it: "Auto mode stopped to ask: it pushes to a remote." A card
+ * without wider scopes (a tool's own question, a PreToolUse hook's "ask") says its reason as it was written.
+ */
+function stopNote(mode: PermissionMode, reason: string, custom = false): string {
+  if (custom) return `${reason.charAt(0).toUpperCase()}${reason.slice(1)}${/[.!?]$/.test(reason) ? '' : '.'}`;
   const why = reason === 'destructive MCP tool' ? 'it can change or delete data' : /^[a-z-]+s\b/.test(reason) ? `it ${reason}` : reason;
   return `${mode === 'auto' ? 'Auto mode stopped to ask' : 'Flagged as risky'}: ${why}.`;
 }
@@ -936,7 +940,8 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   // What the call does in its own words (a command's description), then why it asks when the mode would not have
   const said = typeof card?.args.description === 'string' ? card.args.description.replace(/\s+/g, ' ').trim() : '';
   if (said) body.insertAdjacentHTML('beforeend', `<p class="prompt-text">${escapeHtml(said)}</p>`);
-  if (reason) body.insertAdjacentHTML('beforeend', `<p class="prompt-text prompt-note">${escapeHtml(stopNote(ev.mode, reason))}</p>`);
+  const custom = typeof ev.alwaysLabel === 'string' && !ev.alwaysLabel.trim() && typeof ev.projectLabel === 'string' && !ev.projectLabel.trim();
+  if (reason) body.insertAdjacentHTML('beforeend', `<p class="prompt-text prompt-note">${escapeHtml(stopNote(ev.mode, reason, custom))}</p>`);
   if (said || reason) el.setAttribute('aria-describedby', body.id);
   let subject = ev.name;
   /** The decided line (a call without a row) names the action in words rather than a tool name or a path */
@@ -3943,7 +3948,7 @@ async function addMcpCard(): Promise<void> {
   addNode(el);
 }
 
-// ---------- Permissions: "Always allow … for this project" rules (Settings section) ----------
+// ---------- Permissions: "Always allow … in this project" rules (Settings section) ----------
 
 let debugRules: RulesApi | null = null;
 

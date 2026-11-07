@@ -51,7 +51,7 @@
   /** The live parts of the view, reset with every snapshot */
   let V = freshView();
   function freshView() {
-    return { assistant: null, assistantText: '', thinking: null, thinkingText: '', tools: new Map(), approvals: new Map(), plans: new Map(), compacting: null };
+    return { assistant: null, assistantText: '', thinking: null, thinkingText: '', tools: new Map(), approvals: new Map(), questions: new Map(), plans: new Map(), compacting: null };
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -73,6 +73,7 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    question: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
     shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
     plan: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
     list: '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
@@ -554,6 +555,72 @@
     card.append(line);
   }
 
+  // A question card (ask_user). Questions with one answer each are buttons here; anything more (several answers, the
+  // user's own words) is answered in the app.
+  function questionEl(ev) {
+    const qs = Array.isArray(ev.questions) ? ev.questions.filter((q) => q && Array.isArray(q.options)) : [];
+    const card = h('div', 'card question');
+    const single = qs.length > 0 && qs.every((q) => !q.multiSelect);
+    const title = qs.length === 1 ? qs[0].question || qs[0].header : `${qs.length} questions`;
+    card.innerHTML =
+      `<div class="card-head"><span class="card-icon">${icon('question', 16)}</span><div class="card-heading">` +
+      `<span class="card-kicker">Waiting for you</span><span class="card-title">${esc(title)}</span></div></div>`;
+    const body = h('div', 'card-body');
+    const picked = qs.map(() => null);
+    qs.forEach((q, i) => {
+      const block = h('div', 'q-block');
+      if (qs.length > 1) block.append(h('div', 'q-question', `<span class="q-chip">${esc(q.header)}</span>${esc(q.question)}`));
+      if (single) {
+        const opts = h('div', 'q-options');
+        for (const o of q.options) {
+          const b = h('button', 'btn q-opt', `<span class="q-label">${esc(o.label)}</span>${o.description ? `<span class="q-desc">${esc(o.description)}</span>` : ''}`);
+          b.type = 'button';
+          b.dataset.q = String(i);
+          b.dataset.label = o.label;
+          opts.append(b);
+        }
+        block.append(opts);
+      }
+      body.append(block);
+    });
+    if (!single) body.append(h('div', 'q-elsewhere', 'Answer in the app: this question takes more than one tap.'));
+    card.append(body);
+    if (!single) return card;
+    card.addEventListener('click', async (e) => {
+      const b = e.target.closest('button.q-opt');
+      if (!b || card.classList.contains('decided')) return;
+      const i = Number(b.dataset.q);
+      picked[i] = b.dataset.label;
+      card.querySelectorAll(`button.q-opt[data-q="${i}"]`).forEach((x) => x.classList.toggle('on', x === b));
+      if (picked.some((p) => p === null)) return;
+      card.querySelectorAll('button').forEach((x) => (x.disabled = true));
+      try {
+        await api('answer', { id: ev.id, answers: picked.map((label) => ({ selected: [label] })) });
+        decideQuestion(card, picked);
+      } catch (err) {
+        if (err.status === 404) decideQuestion(card, null);
+        else {
+          card.querySelectorAll('button').forEach((x) => (x.disabled = false));
+          toast(err.message);
+        }
+      }
+    });
+    return card;
+  }
+
+  /** answers: the labels picked here; null: answered or skipped elsewhere (the Mac), or the run stopped */
+  function decideQuestion(card, answers, skipped) {
+    if (card.classList.contains('decided')) return;
+    card.classList.add('decided');
+    card.querySelector('.card-kicker').textContent = 'Question';
+    card.querySelector('.q-elsewhere')?.remove();
+    card.querySelectorAll('button').forEach((x) => (x.disabled = true));
+    const text = answers ? answers.join(' · ') : skipped ? 'Skipped' : 'Answered on your Mac';
+    const line = h('div', 'decision', answers ? `<span class="ok">${icon('check', 14)}</span>` : '');
+    line.append(document.createTextNode(text));
+    card.append(line);
+  }
+
   const PLAN_CHIP = { proposed: 'Proposed', approved: 'Approved', rejected: 'Kept planning' };
 
   function planEl(plan) {
@@ -642,6 +709,11 @@
     for (const ap of live.approvals) {
       const card = approvalEl(ap);
       V.approvals.set(ap.id, card);
+      t.append(card);
+    }
+    for (const q of live.questions || []) {
+      const card = questionEl(q);
+      V.questions.set(q.id, card);
       t.append(card);
     }
     if (!t.childElementCount) t.append(emptyEl());
@@ -795,6 +867,19 @@
         const card = V.approvals.get(ev.id);
         if (card) decideApproval(card, ev.ok, ev.scope);
         V.approvals.delete(ev.id);
+        break;
+      }
+      case 'question_request': {
+        endStreaming();
+        const card = questionEl(ev);
+        V.questions.set(ev.id, card);
+        append(card);
+        break;
+      }
+      case 'question_resolved': {
+        const card = V.questions.get(ev.id);
+        if (card) decideQuestion(card, ev.answers ? ev.answers.map((a) => [...(a.selected || []), ...(a.other ? [`“${a.other}”`] : [])].join(', ')) : null, ev.skipped);
+        V.questions.delete(ev.id);
         break;
       }
       case 'plan_proposed': {

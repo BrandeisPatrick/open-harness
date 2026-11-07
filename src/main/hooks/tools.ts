@@ -17,6 +17,7 @@ export const CLAUDE_TOOL_NAMES: Record<string, string> = {
   update_tasks: 'TodoWrite',
   submit_plan: 'ExitPlanMode',
   skill: 'Skill',
+  ask_user: 'AskUserQuestion',
 };
 
 export function claudeToolName(native: string): string {
@@ -47,7 +48,7 @@ export function claudeToolInput(native: string, args: unknown, cwd: string): Rec
   const a = isObj(args) ? args : {};
   switch (native) {
     case 'bash':
-      return defined({ command: a.command, timeout: a.timeout_ms });
+      return defined({ command: a.command, timeout: a.timeout_ms, description: a.description });
     case 'terminal_run':
       return defined({ command: a.command, tab_id: a.tab_id, timeout: a.timeout_ms });
     case 'read_file':

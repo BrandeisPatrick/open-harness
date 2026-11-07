@@ -66,7 +66,10 @@ const { check, done } = require('./support/check.js');
   check('a denied call is left out of the words and counted', d.text === 'Ran a command, read a file' && d.denied === 1, d);
   const all = activityWords([{ name: 'bash', denied: true }, { name: 'write_file', denied: true }]);
   check('every call denied: the words say so, and nothing is counted twice', all.text === 'Denied 2 calls' && all.denied === 0, all);
-  check('one denied call alone', activityWords([{ name: 'bash', denied: true }]).text === 'Denied a call');
+  check('one denied call alone names what it was', activityWords([{ name: 'bash', denied: true }]).text === 'Denied a command');
+  check('denials of one kind are counted as that kind', activityWords([{ name: 'edit_file', path: 'a', denied: true }, { name: 'edit_file', path: 'b', denied: true }]).text === 'Denied 2 edits');
+  check('a denied MCP call names its server; a denied tool of no kind of its own is a call', activityWords([{ name: 'mcp__figma__get_image', denied: true }]).text === 'Denied a call to figma' && activityWords([{ name: 'browser_click', denied: true }]).text === 'Denied a call');
+  check('a question reads as one', activityWords(['ask_user']).text === 'Asked a question' && activityWords(['ask_user', 'ask_user']).text === 'Asked 2 questions');
 
   // ---------- One line: "and N more" ----------
   check(`${MAX_KINDS} kinds are all named`, say(['read_file', 'bash', 'edit_file', 'grep']) === 'Read a file, ran a command, edited a file, ran a search');

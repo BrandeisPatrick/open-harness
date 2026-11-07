@@ -56,8 +56,10 @@ export function answeredBody(questions: UserQuestion[], result: string): HTMLEle
     box.innerHTML = `<div class="tool-note">${/skipped/.test(result) ? 'Skipped: the model went on without an answer.' : escapeHtml(result.trim())}</div>`;
     return box;
   }
+  // One question the row's own line already shows in full: only its answer
+  const lone = questions.length === 1 && (questions[0].question || questions[0].header).length <= 80;
   box.innerHTML = questions
-    .map((q, i) => `<div class="qa"><div class="qa-q">${escapeHtml(q.question || q.header)}</div><div class="qa-a">${answerHtml(answers[i])}</div></div>`)
+    .map((q, i) => `<div class="qa">${lone ? '' : `<div class="qa-q">${escapeHtml(q.question || q.header)}</div>`}<div class="qa-a">${answerHtml(answers[i])}</div></div>`)
     .join('');
   return box;
 }

@@ -565,7 +565,7 @@ export class Agent {
         ? programs.join(', ') || 'this command'
         : 'edits';
     const alwaysLabel = `Allow ${what} for this session`;
-    const projectLabel = `Always allow ${what} for this project`;
+    const projectLabel = `Always allow ${what} in this project`;
     return new Promise((resolve) => {
       this.pendingApprovals.set(id, { resolve, name, programs, reason });
       this.emit({ type: 'approval_request', id, name, detail, mode, reason: reason ?? undefined, alwaysLabel, projectLabel });

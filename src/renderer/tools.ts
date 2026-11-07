@@ -713,10 +713,20 @@ function terminalBody(name: string, body: HTMLElement, r: string): void {
   } else if (r.trim()) note(r.trim());
 }
 
-/** A refusal (the user denied it, or the mode does not allow it) is not a failure; a command that exited non-zero is. */
+/** A PreToolUse hook refused the call (its permission said deny, or it blocked with exit code 2) */
+function hookDenied(r: string): boolean {
+  return /^PreToolUse(?::\S+)? hook (?:denied|error)\b/.test(r);
+}
+
+/** The call was refused, not tried: the user or a hook denied it, or the mode does not allow it */
+function deniedResult(r: string): boolean {
+  return /^Not permitted/.test(r) || isDeniedResult(r) || hookDenied(r);
+}
+
+/** A refusal (the user or a hook denied it, or the mode does not allow it) is not a failure; a command that exited non-zero is. */
 function callOutcome(name: string, res: ToolResult): ToolCard['outcome'] {
   const r = res.result;
-  if (/^Not permitted/.test(r) || isDeniedResult(r)) return 'denied';
+  if (deniedResult(r)) return 'denied';
   if (!res.ok) return 'failed';
   if (name === 'bash') {
     const code = bashParts(r).code;
@@ -730,8 +740,8 @@ function metaHtml(name: string, a: Args, res: ToolResult, edit?: DiffRow[]): str
   const parts: string[] = [];
   const r = res.result;
   const agent = res.ok ? agentToolMeta(name, a, r) : null;
-  if (!res.ok) parts.push('<span class="meta-err">error</span>');
-  else if (/^Not permitted/.test(r) || isDeniedResult(r)) parts.push('<span>denied</span>');
+  if (deniedResult(r)) parts.push('<span>denied</span>');
+  else if (!res.ok) parts.push('<span class="meta-err">error</span>');
   else if (agent) parts.push(agent.err ? `<span class="meta-err">${escapeHtml(agent.text)}</span>` : escapeHtml(agent.text));
   else {
     switch (name) {
@@ -905,9 +915,12 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
         }
         el.hidden = false;
       }
+      // Refused is not failed: the row keeps its own icon, says "denied" and stays closed
+      const denied = deniedResult(res.result);
+      const failed = !res.ok && !denied;
       const status = el.querySelector<HTMLElement>('.tool-status')!;
-      status.className = `tool-status ${res.ok ? 'ok' : 'err'}`;
-      if (!res.ok) status.innerHTML = icon('circle-alert');
+      status.className = `tool-status ${failed ? 'err' : 'ok'}`;
+      if (failed) status.innerHTML = icon('circle-alert');
       el.querySelector('.tool-meta')!.innerHTML = metaHtml(name, a, res, editRows);
       if (res.ok) setArg(agentArgFromResult(name, a, res.result));
       card.outcome = callOutcome(name, res);
@@ -916,12 +929,11 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
         card.diff = { added: st.added, removed: st.removed };
         card.created = name === 'write_file' && /^Created\b/.test(res.result);
       }
-      const denied = res.ok && (/^Not permitted/.test(res.result) || isDeniedResult(res.result));
-      if (!res.ok || denied) {
+      if (failed || denied) {
         el.classList.toggle('denied', denied);
         // The row already says "Denied" (its approval's answer): the words written for the model would only repeat it
-        if (!(denied && decided && !decided.ok && /Not permitted: the user denied/.test(res.result))) body.appendChild(outBlock(clip(stripCwd(res.result)), res.ok ? 'note' : 'error'));
-        if (!res.ok) el.open = true;
+        if (!(denied && decided && !decided.ok && /Not permitted: the user denied/.test(res.result))) body.appendChild(outBlock(clip(stripCwd(res.result)), denied ? 'note' : 'error'));
+        if (failed) el.open = true;
       } else if (name === 'ask_user') {
         body.appendChild(answeredBody(questionsOf(a), res.result));
       } else if (name === 'read_file') {

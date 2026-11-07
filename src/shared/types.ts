@@ -247,7 +247,7 @@ export interface AppConfig {
   autoCompact: boolean;
   /** macOS notifications when a run ends or waits for approval while the window is in the background */
   notifications: boolean;
-  /** "Always allow … for this project" answers, by working directory (see ProjectRules) */
+  /** "Always allow … in this project" answers, by working directory (see ProjectRules) */
   allowRules: Record<string, StoredRules>;
   /** Working directories used before, most recent first (at most 8); the welcome screen offers them */
   recentDirs: string[];

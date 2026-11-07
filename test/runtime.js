@@ -121,7 +121,7 @@ async function waitFor(fn, ms = 5000, what = 'condition') {
   let live = rt.live(A);
   check('4: live during streaming: partial text, running, startedAt', live.running && 'Hello world'.startsWith(live.text) && live.text.length < 11 && live.startedAt > 0 && live.tools.length === 0, live);
   await idle(A);
-  check('4: live of an idle session is empty', JSON.stringify(rt.live(A)) === JSON.stringify({ running: false, text: '', thinking: '', tools: [], approvals: [], queue: [] }));
+  check('4: live of an idle session is empty', JSON.stringify(rt.live(A)) === JSON.stringify({ running: false, text: '', thinking: '', tools: [], approvals: [], questions: [], queue: [] }));
 
   const toolCall = call('bash', { command: 'sleep 0.8; echo slept' });
   reply('[A1]', { toolCalls: [toolCall] });

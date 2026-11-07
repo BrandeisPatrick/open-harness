@@ -94,39 +94,30 @@ export function answerText(questions: UserQuestion[], answers: QuestionAnswer[] 
 export const askUser: Tool = {
   name: 'ask_user',
   description:
-    'Ask the user one to four multiple-choice questions and wait for the answers. Use it when a choice is genuinely the user\'s to make: a preference, an unclear requirement, which of several reasonable approaches to take, or what to do next. Do not use it for what you can find out yourself with the other tools, and not to ask for permission (actions that need it ask on their own).\n' +
-    '- Each question has a short header (at most 12 characters, e.g. "Library"), 2 to 4 options with a short label (1–5 words) and a description of what choosing it means, and multiSelect when more than one option can apply.\n' +
-    '- The user can always answer in their own words instead ("Other"), so do not add an "Other" option.\n' +
-    '- If you recommend an option, put it first and end its label with "(Recommended)".\n' +
-    '- The user may skip the questions; then go on with your best judgement and say what you assumed.',
+    'Ask the user 1–4 multiple-choice questions and wait for the answers. Use it when a choice is genuinely the user\'s: a preference, an unclear requirement, which of several reasonable approaches to take. Not for what you can find out with the other tools, and not to ask permission (actions that need it ask on their own). Each question has a header of at most 12 characters, 2–4 options (a label of 1–5 words and what choosing it means) and multiSelect when several can apply. The user can always answer in their own words, so add no "Other" option. Put a recommended option first and end its label with "(Recommended)". If the user skips, go on with your best judgement and say what you assumed.',
   parameters: {
     type: 'object',
     properties: {
       questions: {
         type: 'array',
-        description: 'The questions to ask (1–4)',
         minItems: 1,
         maxItems: MAX_QUESTIONS,
         items: {
           type: 'object',
           properties: {
-            question: { type: 'string', description: 'The complete question, clear and specific, ending with a question mark' },
-            header: { type: 'string', description: 'A very short label shown as a chip (at most 12 characters), e.g. "Auth method", "Library", "Approach"' },
+            question: { type: 'string', description: 'The complete question, ending with a question mark' },
+            header: { type: 'string', description: 'A chip label of at most 12 characters, e.g. "Library"' },
             options: {
               type: 'array',
-              description: 'The choices (2–4); the user can also answer in their own words',
               minItems: MIN_OPTIONS,
               maxItems: MAX_OPTIONS,
               items: {
                 type: 'object',
-                properties: {
-                  label: { type: 'string', description: 'What the user sees and picks: concise, 1–5 words' },
-                  description: { type: 'string', description: 'What this option means or what happens if it is chosen' },
-                },
+                properties: { label: { type: 'string', description: '1–5 words' }, description: { type: 'string', description: 'What choosing it means' } },
                 required: ['label', 'description'],
               },
             },
-            multiSelect: { type: 'boolean', description: 'true to let the user pick more than one option' },
+            multiSelect: { type: 'boolean', description: 'true to allow more than one option' },
           },
           required: ['question', 'header', 'options', 'multiSelect'],
         },

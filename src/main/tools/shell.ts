@@ -23,6 +23,7 @@ export const bash: Tool = {
     type: 'object',
     properties: {
       command: { type: 'string', description: 'The command line to execute' },
+      description: { type: 'string', description: 'What the command does, in 5–10 words, for the user (shown when it asks for approval), e.g. "List the files in src"' },
       timeout_ms: { type: 'integer', description: 'Timeout in milliseconds (default 120000)' },
     },
     required: ['command'],

@@ -1,0 +1,15 @@
+{
+  "protocol": 1,
+  "id": "hooks-mod",
+  "name": "Hooks fixture",
+  "version": "0.1.0",
+  "description": "A test fixture: a worker view that asks before every Read, and a rail view that leaves every decision to it.",
+  "permissions": ["hooks"],
+  "contributes": {
+    "views": [
+      { "id": "worker", "title": "Hook worker", "entry": "worker.html", "seat": "worker" },
+      { "id": "panel", "title": "Hook panel", "entry": "panel.html", "seat": "rail" }
+    ],
+    "hooks": [{ "event": "PreToolUse", "timeout": 5 }, "PostToolUse"]
+  }
+}

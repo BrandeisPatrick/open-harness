@@ -158,6 +158,23 @@ process.emitWarning = () => {};
     check('asks: looks and a background together', asksBg.some((l) => l.strong && /restyle the conversation or the chat bar and draw behind the window/.test(l.text)), asksBg);
   }
 
+  // --- hooks: which views a hook request goes to, and what counts as a decision ---
+  {
+    const hm = mod('hk', [v('panel', 'rail', 'Panel'), v('worker', 'worker', 'Worker'), v('tab', 'tab', 'Tab')], { permissions: ['hooks'], contributes: { hooks: [{ event: 'PreToolUse' }] } });
+    const frames = [
+      { view: 'tab', hooks: new Set(['PreToolUse']) },
+      { view: 'worker', hooks: new Set(['PreToolUse', 'Stop']) },
+      { view: 'panel', hooks: new Set(['Stop']) },
+    ];
+    check('hooks: only the views that registered for the event, in the order the manifest lists them', JSON.stringify(L.hookViewOrder(hm, frames, 'PreToolUse').map((f) => f.view)) === '["worker","tab"]' && JSON.stringify(L.hookViewOrder(hm, frames, 'Stop').map((f) => f.view)) === '["panel","worker"]');
+    check('hooks: no registered view, no request', L.hookViewOrder(hm, frames, 'SessionEnd').length === 0);
+    check('hooks: null, undefined and {} decide nothing; anything else is an answer', L.isEmptyHookResult(null) && L.isEmptyHookResult(undefined) && L.isEmptyHookResult({}) && !L.isEmptyHookResult({ decision: 'block' }));
+    check('hooks: the worker seat is a seat of its own', L.viewsFor([hm], 'worker').map((r) => r.key).join() === 'hk/worker' && L.viewsFor([hm], 'rail').length === 1);
+    check('hooks: the hooks.* methods need the hooks permission and are the window\'s', MOD_METHOD_PERMISSIONS['hooks.subscribe'] === 'hooks' && MOD_METHOD_PERMISSIONS['hooks.unsubscribe'] === 'hooks' && L.isWindowMethod('hooks.subscribe') && L.methodNeeds(MOD_METHOD_PERMISSIONS, 'hooks.subscribe') === 'hooks');
+    const asks = L.askLines(mod('hk', [v('worker', 'worker', 'W')], { state: 'off', permissions: ['hooks'] }));
+    check('hooks: the card says what the permission does, plainly', asks.some((l) => l.strong && /React to the agent's actions before and after they happen, and block them/.test(l.text) && /file contents/.test(l.text)), asks);
+  }
+
   done();
 })().catch((err) => {
   console.log(`FAIL crashed | ${err && err.stack}`);

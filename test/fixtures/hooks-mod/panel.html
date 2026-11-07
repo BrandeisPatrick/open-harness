@@ -1,0 +1,8 @@
+<!doctype html>
+<meta charset="utf-8">
+<p style="font: 13px system-ui; margin: 8px">Hook panel</p>
+<script src="/@harness/harness.js"></script>
+<script>
+  // Listed after the worker: asked only when the worker decides nothing, and it decides nothing either.
+  harness.hooks.on('PreToolUse', () => undefined);
+</script>

@@ -137,6 +137,8 @@ export function isWindowMethod(method: string): boolean {
     method === 'hello' ||
     method === 'events.subscribe' ||
     method === 'events.unsubscribe' ||
+    method === 'hooks.subscribe' ||
+    method === 'hooks.unsubscribe' ||
     method === 'log.error' ||
     method.startsWith('ui.') ||
     method === 'composer.insert' ||

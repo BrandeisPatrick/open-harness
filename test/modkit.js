@@ -470,6 +470,46 @@ async function readyPage(hello = HELLO) {
     check('h-md: a failed copy shows a toast and does not flip', toast.method === 'ui.toast' && toast.params.kind === 'error' && /clipboard busy/.test(toast.params.text) && !t2.btn.classList.contains('copied'), toast);
   }
 
+  // --- hooks: harness.hooks.on registers, the host asks, the page answers ------------------------------------
+  {
+    const p = await readyPage(Object.assign({}, HELLO, { view: { id: 'w', seat: 'worker', title: 'W' }, granted: ['hooks'] }));
+    const seen = [];
+    p.h.hooks.on('PreToolUse', (input) => { seen.push(input); return input.tool_name === 'Read' ? { hookSpecificOutput: { permissionDecision: 'ask' } } : undefined; });
+    await flush();
+    const sub = p.sent.find((m) => m.method === 'hooks.subscribe');
+    check('hooks.on: registers the event with the host', sub && same(sub.params, { events: ['PreToolUse'] }), sub);
+    p.reply(sub.id, null);
+    p.deliver({ jsonrpc: '2.0', id: 'hook-1', method: 'hook', params: { event: 'PreToolUse', input: { tool_name: 'Read', tool_input: { file_path: '/a' } } } });
+    await flush();
+    const r1 = p.sent.find((m) => m.id === 'hook-1');
+    check('hook request: the handler gets the input and its output object is the result', seen[0]?.tool_input?.file_path === '/a' && r1 && same(r1, { jsonrpc: '2.0', id: 'hook-1', result: { hookSpecificOutput: { permissionDecision: 'ask' } } }), r1);
+    p.deliver({ jsonrpc: '2.0', id: 'hook-2', method: 'hook', params: { event: 'PreToolUse', input: { tool_name: 'Bash' } } });
+    await flush();
+    check('hook request: nothing returned is a null result', same(p.sent.find((m) => m.id === 'hook-2'), { jsonrpc: '2.0', id: 'hook-2', result: null }));
+    p.deliver({ jsonrpc: '2.0', id: 'hook-3', method: 'hook', params: { event: 'Stop', input: {} } });
+    await flush();
+    check('hook request for an event without a handler: null', same(p.sent.find((m) => m.id === 'hook-3'), { jsonrpc: '2.0', id: 'hook-3', result: null }));
+    p.h.hooks.on('Stop', async () => { throw new Error('broken handler'); });
+    p.deliver({ jsonrpc: '2.0', id: 'hook-4', method: 'hook', params: { event: 'Stop', input: {} } });
+    await flush();
+    await flush();
+    const r4 = p.sent.find((m) => m.id === 'hook-4');
+    check('hook request: a handler that throws answers with an error', r4 && r4.error && /broken handler/.test(r4.error.message), r4);
+    p.h.hooks.on('UserPromptSubmit', () => Promise.resolve(['not', 'an', 'object']));
+    p.deliver({ jsonrpc: '2.0', id: 'hook-5', method: 'hook', params: { event: 'UserPromptSubmit', input: {} } });
+    await flush();
+    await flush();
+    check('hook request: a value that is not an object decides nothing', same(p.sent.find((m) => m.id === 'hook-5'), { jsonrpc: '2.0', id: 'hook-5', result: null }));
+    p.h.hooks.off('PreToolUse');
+    await flush();
+    const unsub = p.sent.find((m) => m.method === 'hooks.unsubscribe');
+    check('hooks.off: unregisters', unsub && same(unsub.params, { events: ['PreToolUse'] }));
+    // A page from a frame that is not the host is ignored
+    p.deliver({ jsonrpc: '2.0', id: 'hook-x', method: 'hook', params: { event: 'Stop', input: {} } }, {});
+    await flush();
+    check('hook request from another frame: ignored', !p.sent.some((m) => m.id === 'hook-x'));
+  }
+
   // --- harness.css: the Markdown class and its tokens ------------------------------------------------------
   {
     const css = fs.readFileSync(path.join(ROOT, 'modkit/harness.css'), 'utf8');

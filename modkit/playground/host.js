@@ -10,6 +10,7 @@
   /** Method → the permission it needs (null: always available). docs/mods.md "harness" and "Permissions". */
   var METHOD_PERMS = {
     hello: null, 'events.subscribe': null, 'events.unsubscribe': null, 'log.error': null,
+    'hooks.subscribe': 'hooks', 'hooks.unsubscribe': 'hooks',
     'ui.theme': null, 'ui.resize': null, 'ui.setTitle': null, 'ui.setBadge': null, 'ui.toast': null, 'ui.open': null,
     'ui.copy': null, 'ui.openExternal': null, 'ui.markdown': null, 'ui.openSettings': null,
     'storage.get': null, 'storage.set': null, 'storage.remove': null, 'storage.keys': null, 'settings.get': null,
@@ -406,6 +407,14 @@
         if (p.protocol !== 1) fail(ERR.PARAMS, 'This app speaks protocol 1');
         view.helloAt = Date.now();
         return this.helloFor(view);
+      case 'hooks.subscribe':
+      case 'hooks.unsubscribe': {
+        // The playground has no agent: the view's handlers are noted, and no hook request is ever sent.
+        if (!Array.isArray(p.events) || p.events.some(function (e) { return typeof e !== 'string'; })) fail(ERR.PARAMS, '"events" must be an array of hook event names');
+        view.hooks = view.hooks || {};
+        p.events.forEach(function (e) { if (method === 'hooks.unsubscribe') delete view.hooks[e]; else view.hooks[e] = true; });
+        return null;
+      }
       case 'events.subscribe':
       case 'events.unsubscribe': {
         if (!Array.isArray(p.events) || p.events.some(function (e) { return typeof e !== 'string'; })) fail(ERR.PARAMS, '"events" must be an array of names');

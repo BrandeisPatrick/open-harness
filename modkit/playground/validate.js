@@ -9,8 +9,9 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var PERMISSIONS = ['session:read', 'session:send', 'session:control', 'sessions:read', 'model', 'skills:read', 'config:read', 'config:write', 'schedules', 'remote', 'network'];
-  var SEATS = ['rail', 'tab', 'composer', 'background'];
+  var PERMISSIONS = ['session:read', 'session:send', 'session:control', 'sessions:read', 'model', 'skills:read', 'config:read', 'config:write', 'schedules', 'remote', 'network', 'hooks'];
+  var SEATS = ['rail', 'tab', 'composer', 'background', 'worker'];
+  var HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification', 'Stop', 'SubagentStop', 'PreCompact', 'PostCompact', 'SessionEnd'];
   var RESERVED_SEATS = ['transcript', 'status', 'sidebar'];
   var LOOK_TARGETS = ['conversation', 'composer'];
   var SETTING_TYPES = ['boolean', 'string', 'number', 'select'];
@@ -162,6 +163,19 @@
             else if (s.default !== undefined && s.options.indexOf(s.default) < 0) err(at + 'default must be one of the options');
           } else if (s.default !== undefined && typeof s.default !== s.type) err(at + 'default must be a ' + s.type);
           if (s.type === 'number') ['min', 'max', 'step'].forEach(function (k) { if (s[k] !== undefined && typeof s[k] !== 'number') err(at + k + ' must be a number'); });
+        });
+      }
+    }
+
+    if (c.hooks !== undefined) {
+      if (!Array.isArray(c.hooks)) err('contributes.hooks must be an array of event names');
+      else {
+        if (c.hooks.length && !(Array.isArray(m.permissions) && m.permissions.indexOf('hooks') >= 0)) err('contributes.hooks needs the "hooks" permission');
+        c.hooks.forEach(function (h, i) {
+          var ev = typeof h === 'string' ? h : h && typeof h === 'object' ? h.event : undefined;
+          if (typeof ev !== 'string') err('hooks[' + i + ']: must be an event name or { "event", "timeout" }');
+          else if (HOOK_EVENTS.indexOf(ev) < 0) warn('hooks[' + i + ']: "' + ev + '" is not a hook event this app fires; it is ignored');
+          if (h && typeof h === 'object' && h.timeout !== undefined && (typeof h.timeout !== 'number' || !(h.timeout > 0) || h.timeout > 600)) err('hooks[' + i + ']: timeout must be a number of seconds from 1 to 600');
         });
       }
     }

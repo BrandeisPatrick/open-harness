@@ -213,7 +213,7 @@ const js = (v) => JSON.stringify(v);
     await app.evaluate(`document.querySelector('#sp-nav-files').focus()`);
     await app.key('ArrowDown');
     await sleep(100);
-    check('ArrowDown moves to the next section', (await app.evaluate('window.__oc_debug.settings.state().section')) === 'about' && (await app.evaluate(`document.activeElement.id`)) === 'sp-nav-about');
+    check('ArrowDown moves to the next section', (await app.evaluate('window.__oc_debug.settings.state().section')) === 'hooks' && (await app.evaluate(`document.activeElement.id`)) === 'sp-nav-hooks');
     await app.key('ArrowUp');
     await app.key('ArrowUp');
     check('ArrowUp goes back', (await app.evaluate('window.__oc_debug.settings.state().section')) === 'appearance');

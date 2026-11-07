@@ -40,6 +40,7 @@ export const MOD_METHOD_PERMISSIONS: Record<ModMethod, ModPermission | null> = {
   'ui.copy': null,
   'ui.openExternal': null,
   'ui.markdown': null,
+  'ui.openSettings': null,
   'storage.get': null,
   'storage.set': null,
   'storage.remove': null,
@@ -76,6 +77,7 @@ export const MOD_METHOD_PERMISSIONS: Record<ModMethod, ModPermission | null> = {
 
   'config.get': 'config:read',
   'config.set': 'config:write',
+  'project.git': 'config:read',
 
   'schedules.list': 'schedules',
   'schedules.create': 'schedules',

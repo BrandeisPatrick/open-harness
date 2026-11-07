@@ -286,6 +286,8 @@ export interface ModBridge {
   'ui.copy': (p: { text: string }) => boolean;
   'ui.openExternal': (p: { url: string }) => void;
   'ui.markdown': (p: { text: string }) => { html: string };
+  /** Opens Settings at a section (default "general") */
+  'ui.openSettings': (p: { section?: string }) => void;
 
   'storage.get': (p: { key: string; scope?: 'mod' | 'session' }) => { value: unknown };
   'storage.set': (p: { key: string; value: unknown; scope?: 'mod' | 'session' }) => void;
@@ -324,6 +326,8 @@ export interface ModBridge {
 
   'config.get': () => PublicConfig;
   'config.set': (p: { patch: PublicConfigPatch }) => PublicConfig;
+  /** The git repository of the session's folder: its root, "owner/name" from the origin remote, the branch */
+  'project.git': () => { root: string | null; repository: string | null; branch: string | null };
 
   'schedules.list': () => { schedules: Schedule[] };
   'schedules.create': (p: { input: ScheduleInput }) => Schedule;

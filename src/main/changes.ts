@@ -109,6 +109,46 @@ export async function gitTop(cwd: string): Promise<string | null> {
   return top;
 }
 
+export interface GitInfo {
+  /** The repository's root folder, or null when the folder is not in a git repository */
+  root: string | null;
+  /** "owner/name" from the origin remote's URL, when it has that shape */
+  repository: string | null;
+  /** The branch checked out, or null (no repository, or a detached HEAD) */
+  branch: string | null;
+}
+
+/** "owner/name" from a remote URL: https://host/owner/name(.git), git@host:owner/name(.git), ssh://git@host/owner/name */
+export function repoFromRemote(url: string): string | null {
+  const s = String(url || '').trim().replace(/\/+$/, '').replace(/\.git$/i, '');
+  const m = /^(?:[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?[^/]+\/|[^@/\s]+@[^:/\s]+:)([^\s]+)$/i.exec(s);
+  if (!m) return null;
+  const parts = m[1].split('/').filter(Boolean);
+  if (parts.length < 2) return null;
+  return parts.slice(-2).join('/');
+}
+
+const infoCache = new Map<string, { at: number; info: GitInfo }>();
+
+/** The repository, its origin as owner/name and the branch, for the Environment section (cached for a few seconds). */
+export async function gitInfo(cwd: string): Promise<GitInfo> {
+  const none: GitInfo = { root: null, repository: null, branch: null };
+  if (!cwd) return none;
+  const hit = infoCache.get(cwd);
+  if (hit && Date.now() - hit.at < 3000) return hit.info;
+  const root = await gitTop(cwd);
+  let info = none;
+  if (root) {
+    const [branch, origin] = await Promise.all([
+      git(['symbolic-ref', '--quiet', '--short', 'HEAD'], root).then((s) => s.trim() || null, () => null),
+      git(['config', '--get', 'remote.origin.url'], root).then((s) => s.trim(), () => ''),
+    ]);
+    info = { root, repository: origin ? repoFromRemote(origin) : null, branch };
+  }
+  infoCache.set(cwd, { at: Date.now(), info });
+  return info;
+}
+
 interface GitFile {
   abs: string;
   status: ChangeEntry['status'];

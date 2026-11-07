@@ -14,7 +14,7 @@ import { closeMenu, openMenu, type MenuSection } from './popover.js';
 import { appendTranscriptItem, registerTranscriptItem } from './transcript-items.js';
 import { homeDir } from './home.js';
 import { modeOf } from './modes.js';
-import { MOD_TABS, modTabs } from './settings/model.js';
+import { MOD_TABS, isSectionId, modTabs } from './settings/model.js';
 import {
   ERR,
   HELLO_TIMEOUT_MS,
@@ -581,6 +581,12 @@ export function createModsHost(deps: ModsHostDeps): ModsHost {
       }
       case 'ui.markdown':
         return { html: renderMarkdown(str('text', 500_000)) };
+      case 'ui.openSettings': {
+        const section = p.section === undefined ? 'general' : str('section', 100);
+        if (!isSectionId(section)) throw bad(`section: no Settings section "${section}"`);
+        deps.openSettings(section);
+        return null;
+      }
       case 'composer.insert': {
         deps.insertText(str('text', 100_000));
         return null;

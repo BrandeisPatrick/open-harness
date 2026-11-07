@@ -312,6 +312,7 @@
       copy: function (text) { return call('ui.copy', { text: String(text) }); },
       openExternal: function (url) { return call('ui.openExternal', { url: String(url) }); },
       markdown: function (text) { return call('ui.markdown', { text: String(text == null ? '' : text) }); },
+      openSettings: function (section) { return call('ui.openSettings', section === undefined ? {} : { section: String(section) }); },
     },
 
     storage: storage,
@@ -367,6 +368,10 @@
     config: {
       get: function () { return call('config.get'); },
       set: function (patch) { return call('config.set', { patch: patch || {} }); },
+    },
+
+    project: {
+      git: function () { return call('project.git'); },
     },
 
     schedules: {

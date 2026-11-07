@@ -263,6 +263,7 @@ Rail and composer views are sized to their content automatically. Use the app's 
 | `harness.ui.copy(text)` | copy to the clipboard |
 | `harness.ui.openExternal(url)` | open an http(s) link in the default browser |
 | `harness.ui.markdown(text)` | `{ html }` rendered the way the chat renders Markdown |
+| `harness.ui.openSettings(section?)` | open Settings at a section (`general` when left out; `model`, `permissions`, `context`, `mods`, …) |
 | `harness.storage.get(key, fallback)`, `.set(key, value)`, `.remove(key)`, `.keys()` | this mod's own JSON storage, kept across sessions; `get` resolves with the value (or `fallback` when nothing is stored), `keys` with an array; `harness.storage.session` is the same per session. A value may be up to 256 KB, a mod's storage 5 MB |
 | `harness.settings.get()` | the values of the mod's settings; event `settings.changed` |
 
@@ -308,6 +309,8 @@ Events: `session.changed` (another session came on screen, or this one's title o
 ### config:read and config:write
 
 `harness.config.get()` → `{ provider, model, workingDirectory, home, permissionMode, theme, autoCompact, compactThreshold, keepAwake, notifications, background, contextLimit }` (`provider` is the name of the provider in use: `ollama`, `portkey` or the name of a named provider such as `openrouter`; `workingDirectory` is the folder of the session on screen, `home` the user's home folder for showing paths as `~/…`). Keys and other secrets are never included. Event `config.changed`, which is also sent when `workingDirectory` changes because a session in another folder came on screen.
+
+`harness.project.git()` → `{ root, repository, branch }` for the folder of the session on screen: the repository's root folder, `owner/name` from the `origin` remote's URL and the branch checked out, each `null` when it is not known (not a repository, no such remote, a detached HEAD). It needs `config:read`.
 
 `harness.config.set(patch)` changes `theme`, `autoCompact`, `compactThreshold`, `keepAwake`, `notifications` or `background`, and nothing else (any other key is refused as bad params): a mod cannot change the permission mode, the provider, or what is trusted.
 

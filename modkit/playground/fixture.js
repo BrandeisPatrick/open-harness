@@ -74,6 +74,7 @@
       app: { name: 'Silo Harness', version: '0.1.0 (playground)' },
       home: HOME,
       config: { provider: 'ollama', model: 'qwen3:8b', workingDirectory: HOME, permissionMode: 'ask', theme: 'system', autoCompact: true, compactThreshold: 0.8, keepAwake: 'off', notifications: true, background: null, contextLimit: 200000 },
+      git: { root: HOME + '/code/atlas-api', repository: 'patrick/atlas-api', branch: 'main' },
       remote: { enabled: false, running: false, bind: 'lan', port: null, urls: [], clients: 0 },
       // How the playground's model answers: ok, slow, hold (streams a little, then waits for a cancel), nokey, unreachable
       model: { mode: 'ok' },

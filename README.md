@@ -1,6 +1,6 @@
 <p align="center"><img src="build/icon.png" width="84" alt=""></p>
 <h1 align="center">Silo Harness</h1>
-<p align="center">An open-source agent harness for macOS, in the style of Claude Code. Local models via Ollama, any provider through an OpenAI-compatible endpoint. Everything beside the chat is a mod you can change.</p>
+<p align="center">The self-improving agent harness: an open-source Mac app in the style of Claude Code. Dreaming reads your past sessions and proposes skills, memory and mods for you to keep, and the agent builds a mod when you ask. Local models via Ollama, or any provider through an OpenAI-compatible endpoint.</p>
 <p align="center">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20silicon-lightgrey.svg">

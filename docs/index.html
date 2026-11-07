@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Silo Harness: an open-source agent harness for macOS</title>
-<meta name="description" content="An open-source agent harness for macOS, in the style of Claude Code. Local models through Ollama, any provider through an OpenAI-compatible endpoint, sessions side by side, and everything beside the chat is a mod you can change.">
+<title>Silo Harness: the self-improving agent harness</title>
+<meta name="description" content="The self-improving agent harness: an open-source Mac app in the style of Claude Code. Dreaming reads your past sessions and proposes skills, memory and mods for you to keep, and the agent builds a mod when you ask.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Silo Harness">
-<meta property="og:description" content="An open-source agent harness for macOS, in the style of Claude Code. Local models, sessions side by side, and mods for everything beside the chat.">
+<meta property="og:description" content="The self-improving agent harness, for macOS and in the style of Claude Code. Dreaming proposes skills, memory and mods from your past sessions, and the agent builds mods on request.">
 <meta property="og:url" content="https://brandeispatrick.github.io/silo-harness/">
 <meta property="og:image" content="https://brandeispatrick.github.io/silo-harness/social-preview.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
-<meta property="og:image:alt" content="Silo Harness: an open-source agent harness for macOS">
+<meta property="og:image:alt" content="Silo Harness: the self-improving agent harness">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="site/icon.svg" type="image/svg+xml">
 <link rel="icon" href="site/icon.png" type="image/png" sizes="1024x1024">
@@ -50,8 +50,9 @@
   <section class="hero" aria-labelledby="title">
     <p class="badge"><span class="dot" aria-hidden="true"></span>Open source · macOS</p>
     <h1 id="title">Silo Harness</h1>
-    <p class="lede">An agent harness for your Mac, in the style of Claude Code.</p>
-    <p class="intro">Run a local model through Ollama, or any provider through an OpenAI-compatible endpoint. Several sessions work side by side in one calm window, and everything beside the chat is a mod you can change.</p>
+    <p class="lede">The self-improving agent harness.</p>
+    <p class="kin">For your Mac, in the style of Claude Code.</p>
+    <p class="intro">Dreaming reads your past sessions and proposes skills, memory and mods, and you keep what helps. Ask the agent for a mod and it builds one.</p>
     <div class="actions">
       <a class="button primary" href="https://github.com/BrandeisPatrick/silo-harness/releases/latest">Download for macOS</a>
       <a class="button quiet" href="https://github.com/BrandeisPatrick/silo-harness">View on GitHub</a>
@@ -67,6 +68,58 @@
       <img src="screenshots/hero.png" width="1280" height="800" decoding="async" alt="The Silo Harness window: the sidebar with today's sessions, a conversation about adding rate limiting to ~/code/atlas-api with its tool activity folded into one line and a task list, and the rail with the environment, the context in use and the tasks.">
     </picture></noscript>
   </div></div>
+
+  <section class="better" aria-labelledby="better">
+    <h2 id="better">It gets better the more you use it</h2>
+    <p class="sub">Silo Harness adapts to how you work, and you decide what sticks.</p>
+
+    <ol class="loop">
+      <li><h3>Work</h3><p>You work with the agent, session by session.</p></li>
+      <li><h3>Dream</h3><p>Once a day, or when you ask, a dream reads your recent sessions.</p></li>
+      <li><h3>Keep what helps</h3><p>It proposes skills, memory and mods for you to apply or dismiss.</p></li>
+      <li><h3>Start the next session better</h3><p>New sessions begin with what you kept.</p></li>
+    </ol>
+
+    <div class="spot">
+      <article class="card wide">
+        <div class="card-text">
+          <h3>Dreaming</h3>
+          <p>Once a day at a time you set, or when you ask, Silo Harness reads a project's recent sessions and proposes skills, mods and memory (lines for the project's instructions file). Each proposal quotes your own words and links the sessions it came from.</p>
+          <ul class="points">
+            <li>Approve, Auto or Plan mode, and anything applied can be reverted.</li>
+            <li>The daily dream is off until you turn it on.</li>
+            <li>A dream sends parts of past conversations to the model you configured.</li>
+          </ul>
+        </div>
+        <div class="card-pic"><div class="card-frame bleed" style="--w: 920px; --x: 196px; --y: 40px; --w-sm: 700px; --x-sm: 150px; --y-sm: 30px">
+          <img data-src="screenshots/dreaming.png" data-src-dark="screenshots/dreaming-dark.png" width="1020" height="752" decoding="async" loading="lazy" alt="Settings, Dreaming: a dream of atlas-api waiting with three suggestions; the first, a release skill, quotes two past requests, links the sessions they came from and has Dismiss and Apply.">
+          <noscript><picture>
+            <source media="(prefers-color-scheme: dark)" srcset="screenshots/dreaming-dark.png" width="1020" height="752" data-dark>
+            <img src="screenshots/dreaming.png" width="1020" height="752" decoding="async" loading="lazy" alt="Settings, Dreaming: a dream of atlas-api waiting with three suggestions; the first, a release skill, quotes two past requests, links the sessions they came from and has Dismiss and Apply.">
+          </picture></noscript>
+        </div></div>
+      </article>
+
+      <article class="card wide">
+        <div class="card-text">
+          <h3>Mods</h3>
+          <p>Everything beside the chat is a mod: panels in the rail, tabs in the side pane, looks, themes, slash commands, and hooks that act before and after the agent's actions. Ask the agent for one and it writes it, then a card in the chat offers to turn it on.</p>
+          <ul class="points">
+            <li>Folders of web files with a documented protocol, reloaded when a file is saved.</li>
+            <li>Each mod declares its permissions, and you grant them when you turn it on.</li>
+            <li>The panels the app ships with are mods too, so yours can do what they do.</li>
+          </ul>
+        </div>
+        <div class="card-pic"><div class="card-frame bleed" style="--w: 720px; --x: 0px; --y: 40px; --w-sm: 560px; --x-sm: 0px; --y-sm: 31px">
+          <img data-src="screenshots/mods.png" data-src-dark="screenshots/mods-dark.png" width="786" height="980" decoding="async" loading="lazy" alt="The rail with the Environment, Context and Tasks mods, beside the Scheduled tab listing three scheduled tasks with their rhythm and a Run now button.">
+          <noscript><picture>
+            <source media="(prefers-color-scheme: dark)" srcset="screenshots/mods-dark.png" width="786" height="980" data-dark>
+            <img src="screenshots/mods.png" width="786" height="980" decoding="async" loading="lazy" alt="The rail with the Environment, Context and Tasks mods, beside the Scheduled tab listing three scheduled tasks with their rhythm and a Run now button.">
+          </picture></noscript>
+        </div></div>
+      </article>
+    </div>
+  </section>
 
   <section class="features" aria-labelledby="features">
     <h2 id="features">What it does</h2>
@@ -96,34 +149,6 @@
           <noscript><picture>
             <source media="(prefers-color-scheme: dark)" srcset="screenshots/sidebar-dark.png" width="596" height="710" data-dark>
             <img src="screenshots/sidebar.png" width="596" height="710" decoding="async" loading="lazy" alt="The sidebar: sessions grouped by day, a merged sub-session and a running one nested under the session that started them, a fork under its original, an unread session marked with a dot and a scheduled one with a clock.">
-          </picture></noscript>
-        </div></div>
-      </article>
-
-      <article class="card">
-        <div class="card-text">
-          <h3>Everything beside the chat is a mod</h3>
-          <p>The rail, the tabs, the look of the conversation and the background are mods: folders of web files with a documented protocol, reloaded when a file is saved.</p>
-        </div>
-        <div class="card-pic"><div class="card-frame bleed" style="--w: 668px; --x: 0px; --y: 40px">
-          <img data-src="screenshots/mods.png" data-src-dark="screenshots/mods-dark.png" width="786" height="980" decoding="async" loading="lazy" alt="The rail with the Environment, Context and Tasks mods, beside the Scheduled tab listing three scheduled tasks with their rhythm and a Run now button.">
-          <noscript><picture>
-            <source media="(prefers-color-scheme: dark)" srcset="screenshots/mods-dark.png" width="786" height="980" data-dark>
-            <img src="screenshots/mods.png" width="786" height="980" decoding="async" loading="lazy" alt="The rail with the Environment, Context and Tasks mods, beside the Scheduled tab listing three scheduled tasks with their rhythm and a Run now button.">
-          </picture></noscript>
-        </div></div>
-      </article>
-
-      <article class="card">
-        <div class="card-text">
-          <h3>Dreaming</h3>
-          <p>Once a day, or when you ask, a dream reads your recent sessions and suggests skills, memory lines and mods, each with the evidence. You apply or dismiss them.</p>
-        </div>
-        <div class="card-pic"><div class="card-frame bleed" style="--w: 867px; --x: 196px; --y: 42px">
-          <img data-src="screenshots/dreaming.png" data-src-dark="screenshots/dreaming-dark.png" width="1020" height="752" decoding="async" loading="lazy" alt="Settings, Dreaming: a dream of atlas-api waiting with three suggestions; the first, a release skill, quotes two past requests, links the sessions they came from and has Dismiss and Apply.">
-          <noscript><picture>
-            <source media="(prefers-color-scheme: dark)" srcset="screenshots/dreaming-dark.png" width="1020" height="752" data-dark>
-            <img src="screenshots/dreaming.png" width="1020" height="752" decoding="async" loading="lazy" alt="Settings, Dreaming: a dream of atlas-api waiting with three suggestions; the first, a release skill, quotes two past requests, links the sessions they came from and has Dismiss and Apply.">
           </picture></noscript>
         </div></div>
       </article>

@@ -2,7 +2,8 @@
 // href and src resolves to a file in the repository; every <img> has alt text, and a width and height in the ratio of
 // the file's real pixels; each themed picture has its light and its dark file, the same size; exactly one h1 and no
 // skipped heading level; nothing is loaded from another origin (links to github.com are fine, resources are not);
-// the page, its stylesheet and its script together weigh under 60 KB; the Copy buttons point at blocks that exist.
+// the page, its stylesheet and its script together weigh under 60 KB; the Copy buttons point at blocks that exist; the
+// page tells one story, the self-improving agent harness, with Dreaming and Mods up front and said once each.
 // Run: node test/site.js [repo]
 const fs = require('node:fs');
 const path = require('node:path');
@@ -111,8 +112,44 @@ const cardBad = cards.filter((c) => {
   const themedOk = attr(pic, 'data-src-dark') !== null || attr(pic, 'src') === 'screenshots/hyperspace.png';
   return !/<h3>[^<]+<\/h3>\s*<p>/.test(c) || !frame || !/--w:\s*\d+px/.test(frame[1]) || pics.length !== 1 || !themedOk;
 });
-check('six feature cards, each with a heading, its words and one framed picture in both themes (Hyperspace is dark only)', cards.length === 6 && cardBad.length === 0, cardBad.map((c) => /<h3>([^<]*)/.exec(c)?.[1]));
+check('four feature cards, each with a heading, its words and one framed picture in both themes (Hyperspace is dark only)', cards.length === 4 && cardBad.length === 0, cardBad.map((c) => /<h3>([^<]*)/.exec(c)?.[1]));
 check('no <picture> outside a <noscript> (the preload scanner would fetch it in the system scheme)', html.replace(/<noscript>[\s\S]*?<\/noscript>/g, '').indexOf('<picture') === -1);
+
+// ---- the story: the self-improving agent harness ----
+// The hero and the head say the line; right after the main picture the loop (work, dream, keep what helps, start the
+// next session better) leads into Dreaming and Mods as two wide cards, and the grid below says everything else, so
+// neither is a feature twice. Every feature says itself in one or two sentences.
+const text = (s) => (s || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const sentences = (s) => (s.match(/[.!?](?=\s|$)/g) || []).length;
+const lede = /<h1 id="title">[^<]*<\/h1>\s*<p class="lede">([^<]*)<\/p>/.exec(html)?.[1];
+check('the hero: the name, then "The self-improving agent harness."', lede === 'The self-improving agent harness.', lede);
+check('"in the style of Claude Code" stays, on a smaller line under it', /<p class="lede">[^<]*<\/p>\s*<p class="kin">[^<]*in the style of Claude Code[^<]*<\/p>/.test(html));
+const head = [/<title>([^<]*)<\/title>/, /<meta name="description" content="([^"]*)"/, /<meta property="og:description" content="([^"]*)"/, /<meta property="og:image:alt" content="([^"]*)"/].map((re) => re.exec(html)?.[1] || '');
+check('the title, the description, the og description and the preview\'s alt text carry the line', head.every((s) => /self-improving agent harness/i.test(s)), head);
+check('no "RSI" and no "recursive self-improvement" on the page', !/\bRSI\b/.test(html) && !/recursive self-improvement/i.test(html));
+check('right after the main picture comes the section on getting better', /<div class="window">[\s\S]*?<\/div><\/div>\s*<section class="better"/.test(html) && html.indexOf('<section class="better"') < html.indexOf('<section class="features"'));
+const steps = [...(/<ol class="loop">([\s\S]*?)<\/ol>/.exec(html)?.[1] || '').matchAll(/<li><h3>([^<]+)<\/h3><p>([^<]+)<\/p><\/li>/g)];
+check('the loop: work, dream, keep what helps, start the next session better', JSON.stringify(steps.map((m) => m[1])) === JSON.stringify(['Work', 'Dream', 'Keep what helps', 'Start the next session better']), steps.map((m) => m[1]));
+const wides = [...html.matchAll(/<article class="card wide">([\s\S]*?)<\/article>/g)].map((m) => {
+  const c = m[1];
+  const pics = c.replace(/<noscript>[\s\S]*?<\/noscript>/g, '').match(/<img\b[^>]*>/g) || [];
+  const frame = /<div class="card-frame[^"]*" style="([^"]*)">/.exec(c);
+  const words = text(/<h3>[^<]+<\/h3>\s*<p>([\s\S]*?)<\/p>/.exec(c)?.[1]);
+  const points = (/<ul class="points">([\s\S]*?)<\/ul>/.exec(c)?.[1].match(/<li>/g) || []).length;
+  const ok = pics.length === 1 && attr(pics[0], 'data-src-dark') !== null && !!frame && /--w:\s*\d+px/.test(frame[1]) && points >= 1 && points <= 3;
+  return { name: /<h3>([^<]+)<\/h3>/.exec(c)?.[1], pic: pics[0] && attr(pics[0], 'data-src'), words, ok };
+});
+check('Dreaming and Mods as two wide cards, each with its picture in both themes, its words and at most three points', JSON.stringify(wides.map((w) => [w.name, w.pic])) === '[["Dreaming","screenshots/dreaming.png"],["Mods","screenshots/mods.png"]]' && wides.every((w) => w.ok), wides);
+const features = [...html.matchAll(/<article class="card[^"]*">[\s\S]*?<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
+const once = (f) => (html.replace(/<noscript>[\s\S]*?<\/noscript>/g, '').match(new RegExp(`data-src="${f}"`, 'g')) || []).length === 1;
+check('Dreaming and Mods are features once each, their pictures on the page once each', features.filter((n) => /dream/i.test(n)).length === 1 && features.filter((n) => /\bmods?\b/i.test(n)).length === 1 && once('screenshots/dreaming.png') && once('screenshots/mods.png'), features);
+const featureWords = [
+  ...cards.map((c) => /<h3>[^<]+<\/h3>\s*<p>([\s\S]*?)<\/p>/.exec(c)?.[1]),
+  ...wides.map((w) => w.words),
+  ...steps.map((m) => m[2]),
+  ...[...(/<ul class="also"[^>]*>([\s\S]*?)<\/ul>/.exec(html)?.[1] || '').matchAll(/<p>([\s\S]*?)<\/p>/g)].map((m) => m[1]),
+].map(text);
+check('every feature says itself in one or two sentences', featureWords.length === 4 + 2 + 4 + 6 && featureWords.every((t) => sentences(t) >= 1 && sentences(t) <= 2), featureWords.filter((t) => sentences(t) < 1 || sentences(t) > 2));
 
 // ---- headings ----
 const heads = [...html.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));

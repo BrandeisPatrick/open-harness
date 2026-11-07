@@ -633,7 +633,7 @@ async function readyPage(hello = HELLO) {
 
   // --- the bundled mods ---------------------------------------------------------------------------------
   const EXPECTED = {
-    environment: { order: 10, permissions: ['config:read', 'config:write', 'remote'] },
+    environment: { order: 10, permissions: ['config:read', 'session:read', 'remote'] },
     context: { order: 20, permissions: ['session:read', 'session:control'] },
     tasks: { order: 30, permissions: ['session:read'] },
     plan: { order: 35, permissions: ['session:read'] },

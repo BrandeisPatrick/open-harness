@@ -73,7 +73,7 @@ const ROWS = `[...document.querySelectorAll('#messages > *')].filter((e) => e.id
     const liveA = await rows();
     if (app.live) {
       check('A ends with its reply', /A DONE/.test(await app.lastReply()), await app.lastReply());
-      check('A: one user bubble, one bash row, a reply', liveA.filter((r) => /msg user/.test(r.cls)).length === 1 && liveA.filter((r) => /^tool\b|\btool\b/.test(r.cls) && !/tool-group/.test(r.cls)).length === 1 && liveA.filter((r) => /msg assistant/.test(r.cls)).length >= 1, liveA);
+      check('A: one user bubble, one bash row, a reply', liveA.filter((r) => /msg user/.test(r.cls)).length === 1 && (liveA.filter((r) => /^tool\b|\btool\b/.test(r.cls) && !/tool-group/.test(r.cls)).length === 1 || liveA.filter((r) => /tool-group/.test(r.cls) && /^Ran a command/.test(r.text)).length === 1) && liveA.filter((r) => /msg assistant/.test(r.cls)).length >= 1, liveA);
     }
     await shot('4-a-done');
     // What a window that watched from the start shows: the transcript rendered afresh

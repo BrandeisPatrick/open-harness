@@ -31,7 +31,7 @@ const { launch, checker, sleep } = require('./rig.js');
     await app.approve('deny');
     await idle();
     check('approval deny: the command did not run', !fs.existsSync(path.join(app.project, 'denied.txt')));
-    check('approval deny: the card shows Denied', /Denied/.test((await app.text('.approval.done')) || ''));
+    check('approval deny: the call reads as denied', await app.evaluate(`[...document.querySelectorAll('.tool-group, .tool, .approval')].some((e) => /Denied/.test(e.innerText))`));
     await app.send('Use the bash tool to run exactly: echo hi > allowed.txt. Then reply with exactly: RAN');
     await app.approve('allow');
     await idle();

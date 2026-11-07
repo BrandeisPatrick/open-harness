@@ -126,7 +126,7 @@ export function groupFamilies(roots: TreeNode[], now: number = Date.now()): Grou
 /** What the row's right end shows when the row is not hovered (at most one). */
 export type Indicator =
   | { kind: 'running' }
-  | { kind: 'attention'; reason: 'approval' | 'plan' }
+  | { kind: 'attention'; reason: 'approval' | 'question' | 'plan' }
   | { kind: 'unread' }
   /** A session with sessions under it; `count` when collapsed; `hot` when a hidden one runs, waits or is unread */
   | { kind: 'family'; count?: number; hot?: boolean }

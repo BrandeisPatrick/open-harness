@@ -1,5 +1,5 @@
 // The routes under /r/<token>/api/. This is the whole of what the remote can do: read sessions, send a message,
-// stop a run, answer an approval card (never with a project rule), decide a plan, start a session. Nothing here
+// stop a run, answer an approval card (never with a project rule) or a question card, decide a plan, start a session. Nothing here
 // touches settings, the permission mode, trust, mods, schedules or files.
 
 import fs from 'node:fs';
@@ -50,7 +50,7 @@ export class Api {
   async handle(route: string, url: URL, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const method = req.method ?? 'GET';
     const get = ['state', 'transcript'];
-    const post = ['send', 'stop', 'approve', 'plan', 'new'];
+    const post = ['send', 'stop', 'approve', 'answer', 'plan', 'new'];
     if (!get.includes(route) && !post.includes(route)) return false;
     const wanted = get.includes(route) ? 'GET' : 'POST';
     if (method !== wanted) {
@@ -80,6 +80,14 @@ export class Api {
         // Scope is fixed: the remote can allow once or for the session, never save a rule for the project.
         const found = rt.respondApproval(id, ok, ok && always, 'session');
         json(res, found ? 200 : 404, found ? { ok: true } : { ok: false, error: 'That request was already answered.' });
+        break;
+      }
+      case 'answer': {
+        // A question card (ask_user): one answer per question, or null to skip it. The agent keeps only labels it offered.
+        const id = str(body, 'id');
+        const answers = Array.isArray(body.answers) ? body.answers.slice(0, 4) : null;
+        const found = rt.respondQuestion(id, answers);
+        json(res, found ? 200 : 404, found ? { ok: true } : { ok: false, error: 'That question was already answered.' });
         break;
       }
       case 'plan': {

@@ -216,7 +216,7 @@ export interface ModSession {
   createdAt: number;
   updatedAt: number;
   running: boolean;
-  attention?: 'approval' | 'plan';
+  attention?: 'approval' | 'question' | 'plan';
 }
 
 export interface ModTranscriptItem {

@@ -405,6 +405,10 @@ export type AgentEvent =
   /** The assistant finished one message: its full text (tool calls follow as tool_start events) */
   | { type: 'assistant_message'; text: string; toolCalls: number }
   | { type: 'approval_resolved'; id: string; ok: boolean; scope: 'once' | 'session' | 'project' }
+  /** ask_user: the model asks the user one to four questions and the run waits for the answers (question:response) */
+  | { type: 'question_request'; id: string; questions: UserQuestion[] }
+  /** The question card was answered (`answers`, one per question) or skipped; also sent when a stop ends it unanswered */
+  | { type: 'question_resolved'; id: string; answers?: QuestionAnswer[]; skipped?: boolean }
   /** The model showed an image with show_image; it appears inline in the reply */
   | { type: 'image'; image: ImageInfo }
   /** A hook with a statusMessage is running (text), or it finished (null): the status line says so meanwhile */
@@ -418,11 +422,28 @@ export type MessageOrigin = 'user' | 'queue' | 'schedule' | 'session' | 'remote'
 /** How a session came to be: started by the user, forked from another, spawned by an agent as a sub-session, or started by a schedule. */
 export type SessionOrigin = 'user' | 'fork' | 'spawn' | 'schedule' | 'dream';
 
+/** One question of an ask_user call, as the model asked it (checked by the tool: 1–4 per call, 2–4 options each). */
+export interface UserQuestion {
+  /** The whole question, e.g. "Which library should the charts use?" */
+  question: string;
+  /** A short label for it (at most 12 characters), shown as a chip: "Library" */
+  header: string;
+  options: { label: string; description: string }[];
+  /** The user may pick more than one option */
+  multiSelect: boolean;
+}
+
+/** The user's answer to one question: the labels picked and, under Other, what they typed. */
+export interface QuestionAnswer {
+  selected: string[];
+  other?: string;
+}
+
 /** Run-time state of a session (only `unread` is stored). */
 export interface SessionStatus {
   running: boolean;
-  /** The run is waiting for the user: an approval card or a proposed plan */
-  attention?: 'approval' | 'plan';
+  /** The run is waiting for the user: an approval card, a question card or a proposed plan */
+  attention?: 'approval' | 'question' | 'plan';
   /** A run ended while the session was not on screen and it has not been opened since */
   unread?: boolean;
 }
@@ -438,6 +459,8 @@ export interface LiveState {
   tools: { id: string; name: string; args: unknown }[];
   /** Approval cards waiting for an answer */
   approvals: Extract<AgentEvent, { type: 'approval_request' }>[];
+  /** Question cards (ask_user) waiting for an answer; missing from an older main process */
+  questions?: Extract<AgentEvent, { type: 'question_request' }>[];
   queue: QueuedMessage[];
 }
 
@@ -671,6 +694,8 @@ export interface SiloHarnessApi {
    * directory (see RulesApi) and applies from now on. Returns the config.
    */
   respondApproval(id: string, ok: boolean, always?: boolean, scope?: ApprovalScope): Promise<AppConfig>;
+  /** Answers a question card (one answer per question); null skips it. False when no session waits on that card any more. */
+  respondQuestion(id: string, answers: QuestionAnswer[] | null): Promise<boolean>;
   files: FilesApi;
   rules: RulesApi;
   instructions: InstructionsApi;

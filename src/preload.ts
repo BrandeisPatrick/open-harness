@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { RpcEvents, RpcMethods } from './shared/rpc';
-import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, Bounds, BrowserState, ChangeDiff, ChangeEntry, ContextInfo, FileHit, ImageAttachment, McpScope, McpServerInfo, ModelCapabilities, SiloHarnessApi, ProjectRules, QueuedMessage, RewindResult, SendResult, SessionMeta, SkillInfo, TerminalTabInfo, TranscriptItem } from './shared/types';
+import type { AgentEvent, AppConfig, ApprovalScope, QuestionAnswer, ArtifactInfo, Bounds, BrowserState, ChangeDiff, ChangeEntry, ContextInfo, FileHit, ImageAttachment, McpScope, McpServerInfo, ModelCapabilities, SiloHarnessApi, ProjectRules, QueuedMessage, RewindResult, SendResult, SessionMeta, SkillInfo, TerminalTabInfo, TranscriptItem } from './shared/types';
 
 // Every feature listens for pushes on the one 'rpc:push' channel, so more than Node's default ten listeners is normal.
 ipcRenderer.setMaxListeners(200);
@@ -33,6 +33,7 @@ const api: SiloHarnessApi = {
     },
   },
   respondApproval: (id: string, ok: boolean, always?: boolean, scope?: ApprovalScope): Promise<AppConfig> => ipcRenderer.invoke('approval:response', id, ok, always, scope ?? 'session'),
+  respondQuestion: (id: string, answers: QuestionAnswer[] | null): Promise<boolean> => ipcRenderer.invoke('question:response', id, answers),
   files: {
     search: (query: string, limit?: number): Promise<FileHit[]> => ipcRenderer.invoke('files:search', query, limit ?? 50),
   },

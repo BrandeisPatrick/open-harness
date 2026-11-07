@@ -44,6 +44,7 @@ const KINDS: Record<string, Omit<Kind, 'key' | 'target'>> = {
   create_artifact: counted('made', 'an', 'artifact'),
   show_image: counted('showed', 'an', 'image'),
   update_tasks: times('updated the tasks'),
+  ask_user: counted('asked', 'a', 'question'),
   submit_plan: counted('wrote', 'a', 'plan'),
   session_spawn: counted('started', 'a', 'sub-session'),
   session_send: counted('sent', 'a', 'message'),

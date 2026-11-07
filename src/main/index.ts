@@ -137,7 +137,7 @@ function createWindow(): void {
   });
 }
 
-/** The Dock badge: how many sessions wait for the user (an approval card or a proposed plan). */
+/** The Dock badge: how many sessions wait for the user (an approval card, a question card or a proposed plan). */
 function updateBadge(a: AppHost): void {
   if (process.platform !== 'darwin') return;
   const waiting = a.runtime.list().filter((m) => m.status?.attention).length;
@@ -165,6 +165,9 @@ function notify(a: AppHost, sessionId: string, ev: AgentEvent): void {
   } else if (ev.type === 'approval_request') {
     title = `${APP_NAME} needs your approval`;
     body = `${name}: ${ev.detail.split('\n')[0].slice(0, 120)}`;
+  } else if (ev.type === 'question_request') {
+    title = `${APP_NAME} has a question for you`;
+    body = `${name}: ${(ev.questions[0]?.question ?? '').slice(0, 120)}`;
   } else return;
   try {
     const n = new Notification({ title, body, silent: false });

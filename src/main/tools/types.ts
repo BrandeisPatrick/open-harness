@@ -1,4 +1,4 @@
-import type { AppConfig, ArtifactInfo, PermissionMode, PlanInfo, TaskItem } from '../../shared/types';
+import type { AppConfig, ArtifactInfo, PermissionMode, PlanInfo, QuestionAnswer, TaskItem, UserQuestion } from '../../shared/types';
 import type { ArtifactInput } from '../artifacts';
 import type { BrowserController } from '../browser';
 import type { Skill } from '../skills';
@@ -49,6 +49,8 @@ export interface ToolContext {
   signal?: AbortSignal;
   /** update_tasks: replace the session's task list and show it */
   setTasks(tasks: TaskItem[]): void;
+  /** ask_user: show the questions and wait for the answers, one per question (null: the user skipped them) */
+  askUser?(questions: UserQuestion[]): Promise<QuestionAnswer[] | null>;
 }
 
 export interface ToolResult {

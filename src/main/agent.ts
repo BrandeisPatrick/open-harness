@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type OpenAI from 'openai';
 import type { ContextBreakdown, ContextSlice } from '../shared/context';
-import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, CompactionInfo, ContextInfo, ImageAttachment, MessageOrigin, PermissionMode, PlanInfo, QueuedMessage, TaskItem } from '../shared/types';
+import type { AgentEvent, AppConfig, ApprovalScope, ArtifactInfo, CompactionInfo, ContextInfo, ImageAttachment, MessageOrigin, PermissionMode, PlanInfo, QuestionAnswer, QueuedMessage, TaskItem, UserQuestion } from '../shared/types';
 import { expandMentions } from './mentions';
 import { isOllama, makeClient, modelCapabilities, ollamaOf, plainError, resolveProvider, scrubSecrets } from './providers';
 import { contextSize, ollamaChat, ollamaComplete, type Usage } from './ollama';
@@ -36,6 +36,7 @@ import {
 import { instructionsPrompt, loadInstructions } from './instructions';
 import { allTools, toSpec, type ApprovalResult, type ApproveOptions, type Tool, type ToolContext, type ToolResult } from './tools';
 import { truncate } from './tools/types';
+import { cleanAnswers } from './tools/ask-user';
 import type { BrowserController } from './browser';
 import { expandSlashCommand, type Skill } from './skills';
 import { clip, latestPlan, toMeta, turnSnapshot, type Session, type SessionStore, type Turn } from './sessions';
@@ -264,6 +265,8 @@ export class Agent {
   session: Session;
   private abortController: AbortController | null = null;
   private pendingApprovals = new Map<string, PendingApproval>();
+  /** ask_user cards waiting for the user's answers */
+  private pendingQuestions = new Map<string, { resolve: (answers: QuestionAnswer[] | null) => void; questions: UserQuestion[] }>();
   /** Per session: programs ("git", "npm") the user allowed for the rest of the session. */
   private allowedPrograms = new Map<string, Set<string>>();
   /** Per session: guard reasons ("uses sudo") the user allowed for the rest of the session. */
@@ -417,6 +420,7 @@ export class Agent {
 
   stop(): void {
     this.abortController?.abort();
+    this.dropQuestions();
     const pending = [...this.pendingApprovals.entries()];
     this.pendingApprovals.clear();
     for (const [id, p] of pending) {
@@ -454,6 +458,41 @@ export class Agent {
     p.resolve(ok ? { ok: true } : { ok: false, message: DENIED });
     this.emit({ type: 'approval_resolved', id, ok, scope: ok && always ? scope : 'once' });
     return out;
+  }
+
+  /** True while the question card `id` (ask_user) is waiting for this agent. */
+  hasQuestion(id: string): boolean {
+    return this.pendingQuestions.has(id);
+  }
+
+  /** Answers a question card, one answer per question; null skips it. False when no such card waits. */
+  resolveQuestion(id: string, answers: unknown): boolean {
+    const p = this.pendingQuestions.get(id);
+    if (!p) return false;
+    this.pendingQuestions.delete(id);
+    const clean = answers === null ? null : cleanAnswers(p.questions, answers);
+    p.resolve(clean);
+    this.emit(clean ? { type: 'question_resolved', id, answers: clean } : { type: 'question_resolved', id, skipped: true });
+    return true;
+  }
+
+  /** ask_user: shows the questions on a card and waits, as an approval does, until they are answered or skipped. */
+  private askUser(questions: UserQuestion[]): Promise<QuestionAnswer[] | null> {
+    const id = randomUUID();
+    return new Promise((resolve) => {
+      this.pendingQuestions.set(id, { resolve, questions });
+      this.emit({ type: 'question_request', id, questions });
+    });
+  }
+
+  /** A stop ends the questions still waiting, unanswered (the tool reports the interruption). */
+  private dropQuestions(): void {
+    const pending = [...this.pendingQuestions.entries()];
+    this.pendingQuestions.clear();
+    for (const [id, p] of pending) {
+      p.resolve(null);
+      this.emit({ type: 'question_resolved', id, skipped: true });
+    }
   }
 
   private sessionSet(map: Map<string, Set<string>>): Set<string> {
@@ -769,6 +808,7 @@ export class Agent {
         setTasks: (tasks) => this.setTasks(tasks),
         submitPlan: (title, markdown) => this.submitPlan(title, markdown),
         saveArtifact: (input) => this.saveArtifact(input),
+        askUser: (questions) => this.askUser(questions),
         signal,
       };
 

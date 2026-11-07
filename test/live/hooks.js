@@ -98,7 +98,13 @@ const setTheme = (app, scheme) => app.evaluate(`(async () => { const c = await w
     check('PreToolUse: the model reads Claude Code\'s wording', toolMsg && /^PreToolUse:Bash hook error: \[.*block-rm\.sh\]: Blocked: rm is not allowed in this project$/.test(toolMsg.content), toolMsg?.content);
     const n1 = await notices(app);
     check('the transcript shows a quiet notice that a hook blocked the call', n1.some((t) => t === 'A PreToolUse hook blocked bash: Blocked: rm is not allowed in this project'), n1);
-    check('the tool row shows the call as failed', await app.evaluate(`[...document.querySelectorAll('#messages *')].some((e) => e.children.length < 40 && /rm victim\\.txt/.test(e.innerText) && /\\berror\\b/.test(e.innerText) && /hook error/.test(e.innerText))`).catch(() => false));
+    // The blocked call reads as denied: one line "Denied a command"; opened, its row says denied with the hook's words
+    const blocked = await app.evaluate(`(() => {
+      const row = [...document.querySelectorAll('#messages .tool[data-tool="bash"]')].find((r) => /rm victim\\.txt/.test(r.querySelector('.tool-arg')?.textContent ?? ''));
+      const g = row?.closest('.tool-group');
+      return row ? { line: g?.querySelector(':scope > summary .group-verb').textContent, meta: row.querySelector('.tool-meta').textContent, body: row.querySelector('.tool-body').textContent, denied: row.classList.contains('denied') } : null;
+    })()`).catch(() => null);
+    check('the blocked call reads as denied: one line "Denied a command", its row denied with the hook\'s words', blocked && blocked.line === 'Denied a command' && blocked.denied && /^denied/.test(blocked.meta) && /hook error/.test(blocked.body) && /Blocked: rm is not allowed/.test(blocked.body), blocked);
     check('Stop (exit 2) sent the run back once with the reason', requests.some((r) => lastHas('Say DONE-AGAIN')(r.payload)) && n1.some((t) => t === 'A Stop hook sent the model back to work: Say DONE-AGAIN before you stop'), n1);
     check('… and the run ended after that (no second round)', requests.filter((r) => lastHas('Say DONE-AGAIN')(r.payload)).length === 1);
     check('UserPromptSubmit: the hook\'s stdout reached the model', requests.some((r) => JSON.stringify(r.payload.messages).includes('the codename is MARMOT')));

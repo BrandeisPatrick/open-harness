@@ -70,6 +70,8 @@
   --button-text: #ffffff;
   --answer-fill: var(--button-fill);
   --answer-ink: var(--button-text);
+  --quiet-fill: var(--bg-300);
+  --quiet-fill-hover: var(--bg-400);
   --spinner: var(--accent);
   --badge-bg: var(--accent-soft);
   --badge-ink: var(--accent);
@@ -139,6 +141,8 @@
     --button-text: #ffffff;
     --answer-fill: var(--button-fill);
     --answer-ink: var(--button-text);
+    --quiet-fill: var(--bg-300);
+    --quiet-fill-hover: var(--bg-400);
     --spinner: var(--accent);
     --badge-bg: var(--accent-soft);
     --badge-ink: var(--accent);
@@ -206,6 +210,8 @@
   --button-text: #ffffff;
   --answer-fill: var(--button-fill);
   --answer-ink: var(--button-text);
+  --quiet-fill: var(--bg-300);
+  --quiet-fill-hover: var(--bg-400);
   --spinner: var(--accent);
   --badge-bg: var(--accent-soft);
   --badge-ink: var(--accent);

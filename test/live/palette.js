@@ -138,7 +138,7 @@ async function setTheme(app, scheme) {
       await app.screenshot(path.join(SHOTS, `palette-paper-${scheme}.png`));
       const page = scheme === 'light' ? [250, 249, 245] : [38, 38, 36];
       check(`Paper ${scheme}: the warm page is back`, same(p.page && p.page.c, page), p.page);
-      check(`Paper ${scheme}: Allow once is terracotta with a white label, Deny stays grey`, same(p.answer && p.answer.c, TERRACOTTA[0]) && same(p.answerText && p.answerText.c, [255, 255, 255]) && grey(p.deny && p.deny.c), { answer: p.answer, text: p.answerText, deny: p.deny });
+      check(`Paper ${scheme}: Allow once is terracotta with a white label, Deny is not`, same(p.answer && p.answer.c, TERRACOTTA[0]) && same(p.answerText && p.answerText.c, [255, 255, 255]) && !!p.deny && !same(p.deny.c, TERRACOTTA[0]), { answer: p.answer, text: p.answerText, deny: p.deny });
       check(`Paper ${scheme}: the mark is terracotta again`, same(p.mark && p.mark.c, TERRACOTTA[0]), p.mark);
       check(`Paper ${scheme}: the scan for terracotta finds it (so the scans above can see it)`, terracotta(p.all).length >= 3, terracotta(p.all).length);
     }

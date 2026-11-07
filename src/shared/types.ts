@@ -404,7 +404,8 @@ export type AgentEvent =
   | { type: 'user_message'; text: string; images: number; origin: MessageOrigin; turn?: number; from?: string }
   /** The assistant finished one message: its full text (tool calls follow as tool_start events) */
   | { type: 'assistant_message'; text: string; toolCalls: number }
-  | { type: 'approval_resolved'; id: string; ok: boolean; scope: 'once' | 'session' | 'project' }
+  /** An approval card was answered (here, on the phone) or, with `interrupted`, ended by a stop */
+  | { type: 'approval_resolved'; id: string; ok: boolean; scope: 'once' | 'session' | 'project'; interrupted?: boolean }
   /** ask_user: the model asks the user one to four questions and the run waits for the answers (question:response) */
   | { type: 'question_request'; id: string; questions: UserQuestion[] }
   /** The question card was answered (`answers`, one per question) or skipped; also sent when a stop ends it unanswered */

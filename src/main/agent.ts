@@ -425,7 +425,7 @@ export class Agent {
     this.pendingApprovals.clear();
     for (const [id, p] of pending) {
       p.resolve({ ok: false, message: 'Tool call was interrupted before it produced a result.' });
-      this.emit({ type: 'approval_resolved', id, ok: false, scope: 'once' });
+      this.emit({ type: 'approval_resolved', id, ok: false, scope: 'once', interrupted: true });
     }
   }
 

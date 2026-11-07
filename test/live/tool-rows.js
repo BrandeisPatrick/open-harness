@@ -2,7 +2,8 @@
 // them in a real session: a real sub-session is spawned, listed, read, messaged and merged; a real schedule is
 // created, listed, changed and deleted; two real mod folders are checked; and a second session messages the first.
 // Each row must read like the file and shell rows ("Sub-session Load-test the limiter … started"), never a raw tool
-// name with JSON, and an approval's decided line must name the action ("Allowed · start sub-session “…”").
+// name with JSON; an answered approval card leaves no line of its own, its answer ("Allowed once", "Denied") is in the
+// call's row, and the call folds to one line that says what it did ("Started a sub-session").
 // Runs twice: in ask mode (cards for sub-sessions, schedules and the message to an unrelated session) and in bypass
 // (only schedules ask). Everything it makes lives in the rig's throwaway profile and project.
 // Run: npm run build && node test/live/tool-rows.js [screenshot-dir]
@@ -33,13 +34,14 @@ async function runMode(mode, shots) {
   const current = () => app.evaluate(`oc.sessions.current().then((m) => m.id)`);
   const light = () => app.evaluate(`document.documentElement.dataset.theme = 'light'`);
 
-  /** The newest row of a tool: verb, argument (and its tooltip), summary, whether it finished */
+  /** The newest row of a tool: verb, argument (and its tooltip), summary, whether it finished, and its folded line */
   const readRow = (name) =>
     app.evaluate(`(() => {
       const el = [...document.querySelectorAll('.tool[data-tool=${JSON.stringify(name)}]')].pop();
       if (!el) return null;
-      const t = (s) => (el.querySelector(s)?.innerText ?? '').replace(/\\s+/g, ' ').trim();
-      return { verb: t('.tool-verb'), arg: t('.tool-arg'), argTitle: el.querySelector('.tool-arg')?.getAttribute('title') ?? '', meta: t('.tool-meta'), done: !el.querySelector('.tool-status.spin'), body: (el.querySelector('.tool-body')?.textContent ?? '').replace(/\\s+/g, ' ').trim() };
+      const t = (s) => (el.querySelector(s)?.textContent ?? '').replace(/\\s+/g, ' ').trim();
+      const g = el.closest('.tool-group');
+      return { verb: t('.tool-verb'), arg: t('.tool-arg'), argTitle: el.querySelector('.tool-arg')?.getAttribute('title') ?? '', meta: t('.tool-meta'), done: !el.querySelector('.tool-status.spin'), body: (el.querySelector('.tool-body')?.textContent ?? '').replace(/\\s+/g, ' ').trim(), decision: t('.tool-decision'), line: g ? g.querySelector(':scope > summary .group-verb').textContent : null };
     })()`);
 
   /**
@@ -49,7 +51,6 @@ async function runMode(mode, shots) {
   async function step(name, args, { answer, shot } = {}) {
     const marker = `Rows ${mode} ${++callN} ${name.replace(/_/g, ' ')}`;
     app.mock.state.replies.push({ content: '', toolCalls: [{ id: `call_${callN}`, name, args }], when: lastUserHas(marker) });
-    const decidedBefore = await app.count('.approval.done');
     await app.send(marker);
     let card = null;
     if (answer) {
@@ -64,8 +65,8 @@ async function runMode(mode, shots) {
         await app.screenshot(path.join(shots, `${shot}.png`));
       }
       await app.approve(answer);
-      await app.waitFor(`document.querySelectorAll('.approval.done').length > ${decidedBefore}`, 10_000, 'the card to collapse');
-      card.decided = norm(await app.evaluate(`[...document.querySelectorAll('.approval.done .decided')].pop().innerText`));
+      await app.waitFor(`!document.querySelector('.approval')`, 10_000, 'the card to go');
+      card.decided = norm((await readRow(name))?.decision);
     }
     await app.waitFor(`(() => { const el = [...document.querySelectorAll('.tool[data-tool=${JSON.stringify(name)}]')].pop(); return el && !el.querySelector('.tool-status.spin'); })()`, 60_000, `${name}'s row to finish`);
     await app.waitFor(nothingRuns, 120_000, 'every session to finish');
@@ -73,8 +74,9 @@ async function runMode(mode, shots) {
     return { row: await readRow(name), card };
   }
 
-  const expectRow = (label, r, verb, arg, meta) => {
+  const expectRow = (label, r, verb, arg, meta, line) => {
     check(tag(`${label}: row reads "${verb}${arg ? ' ' + arg : ''}"`), r && r.verb === verb && r.arg === arg, r && `${r.verb} | ${r.arg}`);
+    if (line) check(tag(`${label}: folds to the line "${line}"`), r && r.line === line, r && r.line);
     check(tag(`${label}: summary "${meta}"`), r && (r.meta === meta || r.meta.startsWith(meta + ' · ')), r && r.meta);
     check(tag(`${label}: no tool name or JSON in the row`), r && !/[_{}]/.test(r.verb + r.arg), r && `${r.verb} ${r.arg}`);
   };
@@ -92,13 +94,13 @@ async function runMode(mode, shots) {
     // ---- sub-sessions ----
     const TITLE = 'Load-test the limiter';
     let s = await step('session_spawn', { title: TITLE, prompt: 'Load-test the new rate limiter and report the 429 rate.' }, { answer: asks ? 'allow' : undefined, shot: asks ? 'ask-1-spawn-card' : undefined });
-    expectRow('session_spawn', s.row, 'Sub-session', TITLE, 'started');
+    expectRow('session_spawn', s.row, 'Sub-session', TITLE, 'started', 'Started a sub-session');
     check(tag('session_spawn: the brief shows in the body'), /Load-test the new rate limiter/.test(s.row.body), s.row.body.slice(0, 200));
     record('session_spawn', s.row, s.card);
     if (asks) {
       check(tag('session_spawn card: title'), s.card.title === `Allow Silo Harness to start the sub-session “${TITLE}”?`, s.card.title);
       check(tag('session_spawn card: the row already reads Sub-session'), s.card.row.verb === 'Sub-session' && s.card.row.arg === TITLE, s.card.row);
-      check(tag('session_spawn card: decided line'), s.card.decided === `Allowed · start sub-session “${TITLE}”`, s.card.decided);
+      check(tag('session_spawn card: the answer is in the row'), s.card.decided === 'Allowed once', s.card.decided);
     }
     const A = await current();
     const rel = await app.evaluate(`oc.rpc('sessions.related', ${JSON.stringify(A)})`);
@@ -131,10 +133,10 @@ async function runMode(mode, shots) {
     const rhythm = asks ? { cron: '0 3 * * *' } : { every_minutes: 120 };
     const words = asks ? 'every day at 03:00' : 'every 2 hours';
     s = await step('schedule_create', { name: NAME, prompt: 'Run npm audit and report anything high.', ...rhythm }, { answer: 'allow', shot: `${mode}-2-schedule-card` });
-    expectRow('schedule_create', s.row, 'Schedule', `${NAME} · ${words}`, 'created');
+    expectRow('schedule_create', s.row, 'Schedule', `${NAME} · ${words}`, 'created', 'Created a schedule');
     check(tag('schedule_create card: title'), s.card.title === `Allow Silo Harness to schedule “${NAME}”?`, s.card.title);
     check(tag('schedule_create card: the row has the rhythm in words while it waits'), s.card.row.arg === `${NAME} · ${words}`, s.card.row.arg);
-    check(tag('schedule_create card: decided line'), s.card.decided === `Allowed · schedule “${NAME}”`, s.card.decided);
+    check(tag('schedule_create card: the answer is in the row'), s.card.decided === 'Allowed once', s.card.decided);
     record('schedule_create', s.row, s.card);
     let list = await app.evaluate(`oc.rpc('schedules.list')`);
     check(tag('a real schedule was created'), list.length === 1 && list[0].name === NAME && list[0].describe === words, list.map((x) => [x.name, x.describe]));
@@ -142,8 +144,8 @@ async function runMode(mode, shots) {
 
     if (asks) {
       s = await step('schedule_create', { name: 'Hourly ping', prompt: 'Say hi.', every_minutes: 60 }, { answer: 'deny' });
-      expectRow('schedule_create (denied)', s.row, 'Schedule', 'Hourly ping · every hour', 'denied');
-      check(tag('schedule_create denied: decided line'), s.card.decided === 'Denied · schedule “Hourly ping”', s.card.decided);
+      expectRow('schedule_create (denied)', s.row, 'Schedule', 'Hourly ping · every hour', 'denied', 'Denied a schedule');
+      check(tag('schedule_create denied: the row says Denied'), s.card.decided === 'Denied', s.card.decided);
       record('schedule_create (denied)', s.row, s.card);
     }
 
@@ -154,7 +156,7 @@ async function runMode(mode, shots) {
     s = await step('schedule_update', { id: sid, every_minutes: 240 }, { answer: 'allow' });
     expectRow('schedule_update', s.row, 'Update schedule', NAME, 'updated');
     check(tag('schedule_update card: title'), s.card.title === `Allow Silo Harness to change the schedule “${NAME}”?`, s.card.title);
-    check(tag('schedule_update card: decided line'), s.card.decided === `Allowed · change schedule “${NAME}”`, s.card.decided);
+    check(tag('schedule_update card: the answer is in the row'), s.card.decided === 'Allowed once', s.card.decided);
     record('schedule_update', s.row, s.card);
 
     s = await step('schedule_delete', { id: sid });
@@ -173,6 +175,9 @@ async function runMode(mode, shots) {
     record('mod_check (broken)', s.row);
 
     await light();
+    // Each call is one folded line; open them to show the rows
+    await app.evaluate(`document.querySelectorAll('#messages > .tool-group').forEach((g) => (g.open = true))`);
+    await app.evaluate(`document.querySelectorAll('#messages .tool').forEach((r) => (r.open = false))`);
     await app.evaluate(`document.querySelector('.tool[data-tool="session_spawn"]').scrollIntoView({ block: 'start' })`);
     await sleep(500);
     await app.screenshot(path.join(shots, `${mode}-3-rows-sessions.png`));
@@ -182,7 +187,7 @@ async function runMode(mode, shots) {
     await app.evaluate(`document.querySelector('.tool[data-tool="mod_check"]').scrollIntoView({ block: 'start' })`);
     await sleep(500);
     await app.screenshot(path.join(shots, `${mode}-5-rows-mods.png`));
-    // One row open: the brief above the result
+    // One row open: the answer, the brief, then the result
     await app.evaluate(`(() => { const el = document.querySelector('.tool[data-tool="session_spawn"]'); el.open = true; el.scrollIntoView({ block: 'start' }); })()`);
     await sleep(500);
     await app.screenshot(path.join(shots, `${mode}-6-spawn-open.png`));
@@ -196,11 +201,12 @@ async function runMode(mode, shots) {
     record('session_send (unrelated)', s.row, s.card);
     if (asks) {
       check(tag('session_send card: title'), s.card.title === `Allow Silo Harness to send a message to “${aTitle}”?`, s.card.title);
-      check(tag('session_send card: decided line'), s.card.decided === `Allowed · message “${aTitle}”`, s.card.decided);
+      check(tag('session_send card: the answer is in the row'), s.card.decided === 'Allowed once', s.card.decided);
     } else check(tag('session_send to an unrelated session: no card in bypass'), !s.card && (await app.count('.approval')) === 0);
 
-    const decidedLines = await app.evaluate(`[...document.querySelectorAll('.approval.done .decided')].map((e) => e.innerText.replace(/\\s+/g, ' ').trim())`);
-    check(tag('no decided line names a tool'), decidedLines.every((l) => !/_/.test(l)), decidedLines);
+    const decided = await app.evaluate(`({ lines: document.querySelectorAll('.approval').length, answers: [...document.querySelectorAll('.tool-decision')].map((e) => e.textContent.replace(/\\s+/g, ' ').trim()), words: [...document.querySelectorAll('#messages > .tool-group > summary .group-verb')].map((e) => e.textContent) })`);
+    check(tag('no answered card is left as a line; the answers in the rows name no tool'), decided.lines === 0 && decided.answers.length === (asks ? 1 : 0) && decided.answers.every((l) => !/_/.test(l)), decided.answers);
+    check(tag('no folded line names a tool'), decided.words.length > 0 && decided.words.every((w) => !/_/.test(w)), decided.words);
     await light();
     await sleep(300);
     await app.screenshot(path.join(shots, `${mode}-8-unrelated-send.png`));

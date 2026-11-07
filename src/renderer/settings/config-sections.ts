@@ -417,7 +417,7 @@ export function permissionsSection(ctx: Ctx, rulesEl: HTMLElement): Section {
     choices: order.map((m) => ({ value: m, label: `${SHORT[m]} · ${MODES[m].desc}` })),
     read: (v) => (order.includes(v as PermissionMode) ? (v as PermissionMode) : 'ask'),
   });
-  const rules = row({ id: 'rules', title: 'Saved rules', desc: 'Answers you gave with "Always allow … for this project". Matching actions run without an approval card.', keywords: 'always allow rules project commands programs mcp edits', full: true }, rulesEl);
+  const rules = row({ id: 'rules', title: 'Saved rules', desc: 'Answers you gave with "Always allow … in this project". Matching actions run without an approval card.', keywords: 'always allow rules project commands programs mcp edits', full: true }, rulesEl);
   rulesEl.classList.add('sp-embedded');
   el.append(group(null, mode), group('This project', rules));
   return {

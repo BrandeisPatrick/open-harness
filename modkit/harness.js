@@ -79,6 +79,10 @@
       dispatch(p.name, p.data);
       return;
     }
+    if (m.method === 'hook' && m.id !== undefined && m.id !== null) {
+      answerHook(m.id, m.params || {});
+      return;
+    }
     if (m.id === undefined || m.id === null) return;
     var entry = pending[m.id];
     if (!entry) return;
@@ -120,6 +124,56 @@
         call('events.unsubscribe', { events: [name] }).catch(function () {});
       }
     };
+  }
+
+  // ---------- hooks (the host asks, the page answers) ----------
+
+  var hookHandlers = {}; // event name -> handler(input) returning an output object, a promise of one, or nothing
+
+  function reply(id, msg) {
+    msg.jsonrpc = '2.0';
+    msg.id = id;
+    try { host.postMessage(msg, '*'); } catch (e) { /* the window went away */ }
+  }
+
+  function answerHook(id, params) {
+    var fn = hookHandlers[params.event];
+    if (!fn) return reply(id, { result: null });
+    var out;
+    try {
+      out = fn(params.input || {});
+    } catch (e) {
+      report(e);
+      return reply(id, { error: { code: 4000, message: String((e && e.message) || e) } });
+    }
+    Promise.resolve(out).then(
+      function (r) {
+        // Only a plain object is an output; anything else decides nothing.
+        reply(id, { result: r && typeof r === 'object' && !Array.isArray(r) ? r : null });
+      },
+      function (e) {
+        report(e);
+        reply(id, { error: { code: 4000, message: String((e && e.message) || e) } });
+      }
+    );
+  }
+
+  function hookOn(event, fn) {
+    if (typeof event !== 'string' || typeof fn !== 'function') throw new TypeError('harness.hooks.on(event, handler)');
+    var had = !!hookHandlers[event];
+    hookHandlers[event] = fn;
+    if (!had) {
+      call('hooks.subscribe', { events: [event] }).catch(function (e) {
+        console.warn('[harness] could not handle the "' + event + '" hook: ' + e.message);
+      });
+    }
+    return function () { hookOff(event, fn); };
+  }
+
+  function hookOff(event, fn) {
+    if (!hookHandlers[event] || (fn && hookHandlers[event] !== fn)) return Promise.resolve();
+    delete hookHandlers[event];
+    return call('hooks.unsubscribe', { events: [event] }).catch(function () {});
   }
 
   // ---------- theme ----------
@@ -312,6 +366,7 @@
       copy: function (text) { return call('ui.copy', { text: String(text) }); },
       openExternal: function (url) { return call('ui.openExternal', { url: String(url) }); },
       markdown: function (text) { return call('ui.markdown', { text: String(text == null ? '' : text) }); },
+      openSettings: function (section) { return call('ui.openSettings', section === undefined ? {} : { section: String(section) }); },
     },
 
     storage: storage,
@@ -369,6 +424,10 @@
       set: function (patch) { return call('config.set', { patch: patch || {} }); },
     },
 
+    project: {
+      git: function () { return call('project.git'); },
+    },
+
     schedules: {
       list: function () { return call('schedules.list'); },
       create: function (input) { return call('schedules.create', { input: input }); },
@@ -381,6 +440,12 @@
       status: function () { return call('remote.status'); },
       start: function () { return call('remote.start'); },
       stop: function () { return call('remote.stop'); },
+    },
+
+    hooks: {
+      /** handler(input) gets what a command hook reads on stdin and returns what it would print (or nothing). */
+      on: hookOn,
+      off: function (event) { return hookOff(event); },
     },
   };
 

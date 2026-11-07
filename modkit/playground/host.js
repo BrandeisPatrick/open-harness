@@ -10,8 +10,9 @@
   /** Method → the permission it needs (null: always available). docs/mods.md "harness" and "Permissions". */
   var METHOD_PERMS = {
     hello: null, 'events.subscribe': null, 'events.unsubscribe': null, 'log.error': null,
+    'hooks.subscribe': 'hooks', 'hooks.unsubscribe': 'hooks',
     'ui.theme': null, 'ui.resize': null, 'ui.setTitle': null, 'ui.setBadge': null, 'ui.toast': null, 'ui.open': null,
-    'ui.copy': null, 'ui.openExternal': null, 'ui.markdown': null,
+    'ui.copy': null, 'ui.openExternal': null, 'ui.markdown': null, 'ui.openSettings': null,
     'storage.get': null, 'storage.set': null, 'storage.remove': null, 'storage.keys': null, 'settings.get': null,
     'session.get': 'session:read', 'session.transcript': 'session:read', 'session.tasks': 'session:read', 'session.plan': 'session:read',
     'session.outputs': 'session:read', 'session.context': 'session:read', 'session.related': 'session:read', 'outputs.open': 'session:read',
@@ -21,7 +22,7 @@
     'sessions.list': 'sessions:read', 'sessions.search': 'sessions:read',
     'model.complete': 'model', 'model.cancel': 'model',
     'skills.list': 'skills:read', 'skills.usage': 'skills:read',
-    'config.get': 'config:read', 'config.set': 'config:write',
+    'config.get': 'config:read', 'config.set': 'config:write', 'project.git': 'config:read',
     'schedules.list': 'schedules', 'schedules.create': 'schedules', 'schedules.update': 'schedules', 'schedules.remove': 'schedules', 'schedules.runNow': 'schedules',
     'remote.status': 'remote', 'remote.start': 'remote', 'remote.stop': 'remote',
   };
@@ -406,6 +407,14 @@
         if (p.protocol !== 1) fail(ERR.PARAMS, 'This app speaks protocol 1');
         view.helloAt = Date.now();
         return this.helloFor(view);
+      case 'hooks.subscribe':
+      case 'hooks.unsubscribe': {
+        // The playground has no agent: the view's handlers are noted, and no hook request is ever sent.
+        if (!Array.isArray(p.events) || p.events.some(function (e) { return typeof e !== 'string'; })) fail(ERR.PARAMS, '"events" must be an array of hook event names');
+        view.hooks = view.hooks || {};
+        p.events.forEach(function (e) { if (method === 'hooks.unsubscribe') delete view.hooks[e]; else view.hooks[e] = true; });
+        return null;
+      }
       case 'events.subscribe':
       case 'events.unsubscribe': {
         if (!Array.isArray(p.events) || p.events.some(function (e) { return typeof e !== 'string'; })) fail(ERR.PARAMS, '"events" must be an array of names');
@@ -460,6 +469,11 @@
         return null;
       }
       case 'ui.markdown': return { html: markdown(str(p, 'text')) };
+      case 'ui.openSettings': {
+        var section = str(p, 'section', true);
+        if (ui.toast) ui.toast('Would open Settings → ' + (section || 'general'), 'info', view);
+        return null;
+      }
 
       case 'storage.get':
       case 'storage.set':
@@ -667,6 +681,7 @@
       }
 
       case 'config.get': return this.publicConfig();
+      case 'project.git': return clone(w.git || { root: null, repository: null, branch: null });
       case 'config.set': {
         var patch = p.patch;
         if (!patch || typeof patch !== 'object' || Array.isArray(patch)) fail(ERR.PARAMS, '"patch" must be an object');

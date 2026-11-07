@@ -116,7 +116,7 @@ function indicatorHtml(ind: Indicator): string {
     case 'running':
       return '<span class="trail-meta"><span class="spinner sm" aria-label="Running"></span></span>';
     case 'attention':
-      return `<span class="trail-meta" data-tip="${ind.reason === 'plan' ? 'Plan waiting for review' : 'Waiting for your approval'}"><span class="status-dot attention" aria-label="Waiting for you"></span></span>`;
+      return `<span class="trail-meta" data-tip="${ind.reason === 'plan' ? 'Plan waiting for review' : ind.reason === 'question' ? 'Waiting for your answer' : 'Waiting for your approval'}"><span class="status-dot attention" aria-label="Waiting for you"></span></span>`;
     case 'unread':
       return '<span class="trail-meta" data-tip="Finished while you were away"><span class="status-dot unread" aria-label="Unread"></span></span>';
     case 'family':

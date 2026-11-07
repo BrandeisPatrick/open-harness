@@ -9,6 +9,7 @@ import { artifactIcon } from './artifacts.js';
 import { cleanTasks, taskProgress, taskSnapshot, taskSummary } from './tasks.js';
 import { AGENT_TOOLS, agentApproval, agentArgFromApproval, agentArgFromResult, agentBrief, agentStatusVerb, agentToolLabel, agentToolMeta, isDeniedResult } from './tool-labels.js';
 import { homeDir, tilde } from './home.js';
+import { answeredBody, answerMeta, questionsOf } from './questions.js';
 
 export type Args = Record<string, unknown>;
 
@@ -162,6 +163,12 @@ export function toolLabel(name: string, a: Args): ToolLabel {
       const summary = taskSummary(cleanTasks(a.tasks));
       return { verb: 'Tasks', arg: short(summary, 80), title: summary.length > 80 ? summary : undefined, icon: 'list-checks', mono: false };
     }
+    case 'ask_user': {
+      // One question: its text; several: their headers
+      const qs = questionsOf(a);
+      const arg = qs.length === 1 ? qs[0].question || qs[0].header : qs.map((q) => q.header).join(', ');
+      return { verb: qs.length > 1 ? 'Questions' : 'Question', arg: short(arg, 80), title: arg.length > 80 ? arg : undefined, icon: 'circle-help', mono: false };
+    }
     default: return { verb: name, arg: short(JSON.stringify(a), 80), icon: 'code', mono: true };
   }
 }
@@ -278,6 +285,7 @@ export function statusVerb(name: string): string {
   if (name === 'create_artifact') return 'Making the artifact…';
   if (name === 'update_tasks') return 'Updating tasks…';
   if (name === 'show_image') return 'Showing the image…';
+  if (name === 'ask_user') return 'Waiting for your answer';
   const agent = agentStatusVerb(name);
   if (agent) return agent;
   if (name.startsWith('browser_')) return 'Browsing…';
@@ -287,7 +295,7 @@ export function statusVerb(name: string): string {
 }
 
 const KNOWN_TOOLS = new Set([
-  'read_file', 'write_file', 'edit_file', 'list_directory', 'glob', 'grep', 'bash', 'skill', 'create_artifact', 'update_tasks', 'show_image',
+  'read_file', 'write_file', 'edit_file', 'list_directory', 'glob', 'grep', 'bash', 'skill', 'create_artifact', 'update_tasks', 'show_image', 'ask_user',
   'terminal_run', 'terminal_read', 'terminal_list', 'terminal_stop',
   'browser_navigate', 'browser_get_text', 'browser_read_page', 'browser_find', 'browser_click',
   'browser_type', 'browser_press_key', 'browser_scroll', 'browser_screenshot', 'browser_eval', 'browser_wait_for',
@@ -467,6 +475,8 @@ export interface ToolCard {
   interrupt(): void;
   /** The approval card for this call arrived: its detail may name what the arguments only gave as an id */
   noteApproval(detail: string): void;
+  /** The approval card for this call was answered: the row keeps the answer ("Allowed once", "Denied") at the top of its body */
+  noteDecision(text: string, ok: boolean): void;
 }
 
 /** Lines of a file's content, without the empty "line" after a trailing newline. */
@@ -703,10 +713,20 @@ function terminalBody(name: string, body: HTMLElement, r: string): void {
   } else if (r.trim()) note(r.trim());
 }
 
-/** A refusal (the user denied it, or the mode does not allow it) is not a failure; a command that exited non-zero is. */
+/** A PreToolUse hook refused the call (its permission said deny, or it blocked with exit code 2) */
+function hookDenied(r: string): boolean {
+  return /^PreToolUse(?::\S+)? hook (?:denied|error)\b/.test(r);
+}
+
+/** The call was refused, not tried: the user or a hook denied it, or the mode does not allow it */
+function deniedResult(r: string): boolean {
+  return /^Not permitted/.test(r) || isDeniedResult(r) || hookDenied(r);
+}
+
+/** A refusal (the user or a hook denied it, or the mode does not allow it) is not a failure; a command that exited non-zero is. */
 function callOutcome(name: string, res: ToolResult): ToolCard['outcome'] {
   const r = res.result;
-  if (/^Not permitted/.test(r) || isDeniedResult(r)) return 'denied';
+  if (deniedResult(r)) return 'denied';
   if (!res.ok) return 'failed';
   if (name === 'bash') {
     const code = bashParts(r).code;
@@ -720,8 +740,8 @@ function metaHtml(name: string, a: Args, res: ToolResult, edit?: DiffRow[]): str
   const parts: string[] = [];
   const r = res.result;
   const agent = res.ok ? agentToolMeta(name, a, r) : null;
-  if (!res.ok) parts.push('<span class="meta-err">error</span>');
-  else if (/^Not permitted/.test(r) || isDeniedResult(r)) parts.push('<span>denied</span>');
+  if (deniedResult(r)) parts.push('<span>denied</span>');
+  else if (!res.ok) parts.push('<span class="meta-err">error</span>');
   else if (agent) parts.push(agent.err ? `<span class="meta-err">${escapeHtml(agent.text)}</span>` : escapeHtml(agent.text));
   else {
     switch (name) {
@@ -776,6 +796,11 @@ function metaHtml(name: string, a: Args, res: ToolResult, edit?: DiffRow[]): str
         if (tasks.length) parts.push(escapeHtml(taskProgress(tasks)));
         break;
       }
+      case 'ask_user': {
+        const said = answerMeta(questionsOf(a), r);
+        if (said) parts.push(said);
+        break;
+      }
       case 'terminal_run':
       case 'terminal_read':
       case 'terminal_list':
@@ -792,7 +817,8 @@ function metaHtml(name: string, a: Args, res: ToolResult, edit?: DiffRow[]): str
         }
     }
   }
-  if (typeof res.durationMs === 'number' && res.durationMs >= 0) parts.push(formatDuration(res.durationMs));
+  // A question's time is the user's, not the tool's work
+  if (typeof res.durationMs === 'number' && res.durationMs >= 0 && name !== 'ask_user') parts.push(formatDuration(res.durationMs));
   return parts.join('<span class="meta-sep"> · </span>');
 }
 
@@ -860,6 +886,8 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
     argEl.setAttribute('title', full);
   };
 
+  /** The answer to this call's approval card, once given */
+  let decided: { text: string; ok: boolean } | null = null;
   const card: ToolCard = {
     el,
     name,
@@ -868,6 +896,14 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
     outcome: 'running',
     noteApproval(detail: string) {
       setArg(agentArgFromApproval(name, detail));
+    },
+    noteDecision(text: string, ok: boolean) {
+      decided = { text, ok };
+      body.querySelector(':scope > .tool-decision')?.remove();
+      const line = document.createElement('div');
+      line.className = `tool-decision ${ok ? 'ok' : 'no'}`;
+      line.innerHTML = `${icon(ok ? 'check' : 'x', 14)}<span>${escapeHtml(text)}</span>`;
+      body.prepend(line);
     },
     finish(res: ToolResult) {
       if (!card.running) return;
@@ -879,9 +915,12 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
         }
         el.hidden = false;
       }
+      // Refused is not failed: the row keeps its own icon, says "denied" and stays closed
+      const denied = deniedResult(res.result);
+      const failed = !res.ok && !denied;
       const status = el.querySelector<HTMLElement>('.tool-status')!;
-      status.className = `tool-status ${res.ok ? 'ok' : 'err'}`;
-      if (!res.ok) status.innerHTML = icon('circle-alert');
+      status.className = `tool-status ${failed ? 'err' : 'ok'}`;
+      if (failed) status.innerHTML = icon('circle-alert');
       el.querySelector('.tool-meta')!.innerHTML = metaHtml(name, a, res, editRows);
       if (res.ok) setArg(agentArgFromResult(name, a, res.result));
       card.outcome = callOutcome(name, res);
@@ -890,11 +929,13 @@ export function createToolCard(name: string, rawArgs: unknown): ToolCard {
         card.diff = { added: st.added, removed: st.removed };
         card.created = name === 'write_file' && /^Created\b/.test(res.result);
       }
-      const denied = res.ok && (/^Not permitted/.test(res.result) || isDeniedResult(res.result));
-      if (!res.ok || denied) {
+      if (failed || denied) {
         el.classList.toggle('denied', denied);
-        body.appendChild(outBlock(clip(stripCwd(res.result)), res.ok ? 'note' : 'error'));
-        if (!res.ok) el.open = true;
+        // The row already says "Denied" (its approval's answer): the words written for the model would only repeat it
+        if (!(denied && decided && !decided.ok && /Not permitted: the user denied/.test(res.result))) body.appendChild(outBlock(clip(stripCwd(res.result)), denied ? 'note' : 'error'));
+        if (failed) el.open = true;
+      } else if (name === 'ask_user') {
+        body.appendChild(answeredBody(questionsOf(a), res.result));
       } else if (name === 'read_file') {
         rememberRead(path, res.result, a);
         const lines = res.result.split('\n');

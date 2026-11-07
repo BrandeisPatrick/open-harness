@@ -72,7 +72,9 @@ process.emitWarning = () => {};
     check('mayReceive: unknown events never, permitted ones only', !L.mayReceive(MOD_EVENT_PERMISSIONS, reader, 'made.up') && L.mayReceive(MOD_EVENT_PERMISSIONS, reader, 'tasks.changed') && !L.mayReceive(MOD_EVENT_PERMISSIONS, none, 'tasks.changed') && L.mayReceive(MOD_EVENT_PERMISSIONS, none, 'theme.changed') && L.mayReceive(MOD_EVENT_PERMISSIONS, none, 'session.switched'));
     check('subscribe: unknown names accepted, a missing permission named', L.subscribeMissing(MOD_EVENT_PERMISSIONS, none, ['made.up', 'theme.changed']) === null && L.subscribeMissing(MOD_EVENT_PERMISSIONS, none, ['theme.changed', 'run.ended']) === 'session:read' && L.subscribeMissing(MOD_EVENT_PERMISSIONS, none, ['skills.used']) === 'skills:read');
     const windowSide = Object.keys(MOD_METHOD_PERMISSIONS).filter(L.isWindowMethod).sort();
-    check('window methods match the brief', JSON.stringify(windowSide) === JSON.stringify(['composer.insert', 'events.subscribe', 'events.unsubscribe', 'hello', 'log.error', 'outputs.open', 'sessions.create', 'sessions.open', 'ui.copy', 'ui.markdown', 'ui.open', 'ui.openExternal', 'ui.resize', 'ui.setBadge', 'ui.setTitle', 'ui.theme', 'ui.toast']), windowSide);
+    const { isWindowMethod: mainSide } = require(path.join(projectDir, 'dist/main/mods/permissions.js'));
+    check('the window and the main process agree on the window methods', JSON.stringify(Object.keys(MOD_METHOD_PERMISSIONS).filter(mainSide).sort()) === JSON.stringify(windowSide));
+    check('window methods match the brief', JSON.stringify(windowSide) === JSON.stringify(['composer.insert', 'events.subscribe', 'events.unsubscribe', 'hello', 'hooks.subscribe', 'hooks.unsubscribe', 'log.error', 'outputs.open', 'sessions.create', 'sessions.open', 'ui.copy', 'ui.markdown', 'ui.open', 'ui.openExternal', 'ui.openSettings', 'ui.resize', 'ui.setBadge', 'ui.setTitle', 'ui.theme', 'ui.toast']), windowSide);
     check('http(s) only for openExternal', L.isHttpUrl('https://a.b/x') && L.isHttpUrl('http://a') && !L.isHttpUrl('file:///etc/passwd') && !L.isHttpUrl('javascript:alert(1)') && !L.isHttpUrl('mod://x/y') && !L.isHttpUrl(3));
   }
 
@@ -156,6 +158,23 @@ process.emitWarning = () => {};
     check('asks: a mod with looks gets a clear restyle line', asks.some((l) => l.strong && /restyle the conversation or the chat bar/.test(l.text)), asks);
     const asksBg = L.askLines(mod('lk', [v('bg', 'background', 'Bg')], { state: 'off', contributes: { looks } }));
     check('asks: looks and a background together', asksBg.some((l) => l.strong && /restyle the conversation or the chat bar and draw behind the window/.test(l.text)), asksBg);
+  }
+
+  // --- hooks: which views a hook request goes to, and what counts as a decision ---
+  {
+    const hm = mod('hk', [v('panel', 'rail', 'Panel'), v('worker', 'worker', 'Worker'), v('tab', 'tab', 'Tab')], { permissions: ['hooks'], contributes: { hooks: [{ event: 'PreToolUse' }] } });
+    const frames = [
+      { view: 'tab', hooks: new Set(['PreToolUse']) },
+      { view: 'worker', hooks: new Set(['PreToolUse', 'Stop']) },
+      { view: 'panel', hooks: new Set(['Stop']) },
+    ];
+    check('hooks: only the views that registered for the event, in the order the manifest lists them', JSON.stringify(L.hookViewOrder(hm, frames, 'PreToolUse').map((f) => f.view)) === '["worker","tab"]' && JSON.stringify(L.hookViewOrder(hm, frames, 'Stop').map((f) => f.view)) === '["panel","worker"]');
+    check('hooks: no registered view, no request', L.hookViewOrder(hm, frames, 'SessionEnd').length === 0);
+    check('hooks: null, undefined and {} decide nothing; anything else is an answer', L.isEmptyHookResult(null) && L.isEmptyHookResult(undefined) && L.isEmptyHookResult({}) && !L.isEmptyHookResult({ decision: 'block' }));
+    check('hooks: the worker seat is a seat of its own', L.viewsFor([hm], 'worker').map((r) => r.key).join() === 'hk/worker' && L.viewsFor([hm], 'rail').length === 1);
+    check('hooks: the hooks.* methods need the hooks permission and are the window\'s', MOD_METHOD_PERMISSIONS['hooks.subscribe'] === 'hooks' && MOD_METHOD_PERMISSIONS['hooks.unsubscribe'] === 'hooks' && L.isWindowMethod('hooks.subscribe') && L.methodNeeds(MOD_METHOD_PERMISSIONS, 'hooks.subscribe') === 'hooks');
+    const asks = L.askLines(mod('hk', [v('worker', 'worker', 'W')], { state: 'off', permissions: ['hooks'] }));
+    check('hooks: the card says what the permission does, plainly', asks.some((l) => l.strong && /React to the agent's actions before and after they happen, and block them/.test(l.text) && /file contents/.test(l.text)), asks);
   }
 
   done();

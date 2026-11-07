@@ -44,6 +44,7 @@ const KINDS: Record<string, Omit<Kind, 'key' | 'target'>> = {
   create_artifact: counted('made', 'an', 'artifact'),
   show_image: counted('showed', 'an', 'image'),
   update_tasks: times('updated the tasks'),
+  ask_user: counted('asked', 'a', 'question'),
   submit_plan: counted('wrote', 'a', 'plan'),
   session_spawn: counted('started', 'a', 'sub-session'),
   session_send: counted('sent', 'a', 'message'),
@@ -63,6 +64,18 @@ const KINDS: Record<string, Omit<Kind, 'key' | 'target'>> = {
   propose_mod: counted('proposed', 'a', 'mod'),
   withdraw_proposal: counted('withdrew', 'a', 'proposal'),
   browser_screenshot: counted('took', 'a', 'screenshot'),
+};
+
+/** What a denied call would have been, for a line of denials only: "Denied a command", "Denied 2 edits" */
+const DENIED: Record<string, [string, string]> = {
+  command: ['a command', 'commands'],
+  edit_file: ['an edit', 'edits'],
+  write: ['a file write', 'file writes'],
+  create: ['a new file', 'new files'],
+  session_spawn: ['a sub-session', 'sub-sessions'],
+  session_send: ['a message', 'messages'],
+  schedule_create: ['a schedule', 'schedules'],
+  schedule_update: ['a schedule change', 'schedule changes'],
 };
 
 /** Kinds that share a phrase share a key, so "ran 2 searches" counts grep and glob together */
@@ -102,9 +115,13 @@ export function activityWords(input: (ActivityCall | string)[]): ActivityWords {
   const calls = input.map((c) => (typeof c === 'string' ? { name: c } : c));
   const kinds = new Map<string, { kind: Kind; n: number; targets: Set<string> }>();
   let denied = 0;
+  /** The kinds of the denied calls, to name them when nothing else happened */
+  const deniedKeys = new Set<string>();
   for (const c of calls) {
     if (c.denied) {
       denied++;
+      const k = kindOf(c).key;
+      deniedKeys.add(k.startsWith('mcp:') ? k : DENIED[k] ? k : 'other');
       continue;
     }
     const kind = kindOf(c);
@@ -118,10 +135,19 @@ export function activityWords(input: (ActivityCall | string)[]): ActivityWords {
   }
   const phrases = [...kinds.values()].map(({ kind, n }) => (n === 1 ? kind.one : kind.many(n)));
   let text: string;
-  if (!phrases.length) text = denied ? `denied ${denied === 1 ? 'a call' : `${denied} calls`}` : '';
+  if (!phrases.length) text = denied ? `denied ${deniedNoun(deniedKeys, denied)}` : '';
   else if (phrases.length <= MAX_KINDS) text = phrases.join(', ');
   else text = `${phrases.slice(0, MAX_KINDS - 1).join(', ')} and ${phrases.length - (MAX_KINDS - 1)} more`;
   return { text: text.charAt(0).toUpperCase() + text.slice(1), phrases, denied: phrases.length ? denied : 0 };
+}
+
+/** "a command", "2 edits", "a call to figma"; "N calls" when the denied calls were of different kinds */
+function deniedNoun(keys: Set<string>, n: number): string {
+  const only = keys.size === 1 ? [...keys][0] : '';
+  if (only.startsWith('mcp:')) return n === 1 ? `a call to ${only.slice(4)}` : `${n} calls to ${only.slice(4)}`;
+  const noun = DENIED[only];
+  if (noun) return n === 1 ? noun[0] : `${n} ${noun[1]}`;
+  return n === 1 ? 'a call' : `${n} calls`;
 }
 
 /** The words alone: "Read 3 files, ran 2 commands, edited a file" */

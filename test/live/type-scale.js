@@ -123,7 +123,7 @@ const allowed = (e) => e.tag === 'kbd' || /xterm/.test(e.cls);
           plusIn: Math.round(box(plus).x - box(comp).x), plusW: box(plus).w, textIn: Math.round(box(q('#input')).x - box(comp).x), inputFs: cs(q('#input')).fontSize,
           sendOut: Math.round(box(comp).r - box(send).r),
           footOutside: !comp.contains(foot) && box(foot).y >= box(comp).b, footBelow: Math.round(box(foot).cy - box(comp).b),
-          footFs: cs(q('#model-btn')).fontSize, ringOut: Math.round(box(comp).r - box(ring).r), ring: box(ring).w,
+          footFs: cs(q('#model-btn')).fontSize, footColor: (() => { const p = document.createElement('canvas').getContext('2d'); const rgb = (v) => { p.fillStyle = '#000'; p.fillStyle = v; return p.fillStyle; }; return rgb(cs(q('#model-btn')).color) === rgb(cs(document.documentElement).getPropertyValue('--text-400').trim()) ? cs(document.documentElement).getPropertyValue('--text-400').trim() : cs(q('#model-btn')).color; })(), ringOut: Math.round(box(comp).r - box(ring).r), ring: box(ring).w,
         },
       };
     })()`);
@@ -143,7 +143,7 @@ const allowed = (e) => e.tag === 'kbd' || /xterm/.test(e.cls);
     check('chat bar: 46 px tall, 12 px radius, at most 770 px wide', m.bar.h === 46 && m.bar.radius === '12px' && m.bar.w <= 770.5, m.bar);
     check('chat bar: the plus, the field and the action in one row, centred on one line', m.bar.oneRow && m.bar.cy.every((v) => near(v, m.bar.cy[1], 1)), m.bar.cy);
     check('chat bar: a 14 px plus 16 px in, the text 45 px in at 15 px, the action glyph 15 px from the right edge', near(m.bar.plusIn, 16) && near(m.bar.plusW, 14, 0.5) && near(m.bar.textIn, 45) && m.bar.inputFs === '15px' && near(m.bar.sendOut, 15, 1.5), m.bar);
-    check('chat bar: #composer-foot outside #composer, its row centred about 20 px below the bar, 13 px labels, a 12 px ring 14 px from the right edge', m.bar.footOutside && near(m.bar.footBelow, 20, 1) && m.bar.footFs === '13px' && m.bar.ring === 12 && near(m.bar.ringOut, 14, 1), m.bar);
+    check('chat bar: #composer-foot outside #composer, its row centred about 20 px below the bar, 12 px muted labels, a 12 px ring 14 px from the right edge', m.bar.footOutside && near(m.bar.footBelow, 20, 1) && m.bar.footFs === '12px' && m.bar.footColor === m.tool.muted && m.bar.ring === 12 && near(m.bar.ringOut, 14, 1), m.bar);
 
     // A mod page's row, through harness.css
     const envId = (await app.evaluate(`window.__oc_debug.mods.views().map((v) => v.key)`)).find((k) => k.startsWith('environment')) ? 'environment' : null;

@@ -7,6 +7,7 @@ import type { ContextBreakdown } from './context';
 import type { Schedule, ScheduleInput, SchedulePatch } from './schedules';
 import type { RemoteStatus } from './remote';
 import type { SearchHit } from './history';
+import type { HookEvent } from './hooks';
 
 export type ModProtocolVersion = 1;
 
@@ -24,10 +25,20 @@ export type ModPermission =
   | 'config:write'
   | 'schedules'
   | 'remote'
-  | 'network';
+  | 'network'
+  | 'hooks';
 
-/** rail: a section in the right-hand rail. tab: a tab in the side pane. composer: a strip above the composer. background: behind the window. */
-export type ModSeat = 'rail' | 'tab' | 'composer' | 'background';
+/**
+ * rail: a section in the right-hand rail. tab: a tab in the side pane. composer: a strip above the composer.
+ * background: behind the window. worker: no place in the window, a hidden page loaded while the mod is on (for hooks).
+ */
+export type ModSeat = 'rail' | 'tab' | 'composer' | 'background' | 'worker';
+
+/** An event a mod handles (contributes.hooks), and how long its handler may take (seconds; default 10) */
+export interface ModHookContribution {
+  event: HookEvent;
+  timeout?: number;
+}
 
 export interface ModViewManifest {
   /** Unique within the mod */
@@ -93,6 +104,8 @@ export interface ModManifest {
     looks?: ModLookManifest[];
     commands?: ModCommandManifest[];
     settings?: ModSettingField[];
+    /** Hook events its views handle (needs the hooks permission) */
+    hooks?: ModHookContribution[];
   };
 }
 
@@ -203,7 +216,7 @@ export interface ModSession {
   createdAt: number;
   updatedAt: number;
   running: boolean;
-  attention?: 'approval' | 'plan';
+  attention?: 'approval' | 'question' | 'plan';
 }
 
 export interface ModTranscriptItem {
@@ -275,6 +288,9 @@ export interface ModBridge {
   hello: (p: { protocol: number }) => ModHello;
   'events.subscribe': (p: { events: string[] }) => void;
   'events.unsubscribe': (p: { events: string[] }) => void;
+  /** The view handles these hook events (the host then sends it "hook" requests) */
+  'hooks.subscribe': (p: { events: string[] }) => void;
+  'hooks.unsubscribe': (p: { events: string[] }) => void;
   'log.error': (p: { message: string; stack?: string }) => void;
 
   'ui.theme': () => ModTheme;
@@ -286,6 +302,8 @@ export interface ModBridge {
   'ui.copy': (p: { text: string }) => boolean;
   'ui.openExternal': (p: { url: string }) => void;
   'ui.markdown': (p: { text: string }) => { html: string };
+  /** Opens Settings at a section (default "general") */
+  'ui.openSettings': (p: { section?: string }) => void;
 
   'storage.get': (p: { key: string; scope?: 'mod' | 'session' }) => { value: unknown };
   'storage.set': (p: { key: string; value: unknown; scope?: 'mod' | 'session' }) => void;
@@ -324,6 +342,8 @@ export interface ModBridge {
 
   'config.get': () => PublicConfig;
   'config.set': (p: { patch: PublicConfigPatch }) => PublicConfig;
+  /** The git repository of the session's folder: its root, "owner/name" from the origin remote, the branch */
+  'project.git': () => { root: string | null; repository: string | null; branch: string | null };
 
   'schedules.list': () => { schedules: Schedule[] };
   'schedules.create': (p: { input: ScheduleInput }) => Schedule;

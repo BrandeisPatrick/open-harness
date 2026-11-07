@@ -1,4 +1,4 @@
-// Settings → Permissions: the "Always allow … for this project" answers saved for the working directory, as
+// Settings → Permissions: the "Always allow … in this project" answers saved for the working directory, as
 // removable chips (commands, auto-mode checks, MCP servers) plus the "edits run without asking" row. Removing
 // one goes straight to oc.rules (it is not part of the Settings form's Save).
 // Also: an in-memory stand-in for oc.rules (the debug hook's mock).
@@ -172,7 +172,7 @@ export function createRulesPanel(opts: RulesPanelOptions): RulesPanel {
       els.empty.hidden = !none;
       els.empty.innerHTML = unavailable
         ? `${icon('shield-check', 16)}<p>Saved rules need the updated app. Restart Silo Harness and try again.</p>`
-        : `${icon('shield-check', 16)}<p>No rules saved for this project yet. Choose <strong>'Always allow … for this project'</strong> on an approval card and the command, MCP server or edits you allowed show up here.</p>`;
+        : `${icon('shield-check', 16)}<p>No rules saved for this project yet. Choose <strong>'Always allow … in this project'</strong> on an approval card and the command, MCP server or edits you allowed show up here.</p>`;
     },
     async refresh() {
       const api = opts.source();

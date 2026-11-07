@@ -21,6 +21,7 @@ import type {
   PermissionMode,
   PlanInfo,
   ProjectRules,
+  QuestionAnswer,
   QueuedMessage,
   RewindResult,
   RulesApi,
@@ -40,6 +41,7 @@ import { lineDiff, numberRows, parseEditPreview, renderDiff, setDiffBaseDir, sta
 import { highlight } from './highlight.js';
 import { approvalTitle, asArgs, createToolCard, displayPath, editStartLine, fileLines, forgetFile, linkPath, mcpParts, resetFileCache, setToolCwd, statusVerb, type ToolCard } from './tools.js';
 import { closeMenu, initTooltips, isMenuOpen, menuAnchoredTo, openMenu, type MenuItem, type MenuSection } from './popover.js';
+import { createQuestionCard } from './questions.js';
 import { MODE_CHIP_CLASSES, MODE_CYCLE, MODES, modeOf, nextMode } from './modes.js';
 import { createPlanCard, type PlanCard, type PlanDecision } from './plan.js';
 import { createChangesPane, mockChangesSource, type ConfirmOptions } from './changes.js';
@@ -221,7 +223,17 @@ let sessions: SessionMeta[] = [];
 const statuses = new Map<string, SessionStatus>();
 const toolCards = new Map<string, ToolCard>();
 let lastToolCard: ToolCard | null = null;
-let pendingApproval: { name: string; cancel: (reason: string) => void; allow: () => void; dispose: () => void } | null = null;
+let pendingApproval: {
+  id: string;
+  el: HTMLElement;
+  name: string;
+  cancel: (reason: string) => void;
+  allow: () => void;
+  resolved: (ok: boolean, scope: 'once' | 'session' | 'project') => void;
+  dispose: () => void;
+} | null = null;
+/** The ask_user card waiting for an answer, if any */
+let pendingQuestion: { id: string; el: HTMLElement; cancel: () => void; dispose: () => void } | null = null;
 let stick = true;
 let runOutputTokens = 0;
 /** From a confirmed Rewind until the transcript is back: sending and other rewinds wait */
@@ -686,10 +698,12 @@ function finishThinking(): void {
 }
 
 // Tool rows, and the runs of them that fold into one line. With Tool activity set to Summary (the default) every run of
-// two or more calls in a turn is one `.tool-group` line ("Read 3 files, ran 2 commands  +49 −2"), with the thinking
-// between the calls and the decided lines of their approvals inside it; with Every call only runs of three or more
-// reads, searches, listings and MCP calls fold, as they always did. A run is whatever stands between two other
-// things (a reply, a waiting approval card, a plan, an image, a notice), so a stored session folds the same way.
+// calls in a turn, a single call included, is one quiet `.tool-group` line ("Ran a command", "Read 3 files, ran 2
+// commands  +49 −2"), with the thinking between the calls inside it; opened, it shows the rows (a lone row opens with
+// it). With Every call only runs of three or more reads, searches, listings and MCP calls fold, as they always did. A
+// run is whatever stands between two other things (a reply, a waiting approval or question card, a plan, an image, a
+// notice), so a stored session folds the same way. An answered approval leaves no line of its own: the call's row
+// says what was decided.
 const cardByEl = new WeakMap<HTMLElement, ToolCard>();
 
 function summaryMode(): boolean {
@@ -713,7 +727,7 @@ function groupCards(group: Element): ToolCard[] {
 function liveGroup(group: Element): boolean {
   if (!running || !summaryMode()) return false;
   for (let n = group.nextElementSibling; n; n = n.nextElementSibling) {
-    if (n.classList.contains('thinking') || n.classList.contains('approval') || ((n as HTMLElement).hidden && n.classList.contains('tool'))) continue;
+    if (n.classList.contains('thinking') || n.classList.contains('approval') || n.classList.contains('question-card') || ((n as HTMLElement).hidden && n.classList.contains('tool'))) continue;
     return false;
   }
   return true;
@@ -780,6 +794,12 @@ function updateGroup(group: Element | null): void {
 function createGroup(): HTMLDetailsElement {
   const group = document.createElement('details');
   group.className = 'tool-group';
+  // A line that stands for one call opens straight to that call's details
+  group.addEventListener('toggle', () => {
+    if (!group.open) return;
+    const cards = groupCards(group);
+    if (cards.length === 1) cards[0].el.open = true;
+  });
   group.innerHTML =
     `<summary><span class="tool-chevron">${icon('chevron-right')}</span><span class="group-icon">${icon('files')}</span>` +
     `<span class="tool-verb group-verb"></span><span class="tool-arg group-arg"></span><span class="tool-meta group-meta"></span></summary><div class="group-body"></div>`;
@@ -823,7 +843,7 @@ function settleRun(anchor: Element): void {
     if (isCall(n) || n.classList.contains('approval')) to = i;
   });
   const calls = items.filter((n) => isCall(n) && !(n as HTMLElement).hidden).length;
-  if (from < 0 || calls < (summaryMode() ? 2 : 3)) {
+  if (from < 0 || calls < (summaryMode() ? 1 : 3)) {
     placeAfter(messagesEl, before, items);
     for (const g of groups) g.remove();
     return;
@@ -873,7 +893,30 @@ function finishToolCard(ev: { id?: string; name: string; result: string; ok: boo
   scrollToBottom();
 }
 
-// Approval card: Claude's wording, keys shown inside the buttons, collapses to one line once decided.
+// Approval card, as Claude Code draws it: the question as the title in a header band; what the call does (its own
+// description) and why it stopped to ask in muted text; the command or the change; Deny and "Allow once ⌘↵" on the
+// right, with ⌄ for the wider scopes. ⌘↵ allows once, Esc denies, A and P pick the scopes. Once decided the card goes
+// and the call's own row says what was decided (a call without a row keeps a one-line decided card).
+let promptSeq = 0;
+
+/**
+ * Why a card asks although the mode would have run it: "Auto mode stopped to ask: it pushes to a remote." A card
+ * without wider scopes (a tool's own question, a PreToolUse hook's "ask") says its reason as it was written.
+ */
+function stopNote(mode: PermissionMode, reason: string, custom = false): string {
+  if (custom) return `${reason.charAt(0).toUpperCase()}${reason.slice(1)}${/[.!?]$/.test(reason) ? '' : '.'}`;
+  const why = reason === 'destructive MCP tool' ? 'it can change or delete data' : /^[a-z-]+s\b/.test(reason) ? `it ${reason}` : reason;
+  return `${mode === 'auto' ? 'Auto mode stopped to ask' : 'Flagged as risky'}: ${why}.`;
+}
+
+/** The words a call's row shows for an approval's answer */
+function decisionWords(ok: boolean, kind: 'once' | 'session' | 'project', alwaysLabel: string, projectLabel: string): string {
+  if (!ok) return 'Denied';
+  if (kind === 'session') return alwaysLabel.replace(/^Allow\b/, 'Allowed');
+  if (kind === 'project') return projectLabel.replace(/^Always allow\b/, 'Always allowed');
+  return 'Allowed once';
+}
+
 function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, synthetic = false): void {
   endAssistant();
   finishThinking();
@@ -881,23 +924,27 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const card = lastToolCard && lastToolCard.running && lastToolCard.name === ev.name ? lastToolCard : null;
   const el = document.createElement('div');
   const reason = typeof ev.reason === 'string' ? ev.reason.trim() : '';
-  el.className = 'approval' + (reason ? ' flagged' : '');
+  el.className = 'approval prompt-card' + (reason ? ' flagged' : '');
+  const uid = `prompt-${++promptSeq}`;
+  el.setAttribute('role', 'group');
+  el.setAttribute('aria-labelledby', `${uid}-title`);
   const mcp = mcpParts(ev.name);
   // A tool's own question (sub-sessions, messages, schedules): its wording comes from the detail the main process sent
   const agent = mcp ? null : agentApproval(ev.name, ev.detail);
   if (agent) card?.noteApproval(ev.detail);
-  const iconName: IconName = mcp ? 'plug' : agent ? agent.icon : ev.name === 'bash' || ev.name === 'terminal_run' ? 'terminal' : ev.name === 'edit_file' ? 'pencil' : ev.name === 'write_file' ? 'file-plus' : 'shield-check';
   if (mcp) el.classList.add('mcp');
-  const reasonHtml = reason
-    ? `<div class="reason">${icon('triangle-alert', 14)}<span>${escapeHtml(`${ev.mode === 'auto' ? 'Auto mode paused' : 'Paused'}: ${reason}`)}</span></div>`
-    : '';
-  el.innerHTML = `<div class="approval-head"><span class="approval-icon">${icon(iconName)}</span><div class="approval-heading"><div class="title">${escapeHtml(
-    approvalTitle(ev.name, ev.detail, card?.args),
-  )}</div>${reasonHtml}</div></div>`;
+  el.innerHTML = `<div class="prompt-head"><div class="title" id="${uid}-title">${escapeHtml(approvalTitle(ev.name, ev.detail, card?.args))}</div></div>`;
   const body = document.createElement('div');
-  body.className = 'approval-body';
+  body.className = 'approval-body prompt-body';
+  body.id = `${uid}-body`;
+  // What the call does in its own words (a command's description), then why it asks when the mode would not have
+  const said = typeof card?.args.description === 'string' ? card.args.description.replace(/\s+/g, ' ').trim() : '';
+  if (said) body.insertAdjacentHTML('beforeend', `<p class="prompt-text">${escapeHtml(said)}</p>`);
+  const custom = typeof ev.alwaysLabel === 'string' && !ev.alwaysLabel.trim() && typeof ev.projectLabel === 'string' && !ev.projectLabel.trim();
+  if (reason) body.insertAdjacentHTML('beforeend', `<p class="prompt-text prompt-note">${escapeHtml(stopNote(ev.mode, reason, custom))}</p>`);
+  if (said || reason) el.setAttribute('aria-describedby', body.id);
   let subject = ev.name;
-  /** The decided line names the action in words rather than a tool name or a path */
+  /** The decided line (a call without a row) names the action in words rather than a tool name or a path */
   let prose = false;
   if (agent) {
     subject = agent.subject;
@@ -910,10 +957,10 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     // The arguments, pretty-printed by the main process, in the same mono block as a command.
     subject = `${mcp.tool} · ${mcp.server}`;
     const json = typeof ev.detail === 'string' ? ev.detail.trim() : '';
-    body.innerHTML = json && json !== '{}' ? `<div class="cmd json"><code>${highlight(json, 'json')}</code></div>` : '<div class="tool-note">No arguments</div>';
+    body.insertAdjacentHTML('beforeend', json && json !== '{}' ? `<div class="cmd json"><code>${highlight(json, 'json')}</code></div>` : '<div class="tool-note">No arguments</div>');
   } else if (ev.name === 'bash' || ev.name === 'terminal_run') {
     subject = ev.detail.split('\n')[0];
-    body.innerHTML = `<div class="cmd"><span class="cmd-prompt">$</span><code>${highlight(ev.detail, 'sh')}</code></div>`;
+    body.insertAdjacentHTML('beforeend', `<div class="cmd"><span class="cmd-prompt">$</span><code>${highlight(ev.detail, 'sh')}</code></div>`);
   } else if (ev.name === 'edit_file' && parseEditPreview(ev.detail)) {
     const p = parseEditPreview(ev.detail)!;
     subject = basename(p.path);
@@ -938,51 +985,66 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     pre.textContent = ev.name === 'write_file' || ev.name === 'edit_file' ? ev.detail.replace(/^[^\n]+/, (line) => displayPath(line)) : ev.detail;
     body.appendChild(pre);
   }
-  const row = document.createElement('div');
-  row.className = 'row';
-  const button = (label: string, key: string, cls: string) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = cls;
-    b.innerHTML = `<span>${escapeHtml(label)}</span><kbd>${key}</kbd>`;
-    return b;
-  };
-  // An empty label (a tool's own question) means the card has no such answer: only Allow and Deny.
+
+  // An empty label (a tool's own question) means the card has no such answer: only Allow once and Deny.
   const noAlways = typeof ev.alwaysLabel === 'string' && !ev.alwaysLabel.trim();
   const noProject = typeof ev.projectLabel === 'string' && !ev.projectLabel.trim();
   const alwaysLabel = typeof ev.alwaysLabel === 'string' && ev.alwaysLabel.trim() ? ev.alwaysLabel.trim() : 'Allow for this session';
-  const projectLabel = typeof ev.projectLabel === 'string' && ev.projectLabel.trim() ? ev.projectLabel.trim() : 'Always allow for this project';
-  const deny = button('Deny', 'n', 'btn');
-  const always = button(alwaysLabel, 'a', 'btn');
-  const project = button(projectLabel, 'p', 'btn');
-  const allow = button('Allow', '↵', 'btn primary');
-  always.classList.add('always');
-  project.classList.add('project');
-  // The "don't ask again" answers stack on the left with equal widths; Deny and Allow stay at the bottom right
-  // (on a narrow card they wrap below). A label cut short shows in full as a tooltip.
-  for (const b of [always, project]) {
-    b.addEventListener('pointerover', () => {
-      const label = b.querySelector('span');
-      if (label && label.scrollWidth > label.clientWidth + 1) b.dataset.tip = label.textContent ?? '';
-      else delete b.dataset.tip;
-    });
-  }
-  const remember = document.createElement('div');
-  remember.className = 'row-always';
-  if (!noAlways) remember.append(always);
-  if (!noProject) remember.append(project);
-  if (noAlways && noProject) remember.hidden = true;
-  const decision = document.createElement('div');
-  decision.className = 'row-main';
-  decision.append(deny, allow);
-  row.append(remember, decision);
-  el.append(body, row);
-
+  const projectLabel = typeof ev.projectLabel === 'string' && ev.projectLabel.trim() ? ev.projectLabel.trim() : 'Always allow in this project';
   /** once: this action only; session: "allow … for this session"; project: saved for the working directory */
   type Answer = 'once' | 'session' | 'project';
+  const scopes: { label: string; key: string; kind: Answer }[] = [];
+  if (!noAlways) scopes.push({ label: alwaysLabel, key: 'A', kind: 'session' });
+  if (!noProject) scopes.push({ label: projectLabel, key: 'P', kind: 'project' });
+
+  const foot = document.createElement('div');
+  foot.className = 'row prompt-foot';
+  const deny = document.createElement('button');
+  deny.type = 'button';
+  deny.className = 'btn deny';
+  deny.textContent = 'Deny';
+  deny.setAttribute('aria-keyshortcuts', 'Escape');
+  const allow = document.createElement('button');
+  allow.type = 'button';
+  allow.className = 'btn primary allow';
+  allow.innerHTML = '<span>Allow once</span><span class="keys" aria-hidden="true"><kbd>⌘</kbd><kbd>↵</kbd></span>';
+  allow.setAttribute('aria-label', 'Allow once');
+  allow.setAttribute('aria-keyshortcuts', 'Meta+Enter');
+  const split = document.createElement('div');
+  split.className = 'split-btn';
+  split.append(allow);
+  let more: HTMLButtonElement | null = null;
+  if (scopes.length) {
+    more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'btn primary more';
+    more.innerHTML = icon('chevron-down', 14);
+    more.setAttribute('aria-label', 'More ways to allow');
+    more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-expanded', 'false');
+    split.append(more);
+  }
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  main.append(deny, split);
+  foot.append(main);
+  el.append(body, foot);
+
   let settled = false;
-  const collapse = (text: string, ok: boolean) => {
+  /** The card goes; the call's row keeps the outcome. Without a row the card folds to a decided line instead. */
+  const settle = (text: string, ok: boolean, note = true) => {
+    document.removeEventListener('keydown', onKey, true);
+    if (more && menuAnchoredTo(more)) closeMenu();
+    if (pendingApproval?.el === el) pendingApproval = null;
+    const row = card && card.el.isConnected ? card : null;
+    if (row) {
+      if (note) row.noteDecision(text, ok);
+      el.remove();
+      settleRun(row.el);
+      return;
+    }
     el.classList.add('done');
+    el.removeAttribute('role');
     el.innerHTML = `<div class="decided"><span class="${ok ? 'ok' : 'no'}">${icon(ok ? 'check' : 'x')}</span><span>${escapeHtml(text)}</span>${
       subject ? `<span>·</span>${prose ? `<span class="subject">${escapeHtml(subject)}</span>` : `<code>${escapeHtml(subject)}</code>`}` : ''
     }</div>`;
@@ -992,10 +1054,8 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   const decide = async (ok: boolean, answer: Answer = 'once') => {
     if (settled) return;
     settled = true;
-    document.removeEventListener('keydown', onKey, true);
-    pendingApproval = null;
     const kind: Answer = ok ? answer : 'once';
-    collapse(!ok ? 'Denied' : kind === 'session' ? alwaysLabel.replace(/^Allow\b/, 'Allowed') : kind === 'project' ? 'Allowed · saved for this project' : 'Allowed', ok);
+    settle(decisionWords(ok, kind, alwaysLabel, projectLabel), ok);
     if (running) setStatusText(baseVerb());
     if (synthetic) return;
     const before = currentMode();
@@ -1012,16 +1072,34 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
     // The new rule shows in Settings → Permissions.
     if (kind === 'project') void rulesPanel.refresh();
   };
+  const openScopes = () => {
+    if (!more || settled) return;
+    if (menuAnchoredTo(more)) return closeMenu();
+    openMenu([{ items: scopes.map((sc) => ({ label: sc.label, hint: sc.key, onSelect: () => void decide(true, sc.kind) })) }], {
+      anchor: more,
+      placement: 'bottom-end',
+      className: 'scope-menu',
+      minWidth: 240,
+    });
+  };
   const onKey = (e: KeyboardEvent) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
-    if (dialogOpen() || isMenuOpen()) return;
+    if (e.isComposing || e.altKey || settled) return;
+    const k = e.key;
+    const menu = more !== null && menuAnchoredTo(more);
+    if ((dialogOpen() || isMenuOpen()) && !menu) return;
+    // ⌘↵ (Ctrl+↵ too) allows once from anywhere, the composer included
+    if (k === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      void decide(true);
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) return;
+    // Plain keys only where they type nothing: not in a field with text (the empty composer is fine)
     const t = e.target as HTMLElement;
     if (isTextField(t) && !(t === inputEl && composerEmpty())) return;
-    const k = e.key;
-    if (k === 'Enter' && (t instanceof HTMLButtonElement || t.closest('[role="tab"]'))) return;
     let action: (() => void) | null = null;
-    if (k === 'y' || k === 'Y' || k === 'Enter') action = () => void decide(true);
-    else if (k === 'n' || k === 'N' || k === 'Escape') action = () => void decide(false);
+    if (k === 'Escape' && !menu) action = () => void decide(false);
     else if ((k === 'a' || k === 'A') && !noAlways) action = () => void decide(true, 'session');
     else if ((k === 'p' || k === 'P') && !noProject) action = () => void decide(true, 'project');
     if (!action) return;
@@ -1031,29 +1109,112 @@ function addApprovalCard(ev: Extract<AgentEvent, { type: 'approval_request' }>, 
   };
   document.addEventListener('keydown', onKey, true);
   pendingApproval = {
+    id: ev.id,
+    el,
     name: ev.name,
     cancel: (why: string) => {
       if (settled) return;
       settled = true;
-      document.removeEventListener('keydown', onKey, true);
-      pendingApproval = null;
-      collapse(why, false);
+      // The row says it itself (interrupted); only a call without a row keeps the word
+      settle(why, false, false);
     },
     allow: () => void decide(true),
+    // Answered elsewhere (the phone): the card goes the same way, nothing is sent back
+    resolved: (ok: boolean, scope: Answer) => {
+      if (settled) return;
+      settled = true;
+      settle(decisionWords(ok, ok ? scope : 'once', alwaysLabel, projectLabel), ok);
+      if (running) setStatusText(baseVerb());
+    },
     // The card left the screen with its session (a switch): it stays unanswered for when the session comes back.
     dispose: () => {
       if (settled) return;
       settled = true;
       document.removeEventListener('keydown', onKey, true);
-      pendingApproval = null;
+      if (pendingApproval?.el === el) pendingApproval = null;
     },
   };
   allow.onclick = () => void decide(true);
-  always.onclick = () => void decide(true, 'session');
-  project.onclick = () => void decide(true, 'project');
   deny.onclick = () => void decide(false);
+  if (more) more.onclick = openScopes;
   addNode(el);
   scrollToBottom(true);
+}
+
+// Question card (ask_user): the approval card's frame around the questions. The run waits for it like an approval:
+// ⌘↵ goes on (Next, then Submit), Esc skips, 1–4 pick an option. Answered, it goes, and the call's row (in Summary
+// the line "Asked a question") holds the answers.
+function addQuestionCard(ev: Extract<AgentEvent, { type: 'question_request' }>, synthetic = false): void {
+  const questions = Array.isArray(ev.questions) ? ev.questions.filter((q) => q && typeof q === 'object' && Array.isArray(q.options)) : [];
+  if (!questions.length) return;
+  endAssistant();
+  finishThinking();
+  pendingQuestion?.dispose();
+  const row = lastToolCard && lastToolCard.running && lastToolCard.name === 'ask_user' ? lastToolCard : null;
+  let settled = false;
+  const close = () => {
+    if (settled) return;
+    settled = true;
+    document.removeEventListener('keydown', onKey, true);
+    if (pendingQuestion?.el === card.el) pendingQuestion = null;
+    const hadFocus = card.el.contains(document.activeElement);
+    card.el.remove();
+    if (row?.el.isConnected) settleRun(row.el);
+    if (running) setStatusText(baseVerb());
+    if (hadFocus && !dialogOpen()) inputEl.focus();
+  };
+  const send = (answers: QuestionAnswer[] | null) => {
+    if (settled) return;
+    close();
+    if (synthetic) return;
+    oc.respondQuestion(ev.id, answers).catch((err: unknown) => addSystemMessage(`Couldn't send your answer: ${cleanError(err)}`, 'error'));
+  };
+  const card = createQuestionCard({ uid: `prompt-${++promptSeq}`, questions, onSubmit: (a) => send(a), onSkip: () => send(null) });
+  const onKey = (e: KeyboardEvent) => {
+    if (settled || e.isComposing || e.altKey || dialogOpen() || isMenuOpen()) return;
+    // ⌘↵ (Ctrl+↵ too): the next question, or send the answers
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      card.next();
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) return;
+    const t = e.target as HTMLElement;
+    const inCard = card.el.contains(t);
+    const typing = !inCard && isTextField(t) && !(t === inputEl && composerEmpty());
+    if (e.key === 'Escape') {
+      // Skips the questions instead of stopping the run (not while the user types elsewhere)
+      if (typing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      card.skip();
+      return;
+    }
+    if (inCard || typing) return;
+    if (card.key(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+  document.addEventListener('keydown', onKey, true);
+  pendingQuestion = {
+    id: ev.id,
+    el: card.el,
+    cancel: close,
+    // The card left the screen with its session (a switch): it stays unanswered for when the session comes back.
+    dispose: () => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener('keydown', onKey, true);
+      if (pendingQuestion?.el === card.el) pendingQuestion = null;
+    },
+  };
+  addNode(card.el);
+  scrollToBottom(true);
+  // The keyboard moves into the card unless the user is typing a message
+  const active = document.activeElement;
+  if (!synthetic && (active === document.body || active === null || (active === inputEl && composerEmpty()))) card.focus();
 }
 
 // Plan cards: the newest proposed plan has the buttons; Enter builds and Esc keeps planning while it is the last card.
@@ -1175,7 +1336,7 @@ async function artifactAction(card: ArtifactCard, action: ArtifactAction, button
 function isLastCard(el: HTMLElement): boolean {
   if (!el.isConnected) return false;
   for (let n = el.nextElementSibling; n; n = n.nextElementSibling) {
-    if (n.matches('.msg.user, .msg.assistant, .tool, .tool-group, .approval, .plan-card, .artifact-card, .thinking')) return false;
+    if (n.matches('.msg.user, .msg.assistant, .tool, .tool-group, .approval, .question-card, .plan-card, .artifact-card, .thinking')) return false;
   }
   return true;
 }
@@ -1201,6 +1362,7 @@ document.addEventListener(
 
 function clearMessages(): void {
   pendingApproval?.dispose();
+  pendingQuestion?.dispose();
   showJump(false);
   messagesEl.querySelectorAll(':scope > :not(#empty-state)').forEach((n) => n.remove());
   emptyState.hidden = false;
@@ -2001,9 +2163,28 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       statusTokens.hidden = !running;
       break;
     }
+    case 'hook_status':
+      // A hook's statusMessage while it runs (one line; the status text never wraps)
+      setStatusText(typeof ev.text === 'string' && ev.text.trim() ? ev.text.replace(/\s+/g, ' ').trim().slice(0, 120) : baseVerb());
+      break;
     case 'approval_request':
       setStatusText('Waiting for approval');
       addApprovalCard(ev, synthetic);
+      break;
+    case 'question_request':
+      setStatusText('Waiting for your answer');
+      addQuestionCard(ev, synthetic);
+      break;
+    case 'question_resolved':
+      // Answered here, on the phone, or ended by a stop: the card goes; the call's row shows the answers
+      if (pendingQuestion?.id === ev.id) pendingQuestion.cancel();
+      break;
+    case 'approval_resolved':
+      // Answered on the phone (or ended by a stop): the card on screen goes as if it had been answered here
+      if (pendingApproval?.id === ev.id) {
+        if (ev.interrupted) pendingApproval.cancel('Interrupted');
+        else pendingApproval.resolved(ev.ok, ev.scope);
+      }
       break;
     case 'plan_proposed':
       setStatusText('Plan ready for review');
@@ -2066,6 +2247,7 @@ function handleEvent(ev: AgentEvent, synthetic = false): void {
       finishThinking();
       endAssistant();
       pendingApproval?.cancel('Interrupted');
+      pendingQuestion?.cancel();
       // An auto-compaction belongs to the run; its compact_end (if one still comes) only adds the divider or error.
       if (compacting && !compacting.standalone) {
         compacting = null;
@@ -2109,6 +2291,8 @@ function trackStatus(id: string, ev: AgentEvent, onScreen: boolean): void {
   else if (ev.type === 'run_end') next = { running: false, attention: ev.reason === 'plan' ? 'plan' : undefined, unread: onScreen ? undefined : true };
   else if (ev.type === 'approval_request') next = { ...before, attention: 'approval' };
   else if (ev.type === 'approval_resolved' && before.attention === 'approval') next = { ...before, attention: undefined };
+  else if (ev.type === 'question_request') next = { ...before, attention: before.attention === 'approval' ? 'approval' : 'question' };
+  else if (ev.type === 'question_resolved' && before.attention === 'question') next = { ...before, attention: undefined };
   if (!next) return;
   statuses.set(id, next);
   renderSessionList();
@@ -2391,7 +2575,7 @@ window.addEventListener(
 function escCounts(e: KeyboardEvent): boolean {
   return (
     !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.isComposing && !e.defaultPrevented &&
-    !running && compacting === null && !rewinding && !pendingApproval && !titleEditing && !dialogOpen() && !isMenuOpen()
+    !running && compacting === null && !rewinding && !pendingApproval && !pendingQuestion && !titleEditing && !dialogOpen() && !isMenuOpen()
   );
 }
 
@@ -2420,7 +2604,7 @@ document.addEventListener('keydown', (e) => {
   // In a terminal, Esc and Ctrl combinations belong to the shell (xterm sends them on); ⌘ shortcuts still work.
   const inTerminal = terminalPane.hasFocus();
   if (inTerminal && (e.key === 'Escape' || (e.ctrlKey && !e.metaKey))) return;
-  if (e.key === 'Escape' && (running || compacting?.standalone) && !pendingApproval && !isMenuOpen() && !dialogOpen()) {
+  if (e.key === 'Escape' && (running || compacting?.standalone) && !pendingApproval && !pendingQuestion && !isMenuOpen() && !dialogOpen()) {
     void oc.abort();
   } else if (e.key === 'Escape') {
     if (escCounts(e) && escEsc.counts()) {
@@ -2515,7 +2699,7 @@ modeBtn.onclick = () => {
       label: info.label,
       description: info.desc,
       icon: info.icon,
-      tone: info.tone === 'neutral' ? undefined : info.tone,
+      // Neutral icons, as Claude Code's menus; Bypass keeps its red words
       danger: m === 'bypass',
       checked: m === mode,
       onSelect: () => {
@@ -3127,6 +3311,7 @@ function applyLive(live: LiveState | null): void {
   for (const m of live.queue ?? []) if (!m.origin || m.origin === 'user' || m.origin === 'queue') queueList.add(m);
   for (const t of live.tools ?? []) handleEvent({ type: 'tool_start', id: t.id, name: t.name, args: t.args });
   for (const a of live.approvals ?? []) handleEvent(a);
+  for (const q of live.questions ?? []) handleEvent(q);
   if (live.thinking) handleEvent({ type: 'thinking_delta', text: live.thinking });
   if (live.text) handleEvent({ type: 'text_delta', text: live.text });
 }
@@ -3763,7 +3948,7 @@ async function addMcpCard(): Promise<void> {
   addNode(el);
 }
 
-// ---------- Permissions: "Always allow … for this project" rules (Settings section) ----------
+// ---------- Permissions: "Always allow … in this project" rules (Settings section) ----------
 
 let debugRules: RulesApi | null = null;
 
@@ -3807,6 +3992,9 @@ const SHORTCUTS: [string, string[], string[]?][] = [
   ['Settings', ['⌘', ',']],
   ['Cycle permission mode', ['⇧', 'Tab']],
   ['Stop the run', ['Esc']],
+  ['Allow once, or submit the answers', ['⌘', '↵']],
+  ['Deny, or skip the questions (while a card waits)', ['Esc']],
+  ['Allow for the session or in the project', ['A'], ['P']],
   ['Rewind to your last message', ['Esc', 'Esc']],
   ['Focus the composer', ['⌘', 'K']],
   ['Clear the terminal (in a terminal)', ['⌘', 'K']],
@@ -3998,7 +4186,9 @@ function noticeProjectSettings(info: SettingsInfo | null | undefined): void {
   settingsNoticed.add(key);
   const env = f.keys.filter((k) => k.startsWith('env.')).length;
   const fields = f.keys.filter((k) => !k.startsWith('env.'));
-  const sets = [fields.slice(0, 4).join(', ') + (fields.length > 4 ? ` and ${fields.length - 4} more` : ''), env ? `${env} environment variable${env === 1 ? '' : 's'}` : ''].filter(Boolean).join(', plus ');
+  const hooks = f.hookCommands?.length ? 'hooks that run commands' : '';
+  const plain = fields.filter((k) => !k.startsWith('hooks.'));
+  const sets = [plain.slice(0, 4).join(', ') + (plain.length > 4 ? ` and ${plain.length - 4} more` : ''), hooks, env ? `${env} environment variable${env === 1 ? '' : 's'}` : ''].filter(Boolean).join(', plus ');
   addSystemMessage(
     f.changed
       ? `This project's settings.json changed since you approved it (it sets ${sets}), so it is no longer applied. Review it in Settings → Configuration files.`

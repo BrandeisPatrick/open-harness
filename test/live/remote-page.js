@@ -335,6 +335,23 @@ async function main() {
   check('the composer emptied and shows the message as queued, with Stop', (await js(win, `document.getElementById('input').value === '' && !document.getElementById('stop').hidden && document.querySelector('.queued .text').textContent`)) === 'Also add a test for three attempts');
   await shot(win, '5-driven');
 
+  // 5b. The agent asks a question (ask_user): one answer is a tap; more than one is for the app.
+  const LIB = { question: 'Which chart library should the dashboard use?', header: 'Library', options: [{ label: 'Chart.js', description: 'Small, canvas' }, { label: 'D3', description: 'Anything, more code' }], multiSelect: false };
+  f.emit(A, { type: 'tool_start', id: 't5', name: 'ask_user', args: { questions: [LIB] } });
+  f.emit(A, { type: 'question_request', id: 'qq-1', questions: [LIB] });
+  check('a question shows as a card with its options as buttons', await waitFor(win, `document.querySelectorAll('.card.question:not(.decided) button.q-opt').length === 2`) && (await js(win, `document.querySelector('.card.question .card-title').textContent`)) === LIB.question);
+  await shot(win, '5b-question');
+  f.calls.length = 0;
+  await tap(win, '.card.question:not(.decided) button.q-opt:nth-child(2)');
+  check('tapping an option answers it: the label reaches the runtime', await waitFor(win, `document.querySelector('.card.question')?.classList.contains('decided')`) && JSON.stringify(f.calls.find((c) => c[0] === 'respondQuestion')) === JSON.stringify(['respondQuestion', 'qq-1', [{ selected: ['D3'] }]]), f.calls);
+  f.emit(A, { type: 'question_resolved', id: 'qq-1', answers: [{ selected: ['D3'] }] });
+  f.emit(A, { type: 'tool_end', id: 't5', name: 'ask_user', result: 'The user answered your question:\n- Library: D3', ok: true });
+  const FEAT = { question: 'Which features first?', header: 'Features', options: [{ label: 'Export', description: '' }, { label: 'Filters', description: '' }], multiSelect: true };
+  f.emit(A, { type: 'question_request', id: 'qq-2', questions: [FEAT] });
+  check('a question with several answers says to answer in the app, with no buttons', await waitFor(win, `[...document.querySelectorAll('.card.question')].pop()?.querySelector('.q-elsewhere')?.textContent.startsWith('Answer in the app')`) && (await js(win, `[...document.querySelectorAll('.card.question')].pop().querySelectorAll('button').length`)) === 0);
+  f.emit(A, { type: 'question_resolved', id: 'qq-2', answers: [{ selected: ['Export', 'Filters'] }] });
+  check('answered on the Mac, the card says what was picked', await waitFor(win, `[...document.querySelectorAll('.card.question')].pop()?.querySelector('.decision')?.textContent === 'Export, Filters'`));
+
   // 6. The queued message is delivered and the run ends.
   f.emit(A, { type: 'queue_delivered', id: 'q-1' });
   f.emit(A, { type: 'user_message', text: 'Also add a test for three attempts', images: 0, origin: 'queue' });

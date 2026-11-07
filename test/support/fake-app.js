@@ -58,6 +58,10 @@ function fakeApp(projectDir, opts = {}) {
       calls.push(['respondApproval', id, ok, always, scope]);
       return opts.onApproval ? opts.onApproval(id, ok, always, scope) : id !== 'gone';
     },
+    respondQuestion: (id, answers) => {
+      calls.push(['respondQuestion', id, answers]);
+      return id !== 'gone';
+    },
     respondPlan: (sessionId, planId, decision) => {
       calls.push(['respondPlan', sessionId, planId, decision]);
       if (opts.onPlan) opts.onPlan(sessionId, planId, decision);

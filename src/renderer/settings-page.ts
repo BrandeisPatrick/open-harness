@@ -23,6 +23,7 @@ import { modsSection } from './settings/mods-section.js';
 import { remoteSection, scheduledSection, skillsSection } from './settings/feature-sections.js';
 import { dreamingSection } from './settings/dreaming-section.js';
 import { aboutSection, appearanceSection, filesSection, historySection, mcpSection } from './settings/info-sections.js';
+import { hooksSection } from './settings/hooks-section.js';
 
 export interface SettingsPageDeps {
   dialog: HTMLDialogElement;
@@ -333,6 +334,7 @@ export function createSettingsPage(deps: SettingsPageDeps): SettingsPage {
       historySection(ctx),
       appearanceSection(ctx),
       filesSection(ctx, (info) => applyOwned(info)),
+      hooksSection(ctx),
       aboutSection(ctx),
     ];
     for (const s of sections) {

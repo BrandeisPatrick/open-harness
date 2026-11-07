@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { HistoryRecord } from '../../shared/history';
 import type { DreamMode } from '../../shared/dreaming';
 import type { MessageOrigin } from '../../shared/types';
-import { isCompactPreamble } from '../compact';
+import { FAILED_RESULT, isCompactPreamble } from '../compact';
 import { displayText, type Msg, type Session } from '../sessions';
 
 /** How much of each piece a digest keeps */
@@ -43,7 +43,7 @@ export function clipText(text: string, max: number): string {
 }
 
 const DENIED_RE = /^Not permitted: the user denied/;
-const FAILED_RE = /^(Error:|Not permitted|Tool call was interrupted)/;
+const FAILED_RE = FAILED_RESULT;
 
 /** A few words for what a tool call was about: the command, the path, the URL, the first string it was given. */
 export function callWhat(name: string, rawArgs: unknown): string {

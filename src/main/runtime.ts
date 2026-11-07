@@ -68,6 +68,8 @@ interface Live {
   thinking: string;
   tools: Map<string, { id: string; name: string; args: unknown }>;
   approvals: Map<string, Extract<AgentEvent, { type: 'approval_request' }>>;
+  /** ask_user cards waiting for an answer */
+  questions: Map<string, Extract<AgentEvent, { type: 'question_request' }>>;
   /** The last run ended with a plan the user has not decided on yet */
   planWaiting: boolean;
 }
@@ -173,7 +175,9 @@ export class SessionRuntime {
 
   /** Stops and forgets a deleted session's agent. The caller deletes the session from the store. */
   forget(id: string): void {
-    this.agents.get(id)?.stop();
+    const agent = this.agents.get(id);
+    agent?.stop();
+    void agent?.endSession('deleted').catch(() => undefined);
     this.agents.delete(id);
     this.lives.delete(id);
     this.listChanged();
@@ -205,6 +209,11 @@ export class SessionRuntime {
     this.agents.get(id)?.stop();
   }
 
+  /** SessionEnd for every session that started in this app session (the app quits); resolves when their hooks are done. */
+  async endSessions(reason: 'quit' | 'deleted' = 'quit'): Promise<void> {
+    await Promise.all([...this.agents.values()].map((a) => a.endSession(reason).catch(() => undefined)));
+  }
+
   stopAll(): void {
     for (const a of this.agents.values()) a.stop();
   }
@@ -223,6 +232,7 @@ export class SessionRuntime {
     const running = this.isRunning(id);
     const st: SessionStatus = { running };
     if (live?.approvals.size) st.attention = 'approval';
+    else if (live?.questions.size) st.attention = 'question';
     else if (live?.planWaiting && !running) st.attention = 'plan';
     if (this.opts.store.get(id)?.unread) st.unread = true;
     return st;
@@ -233,7 +243,7 @@ export class SessionRuntime {
     const l = this.lives.get(id);
     const agent = this.agents.get(id);
     const running = agent?.running === true;
-    if (!l || !running) return { running: false, text: '', thinking: '', tools: [], approvals: [], queue: [] };
+    if (!l || !running) return { running: false, text: '', thinking: '', tools: [], approvals: [], questions: [], queue: [] };
     return {
       running: true,
       startedAt: l.startedAt,
@@ -241,6 +251,7 @@ export class SessionRuntime {
       thinking: l.thinking,
       tools: [...l.tools.values()].map((t) => ({ ...t })),
       approvals: [...l.approvals.values()].map((a) => ({ ...a })),
+      questions: [...l.questions.values()].map((q) => ({ ...q })),
       queue: agent?.queue() ?? [],
     };
   }
@@ -260,6 +271,17 @@ export class SessionRuntime {
   findApproval(id: string): Agent | undefined {
     for (const a of this.agents.values()) if (a.hasApproval(id)) return a;
     return undefined;
+  }
+
+  /** The agent waiting on the question card `id` (ask_user). */
+  findQuestion(id: string): Agent | undefined {
+    for (const a of this.agents.values()) if (a.hasQuestion(id)) return a;
+    return undefined;
+  }
+
+  /** Answers a question card, whichever session holds it (null skips it). False when no session waits on it any more. */
+  respondQuestion(id: string, answers: unknown): boolean {
+    return this.findQuestion(id)?.resolveQuestion(id, answers) ?? false;
   }
 
   /** The agent holding the queued message `id`. */
@@ -365,7 +387,7 @@ export class SessionRuntime {
   private liveOf(id: string): Live {
     let l = this.lives.get(id);
     if (!l) {
-      l = { running: false, text: '', thinking: '', tools: new Map(), approvals: new Map(), planWaiting: false };
+      l = { running: false, text: '', thinking: '', tools: new Map(), approvals: new Map(), questions: new Map(), planWaiting: false };
       this.lives.set(id, l);
     }
     return l;
@@ -388,6 +410,7 @@ export class SessionRuntime {
         Object.assign(l, { running: true, startedAt: Date.now(), text: '', thinking: '', planWaiting: false });
         l.tools.clear();
         l.approvals.clear();
+        l.questions.clear();
         status = true;
         break;
       case 'text_delta':
@@ -420,6 +443,13 @@ export class SessionRuntime {
       case 'approval_resolved':
         status = l.approvals.delete(ev.id);
         break;
+      case 'question_request':
+        l.questions.set(ev.id, ev);
+        status = true;
+        break;
+      case 'question_resolved':
+        status = l.questions.delete(ev.id);
+        break;
       case 'plan_proposed':
         l.planWaiting = true;
         // A plan put on a session between runs (a dream's) waits for the user from now on
@@ -429,6 +459,7 @@ export class SessionRuntime {
         Object.assign(l, { running: false, startedAt: undefined, text: '', thinking: '' });
         l.tools.clear();
         l.approvals.clear();
+        l.questions.clear();
         if (ev.reason !== 'plan') l.planWaiting = false;
         const s = this.opts.store.get(id);
         if (s && id !== this.fg && !s.unread) {

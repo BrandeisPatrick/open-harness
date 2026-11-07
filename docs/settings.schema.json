@@ -434,6 +434,186 @@
           }
         ]
       }
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Commands and HTTP endpoints run before and after the agent acts, in Claude Code's format. A project file's hooks run only once you trust the file. See docs/hooks.md.",
+      "propertyNames": {
+        "enum": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PostToolUse",
+          "PostToolUseFailure",
+          "Notification",
+          "Stop",
+          "SubagentStop",
+          "PreCompact",
+          "PostCompact",
+          "SessionEnd",
+          "Setup",
+          "UserPromptExpansion",
+          "PermissionRequest",
+          "PermissionDenied",
+          "PostToolBatch",
+          "MessageDisplay",
+          "SubagentStart",
+          "TaskCreated",
+          "TaskCompleted",
+          "StopFailure",
+          "TeammateIdle",
+          "InstructionsLoaded",
+          "ConfigChange",
+          "CwdChanged",
+          "DirectoryAdded",
+          "FileChanged",
+          "WorktreeCreate",
+          "WorktreeRemove",
+          "PreModelSwitch",
+          "PostModelSwitch",
+          "Elicitation",
+          "ElicitationResult"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "hooks"
+          ],
+          "properties": {
+            "matcher": {
+              "type": "string",
+              "description": "Which occurrences fire: a name, names separated by | or \",\", or a regular expression; \"*\" or empty matches all."
+            },
+            "hooks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "command",
+                      "http",
+                      "mcp_tool",
+                      "prompt",
+                      "agent"
+                    ],
+                    "description": "command and http run; mcp_tool, prompt and agent are Claude Code types this app skips (with a problem line)."
+                  },
+                  "timeout": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Seconds before the hook is cancelled (default 600; 30 on UserPromptSubmit)."
+                  },
+                  "if": {
+                    "type": "string",
+                    "description": "Tool events only: one permission rule, e.g. \"Bash(git *)\" or \"Edit(*.ts)\". The handler runs only when the tool call matches it."
+                  },
+                  "statusMessage": {
+                    "type": "string",
+                    "description": "Shown in the status line while the hook runs."
+                  },
+                  "onFailure": {
+                    "enum": [
+                      "continue",
+                      "block"
+                    ],
+                    "description": "Whether the action goes ahead when the hook fails, times out or cannot start (default \"continue\")."
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "type": {
+                          "const": "command"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "command"
+                      ],
+                      "properties": {
+                        "command": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The shell command (sh -c), or with \"args\" the program to run directly. Reads the event as JSON on stdin."
+                        },
+                        "args": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Exec form: the arguments, passed as they are with no shell."
+                        },
+                        "async": {
+                          "type": "boolean",
+                          "description": "Run in the background; its decision is not waited for."
+                        },
+                        "asyncRewake": {
+                          "type": "boolean",
+                          "description": "Read as async in this app."
+                        },
+                        "shell": {
+                          "enum": [
+                            "bash",
+                            "powershell"
+                          ],
+                          "description": "Accepted for Claude Code compatibility; this app runs shell-form commands with sh."
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "type": {
+                          "const": "http"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "url"
+                      ],
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "pattern": "^https?://",
+                          "description": "POSTed the event as JSON; the response body is read like a command hook's stdout."
+                        },
+                        "headers": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "Extra headers; $VAR and ${VAR} are filled in from allowedEnvVars only."
+                        },
+                        "allowedEnvVars": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "disableAllHooks": {
+      "type": "boolean",
+      "description": "Turn off every hook from the settings files (mods' hooks still run)."
     }
   }
 }

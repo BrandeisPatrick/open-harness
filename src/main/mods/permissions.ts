@@ -17,9 +17,10 @@ export const MOD_PERMISSIONS: readonly ModPermission[] = [
   'schedules',
   'remote',
   'network',
+  'hooks',
 ];
 
-export const MOD_SEATS: readonly ModSeat[] = ['rail', 'tab', 'composer', 'background'];
+export const MOD_SEATS: readonly ModSeat[] = ['rail', 'tab', 'composer', 'background', 'worker'];
 /** The regions a look can restyle (docs/mods.md, Looks); a manifest naming another one gets a warning, not an error. */
 export const MOD_LOOK_TARGETS: readonly ModLookTarget[] = ['conversation', 'composer'];
 /** Seats a later protocol version will define; a manifest naming one gets a clearer message than "unknown". */
@@ -30,6 +31,8 @@ export const MOD_METHOD_PERMISSIONS: Record<ModMethod, ModPermission | null> = {
   hello: null,
   'events.subscribe': null,
   'events.unsubscribe': null,
+  'hooks.subscribe': 'hooks',
+  'hooks.unsubscribe': 'hooks',
   'log.error': null,
   'ui.theme': null,
   'ui.resize': null,
@@ -40,6 +43,7 @@ export const MOD_METHOD_PERMISSIONS: Record<ModMethod, ModPermission | null> = {
   'ui.copy': null,
   'ui.openExternal': null,
   'ui.markdown': null,
+  'ui.openSettings': null,
   'storage.get': null,
   'storage.set': null,
   'storage.remove': null,
@@ -76,6 +80,7 @@ export const MOD_METHOD_PERMISSIONS: Record<ModMethod, ModPermission | null> = {
 
   'config.get': 'config:read',
   'config.set': 'config:write',
+  'project.git': 'config:read',
 
   'schedules.list': 'schedules',
   'schedules.create': 'schedules',
@@ -94,6 +99,8 @@ export function isWindowMethod(method: string): boolean {
     method === 'hello' ||
     method === 'events.subscribe' ||
     method === 'events.unsubscribe' ||
+    method === 'hooks.subscribe' ||
+    method === 'hooks.unsubscribe' ||
     method === 'log.error' ||
     method.startsWith('ui.') ||
     method === 'composer.insert' ||

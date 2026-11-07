@@ -252,6 +252,7 @@ export function registerCoreIpc(app: AppHost, deps: CoreIpcDeps): void {
     runtime.respondApproval(String(id), Boolean(ok), Boolean(always), scope === 'project' ? 'project' : 'session');
     return forWindow(cfg());
   });
+  ipcMain.handle('question:response', (_e, id: string, answers: unknown) => runtime.respondQuestion(String(id), answers === null ? null : answers));
   ipcMain.handle('plan:respond', (_e, id: string, decision: string) => {
     // The plan is on screen, so it is normally the foreground session's; look further in case the window lags behind.
     const planId = String(id);

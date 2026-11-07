@@ -12,7 +12,7 @@ import type { ScheduleInput, SchedulePatch } from '../../shared/schedules';
 import type { SessionMeta, TranscriptItem } from '../../shared/types';
 import type { ContextService, HistoryService, ImagesService, RemoteService, SchedulesService, SubagentsService } from '../services';
 import { formatBytes, kindLabel } from '../artifacts';
-import { listChanges } from '../changes';
+import { gitInfo, listChanges } from '../changes';
 import { COMPACT_THRESHOLD } from '../compact';
 import { loadSkills, toInfo } from '../skills';
 import { latestPlan, toMeta, toTranscript, type Session } from '../sessions';
@@ -332,6 +332,8 @@ export class ModBridgeHandler {
         const next = this.app.updateConfig((cur) => applyPublicPatch(cur, patch, list));
         return publicConfig(next, this.meta(fg)?.cwd);
       }
+      case 'project.git':
+        return gitInfo(this.meta(fg)?.cwd || this.cwd());
 
       case 'schedules.list':
         return { schedules: this.service<SchedulesService>('schedules', 'Scheduled tasks').list() };

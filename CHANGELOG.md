@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.8.0
+
+Closer to Claude Code: hooks in Claude Code's own format, from settings.json and from mods; the permission prompt and a new question card drawn as Claude Code draws them; one quiet line per tool call; and the rail, the footer and the status line laid out like Claude Code's.
+
+### Hooks
+
+- **Hooks, as in Claude Code.** Put `"hooks"` in `~/.silo-harness/settings.json` and a command, a script or an HTTP endpoint runs at fixed points of the agent's work: before a tool call (it can refuse it, ask you first, let it through without asking, or change what it does), after one, when you send a message, when a run ends (it can send the agent back to work), around a compaction, when a session starts and ends, and when an approval waits. The format is Claude Code's, so the hooks you already have work as they are: the same events, matchers, `if` rules, input on stdin and exit codes, and tool names like `Bash`, `Read`, `Write` and `Edit`. docs/hooks.md has the details and what is not supported.
+- **A project's hooks wait for your trust.** A project's `settings.json` with hooks runs nothing until you trust the file in Settings → Configuration files, which says before you do that it defines hooks that run commands, and lists them.
+- **Settings → Hooks** lists the hooks in effect, by event, with where each comes from, and the hooks that ran since the app started: what they decided, their exit code, how long they took and what they printed on stderr.
+- **In the conversation**, a hook that blocks something or fails leaves a quiet note saying so, and the status line says what a hook is doing while it runs, when it has a status message.
+- **Mods can handle hooks** with the new `hooks` permission: `harness.hooks.on('PreToolUse', handler)` gets the same input and returns the same answer as a command hook. A new `worker` seat loads a hidden page whenever the mod is on, for a mod that has nothing to show. The card that turns a mod on says plainly what the permission allows. Older mods are unaffected.
+
+### Closer to Claude Code
+
+- **The rail.** Environment shows the folder with its path, the repository and the branch when the folder is a git repository, the provider and model, and Remote control with a small switch; the mode row and Keep awake are gone from it (the mode stays in the footer, Keep awake in Settings → General). Context shows a plain title, a 4 px bar in the legend's order, coloured squares, the percentage column in strong text, a chevron row for each slice that opens, "Last updated … Refreshes when this turn ends", and "Nk until auto-compact" with a Compact session button, as Claude Code lays it out.
+- **The footer** under the chat bar names the model and the mode in muted text at 12 px; only the ring carries colour.
+- **The status line** stays on one line when the side pane is open: the text is cut with an ellipsis, the time, the token count and the esc hint stay whole.
+- **For mods**: `harness.ui.openSettings(section)` opens Settings at a section, and `harness.project.git()` (with `config:read`) returns the repository and branch of the session's folder.
+- **The approval card** looks like Claude Code's permission prompt: the question in a header band, what the command does (in the model's words, when it says) and why the card came up in muted text, the command, then Deny and **Allow once ⌘↵** at the bottom right, with ⌄ opening "Allow … for this session" (A) and "Always allow … in this project" (P). No icon tile, no stack of buttons, no key on every button. ⌘↵ allows once even while you type, and Esc denies instead of stopping the run.
+- **Auto mode** says why it stopped in a quiet line on the card ("Auto mode stopped to ask: it pushes to a remote.") rather than with an amber warning, and the mode menu's icons are neutral, as in Claude Code's menus; only Bypass keeps its red words.
+- **Questions.** The agent can ask you one to four multiple-choice questions when a choice is genuinely yours, and waits for the answers, in every mode, Plan included. The card has the approval card's frame: the question with a short header as a chip, the options as rows you click or pick with 1–4, "Other" for your own words, Skip and Submit ⌘↵; several questions come one at a time. Answered, it folds to "Asked a question" with your answers inside. The phone page shows a one-answer question as buttons. Hooks see the tool as `AskUserQuestion`.
+- **One quiet line per tool call.** With Tool activity on Summary, a single call now folds like a run of several: "Ran a command", "Read a file", "Edited a file +3 −1", and opened it shows the row with its details. An answered approval no longer leaves a separate "Allowed · …" line in either setting: the call's row keeps the answer, and a call you or a hook denied reads "Denied a command".
+
 ## 0.7.0
 
 The window and the website can be made of glass: translucent, layered materials in the style of macOS 26, on the app's own white and grey. The Glass theme is off until you turn it on.

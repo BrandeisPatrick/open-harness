@@ -3,8 +3,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ModCommandManifest, ModLookManifest, ModLookTarget, ModManifest, ModPermission, ModProblem, ModSeat, ModSettingField, ModViewManifest } from '../../shared/mods';
+import type { ModCommandManifest, ModHookContribution, ModLookManifest, ModLookTarget, ModManifest, ModPermission, ModProblem, ModSeat, ModSettingField, ModViewManifest } from '../../shared/mods';
 import { MOD_LOOK_TARGETS, MOD_PERMISSIONS, MOD_SEATS, RESERVED_SEATS } from './permissions';
+import { HOOK_EVENTS, OTHER_CLAUDE_EVENTS, isHookEvent } from '../hooks/config';
+
+/** The longest a mod's hook handler may be given (seconds) */
+const MOD_HOOK_MAX_TIMEOUT = 600;
 
 export const MOD_ID_RE = /^[a-z][a-z0-9-]{1,39}$/;
 /** View ids and command names: lower-case letters, digits and -, starting with a letter or digit */
@@ -257,6 +261,32 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
     }
   }
 
+  const hooks: ModHookContribution[] = [];
+  if (contributes.hooks !== undefined) {
+    if (!Array.isArray(contributes.hooks)) bad('contributes.hooks: must be a list of hook events, e.g. ["PreToolUse", "Stop"]');
+    else {
+      if (contributes.hooks.length && !permissions.includes('hooks')) bad('contributes.hooks: handling hooks needs the "hooks" permission; add it to "permissions"');
+      const seen = new Set<string>();
+      contributes.hooks.forEach((e, i) => {
+        const at = `hooks[${i}]`;
+        const entry = typeof e === 'string' ? { event: e } : isObj(e) ? e : null;
+        if (!entry) return bad(`${at}: must be an event name or { "event": "PreToolUse", "timeout": 30 }`);
+        const event = entry.event;
+        if (typeof event !== 'string') return bad(`${at}.event: missing; use one of ${HOOK_EVENTS.join(', ')}`);
+        // An event this app does not fire (one of Claude Code's, or a later one) is skipped, so the mod still loads.
+        if (!isHookEvent(event)) return warn(`${at}: "${event}" is ${OTHER_CLAUDE_EVENTS.includes(event) ? 'a Claude Code event this app does not fire' : 'not a hook event this version of the app knows'}, so it is ignored (fired: ${HOOK_EVENTS.join(', ')})`);
+        if (seen.has(event)) return bad(`${at}: "${event}" is listed twice`);
+        seen.add(event);
+        const h: ModHookContribution = { event };
+        if (entry.timeout !== undefined) {
+          if (typeof entry.timeout !== 'number' || !Number.isFinite(entry.timeout) || entry.timeout <= 0 || entry.timeout > MOD_HOOK_MAX_TIMEOUT) return bad(`${at}.timeout: must be a number of seconds from 1 to ${MOD_HOOK_MAX_TIMEOUT}`);
+          h.timeout = entry.timeout;
+        }
+        hooks.push(h);
+      });
+    }
+  }
+
   if (problems.some((p) => !p.warning)) return { manifest: null, problems };
   const r = raw as Record<string, unknown>;
   const manifest: ModManifest = { protocol: 1, id: r.id as string, name: (r.name as string).trim(), version: r.version as string };
@@ -268,6 +298,7 @@ export function validateManifest(raw: unknown, dir: string, folderName = path.ba
   if (looks.length) c.looks = looks;
   if (commands.length) c.commands = commands;
   if (settings.length) c.settings = settings;
+  if (hooks.length) c.hooks = hooks;
   if (Object.keys(c).length) manifest.contributes = c;
   return { manifest, problems };
 }

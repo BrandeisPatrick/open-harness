@@ -4,60 +4,70 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="/@harness/harness.css">
 <style>
+  /* As in Claude Code's Context section: the slices are coloured by size (blue, orange, green, then greys), the
+     autocompact buffer a darker grey, the free space the bar's own track */
   :root {
-    --c-system: #8a8a8a; --c-instructions: #c48a3a; --c-skills: #8a6fb0; --c-tools: #4f86b8; --c-mcpTools: #3a9a95;
-    --c-summary: #b0668a; --c-messages: #e8833a; --c-toolResults: #6f9a3e; --c-other: #a3a3a3;
+    --c-1: #2a7edf; --c-2: #e8742f; --c-3: #18a586; --c-grey: #878787; --c-buffer: #c2c2c2;
+    --track: rgba(0, 0, 0, 0.06);
   }
   :root[data-theme="dark"] {
-    --c-system: #a8a8a8; --c-instructions: #d9a24f; --c-skills: #a58bd0; --c-tools: #6aa3d6; --c-mcpTools: #4fb8b2;
-    --c-summary: #cf82a8; --c-messages: #f0954d; --c-toolResults: #88b553; --c-other: #8a8a8a;
+    --c-1: #4c7ce7; --c-2: #cf6622; --c-3: #439b7f; --c-grey: #8a8a8a; --c-buffer: #535353;
+    --track: rgba(255, 255, 255, 0.07);
   }
-  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 24px; }
+  .pct { color: var(--text-100); font-variant-numeric: tabular-nums; }
   .top.warn .pct { color: var(--warn); }
   .top.danger .pct { color: var(--danger); }
-  .sum { font-variant-numeric: tabular-nums; }
-  .h-bar { margin: 8px 0 8px; }
-  .seg-reserve { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--text-400) 55%, transparent) 0 2px, transparent 2px 4px) !important; }
-  /* The breakdown is a dense table: secondary size, 24px rows */
-  .slices { margin: 0 -4px; padding: 0; list-style: none; font-size: var(--fs-small); line-height: var(--lh-small); }
-  .slice { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto 44px; align-items: center; column-gap: 8px; min-height: 24px; padding: 0 4px; border-radius: var(--r-control); color: var(--text-200); }
-  button.slice { width: 100%; text-align: left; }
-  button.slice:hover { background: var(--hover); color: var(--text-100); }
-  .slice .name { display: flex; align-items: center; gap: 2px; min-width: 0; }
-  .slice .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .slice .h-chev { width: 12px; height: 12px; flex: none; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .slice .tok { color: var(--text-200); }
-  .slice .per { color: var(--text-400); }
-  .slice.muted, .slice.muted .tok { color: var(--text-400); }
-  .dot-free { background: transparent; box-shadow: inset 0 0 0 1.25px var(--text-400); }
-  .dot-reserve { background: repeating-linear-gradient(135deg, var(--text-400) 0 1.5px, transparent 1.5px 3px); }
-  .items { margin: 0 0 2px; padding: 0; list-style: none; }
-  .items li { display: grid; grid-template-columns: minmax(0, 1fr) auto 44px; column-gap: 8px; min-height: 24px; align-items: center; padding: 0 4px 0 20px; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-400); }
+  .sum { color: var(--text-400); font-variant-numeric: tabular-nums; }
+  /* A 4 px rounded bar of segments, 1 px of track between them */
+  .bar { display: flex; gap: 1px; height: 4px; margin: 4px 0 8px; border-radius: 2px; overflow: hidden; background: var(--track); }
+  .bar > span { flex: none; height: 100%; min-width: 2px; background: var(--seg); transition: width 0.3s ease; }
+  /* The legend: a dense table at the secondary size on 24 px rows */
+  .list { margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); line-height: var(--lh-small); }
+  .list + .list { margin-top: 8px; }
+  .row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 48px; align-items: center; column-gap: 12px; min-height: 24px; color: var(--text-200); }
+  .sq { width: 10px; height: 10px; border-radius: 2px; background: var(--seg); }
+  .row .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .name.more { text-decoration: underline dotted; text-decoration-color: var(--text-400); text-underline-offset: 3px; }
+  .row .tok { color: var(--text-400); }
+  .row .per { color: var(--text-100); font-weight: 500; }
+  /* What is behind a number: a chevron row per slice, its entries under it when open */
+  .fold { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; width: 100%; min-height: 24px; text-align: left; color: var(--text-200); border-radius: var(--r-control); }
+  .fold:hover { color: var(--text-100); }
+  .fold .h-chev { width: 12px; height: 12px; margin-left: -1px; color: var(--text-400); transition: transform 0.15s ease; }
+  .fold[aria-expanded="true"] .h-chev { transform: rotate(90deg); }
+  .fold .cnt { color: var(--text-400); }
+  .items { margin: 0 0 4px; padding: 0; list-style: none; }
+  .items li { display: grid; grid-template-columns: minmax(0, 1fr) auto 48px; column-gap: 12px; min-height: 24px; align-items: center; padding-left: 22px; color: var(--text-400); }
   .items li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+  .foot { margin: 12px 0 0; color: var(--text-400); }
+  /* One row when the rail is wide enough; at narrower widths the button moves under the note instead of cutting it */
+  .actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin-top: 12px; }
+  .actions .h-muted { white-space: nowrap; }
+  .actions .h-btn { flex: none; margin-left: auto; padding: 0 8px; }
   .error { margin-top: 6px; color: var(--danger); font-size: var(--fs-small); line-height: var(--lh-small); }
-  .foot { margin-top: 8px; }
 </style>
 </head>
 <body>
 <div id="root" hidden>
-  <div class="top" id="top"><span class="pct" id="pct"></span><span class="h-muted sum" id="sum"></span></div>
-  <div class="h-bar" id="bar" role="img"></div>
-  <ul class="slices" id="slices"></ul>
+  <div class="top" id="top"><span class="pct" id="pct"></span><span class="sum" id="sum"></span></div>
+  <div class="bar" id="bar" role="img"></div>
+  <ul class="list" id="slices"></ul>
+  <ul class="list" id="folds"></ul>
+  <p class="h-muted foot" id="foot"></p>
   <div class="actions">
-    <button class="h-btn sm" id="compact">Compact now</button>
     <span class="h-muted" id="auto"></span>
+    <button class="h-btn primary sm" id="compact">Compact session</button>
   </div>
   <div class="error" id="error" hidden></div>
-  <p class="h-muted foot" id="foot"></p>
 </div>
 <p class="h-empty" id="empty" hidden>No context numbers yet.</p>
 <script src="/@harness/harness.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   const CHEV = '<svg class="h-icon h-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.25 3.75L10.5 8l-4.25 4.25"/></svg>';
+  const LABELS = { reserve: 'Autocompact buffer', free: 'Free space' };
   let ctx = null;
   let running = false;
   let compacting = false;
@@ -68,17 +78,24 @@
     n = Math.max(0, Math.round(Number(n) || 0));
     if (n < 1000) return String(n);
     const k = n / 1000;
-    if (k < 99.95) return `${Math.round(k * 10) / 10}k`;
-    if (k < 999.5) return `${Math.round(k)}k`;
+    if (k < 999.95) return `${Math.round(k * 10) / 10}k`;
     const m = n / 1e6;
     return m < 9.95 ? `${Math.round(m * 10) / 10}M` : `${Math.round(m)}M`;
+  }
+  /** Whole thousands from 10k up: "170k until auto-compact" */
+  function fmtRound(n) {
+    n = Math.max(0, Math.round(Number(n) || 0));
+    return n >= 10000 && n < 1e6 ? `${Math.round(n / 1000)}k` : fmtTokens(n);
   }
   function fmtPct(r) {
     const p = (Number(r) || 0) * 100;
     if (p <= 0) return '0%';
     if (p < 0.05) return '<0.1%';
-    const one = Math.round(p * 10) / 10;
-    return one < 10 ? `${one.toFixed(1)}%` : `${Math.round(p)}%`;
+    return `${(Math.round(p * 10) / 10).toFixed(1)}%`;
+  }
+  function usedPct(r) {
+    const p = (Number(r) || 0) * 100;
+    return p <= 0 ? '0%' : p < 1 ? '<1%' : `${Math.round(p)}%`;
   }
   function ago(t) {
     const s = Math.max(0, (Date.now() - t) / 1000);
@@ -90,106 +107,108 @@
     const d = Math.round(h / 24);
     return d === 1 ? 'yesterday' : `${d} days ago`;
   }
-  const colour = (key) => `var(--c-${/^(system|instructions|skills|tools|mcpTools|summary|messages|toolResults)$/.test(key) ? key : 'other'})`;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
   // The app says whether compacting now could free anything (false while a run is going or for a short conversation)
   const compactable = () => !!(ctx && ctx.compactable === true);
+
+  /** Used slices largest first, then the buffer, then free space; the three largest in colour, the rest grey */
+  function ordered(slices) {
+    const used = slices.filter((s) => s.key !== 'reserve' && s.key !== 'free').sort((a, b) => (b.tokens || 0) - (a.tokens || 0));
+    let rank = 0;
+    const out = used.map((s) => ({ ...s, colour: s.tokens > 0 && rank < 3 ? `var(--c-${++rank})` : 'var(--c-grey)' }));
+    for (const key of ['reserve', 'free']) {
+      const s = slices.find((x) => x.key === key);
+      if (s) out.push({ ...s, label: LABELS[key], colour: key === 'reserve' ? 'var(--c-buffer)' : 'var(--track)' });
+    }
+    return out;
+  }
 
   function render() {
     const ok = !!(ctx && ctx.limit > 0);
     $('root').hidden = !ok;
     $('empty').hidden = ok;
-    if (!ok) { harness.ui.setBadge(null); return; }
+    if (!ok) return;
     const limit = ctx.limit;
     const used = ctx.tokens || 0;
     const ratio = used / limit;
     const threshold = typeof ctx.threshold === 'number' ? ctx.threshold : 0.8;
-    $('pct').textContent = `${fmtPct(ratio)} used`;
+    $('pct').textContent = `${usedPct(ratio)} used`;
     $('sum').textContent = `${fmtTokens(used)} / ${fmtTokens(limit)}`;
     $('top').classList.toggle('danger', ratio >= threshold);
     $('top').classList.toggle('warn', ratio < threshold && ratio >= threshold - 0.1);
 
-    const slices = Array.isArray(ctx.slices) ? ctx.slices : [];
+    const slices = ordered(Array.isArray(ctx.slices) ? ctx.slices : []);
     const bar = $('bar');
     bar.textContent = '';
-    bar.setAttribute('aria-label', `${fmtPct(ratio)} of the context window used`);
+    bar.setAttribute('aria-label', `${usedPct(ratio)} of the context window used`);
     for (const s of slices) {
       if (s.key === 'free' || !(s.tokens > 0)) continue;
-      const seg = document.createElement('span');
-      seg.className = 'h-bar-seg' + (s.key === 'reserve' ? ' seg-reserve' : '');
+      const seg = el('span');
       seg.style.width = `${Math.min(100, (s.tokens / limit) * 100)}%`;
-      if (s.key !== 'reserve') seg.style.setProperty('--seg', colour(s.key));
+      seg.style.setProperty('--seg', s.colour);
       seg.title = `${s.label}: ${fmtTokens(s.tokens)}`;
       bar.appendChild(seg);
-    }
-    if (ctx.autoCompact !== false && threshold > 0 && threshold < 1) {
-      const mark = document.createElement('span');
-      mark.className = 'h-bar-mark';
-      mark.style.left = `${threshold * 100}%`;
-      mark.title = `Compacts on its own at ${Math.round(threshold * 100)}%`;
-      bar.appendChild(mark);
     }
 
     const list = $('slices');
     list.textContent = '';
+    const folds = [];
     for (const s of slices) {
-      const li = document.createElement('li');
       const items = Array.isArray(s.items) && s.items.length ? s.items : null;
-      const row = document.createElement(items ? 'button' : 'div');
-      row.className = 'slice' + (s.key === 'free' || s.key === 'reserve' ? ' muted' : '');
-      const dot = document.createElement('span');
-      dot.className = 'h-dot' + (s.key === 'free' ? ' dot-free' : s.key === 'reserve' ? ' dot-reserve' : '');
-      if (s.key !== 'free' && s.key !== 'reserve') dot.style.setProperty('--dot', colour(s.key));
-      const name = document.createElement('span');
-      name.className = 'name';
-      const label = document.createElement('span');
-      label.textContent = s.label || s.key;
-      name.appendChild(label);
-      if (items) {
-        name.insertAdjacentHTML('beforeend', CHEV);
-        row.setAttribute('aria-expanded', String(open.has(s.key)));
-        row.onclick = () => { open.has(s.key) ? open.delete(s.key) : open.add(s.key); render(); };
-      }
-      const tok = document.createElement('span');
-      tok.className = 'num tok';
-      tok.textContent = fmtTokens(s.tokens);
-      const per = document.createElement('span');
-      per.className = 'num per';
-      per.textContent = fmtPct(s.tokens / limit);
-      row.append(dot, name, tok, per);
-      li.appendChild(row);
-      if (items && open.has(s.key)) {
-        const ul = document.createElement('ul');
-        ul.className = 'items';
-        for (const it of items) {
-          const sub = document.createElement('li');
-          const a = document.createElement('span'); a.textContent = it.label; a.title = it.label;
-          const b = document.createElement('span'); b.className = 'num'; b.textContent = fmtTokens(it.tokens);
-          const c = document.createElement('span'); c.className = 'num'; c.textContent = fmtPct(it.tokens / limit);
-          sub.append(a, b, c);
+      if (items) folds.push({ ...s, items });
+      const li = el('li', 'row');
+      li.dataset.key = s.key;
+      const sq = el('span', 'sq');
+      sq.style.setProperty('--seg', s.colour);
+      const name = el('span', 'name' + (items ? ' more' : ''), s.label || s.key);
+      name.title = items ? items.map((it) => `${it.label}  ${fmtTokens(it.tokens)}`).join('\n') : s.label || s.key;
+      li.append(sq, name, el('span', 'num tok', fmtTokens(s.tokens)), el('span', 'num per', fmtPct(s.tokens / limit)));
+      list.appendChild(li);
+    }
+
+    const fl = $('folds');
+    fl.textContent = '';
+    fl.hidden = !folds.length;
+    for (const s of folds) {
+      const li = el('li');
+      const btn = el('button', 'fold');
+      btn.dataset.key = s.key;
+      btn.setAttribute('aria-expanded', String(open.has(s.key)));
+      btn.insertAdjacentHTML('beforeend', CHEV);
+      btn.append(el('span', 'name', s.label || s.key), el('span', 'num cnt', String(s.items.length)));
+      btn.onclick = () => { open.has(s.key) ? open.delete(s.key) : open.add(s.key); render(); };
+      li.appendChild(btn);
+      if (open.has(s.key)) {
+        const ul = el('ul', 'items');
+        for (const it of s.items) {
+          const sub = el('li');
+          const a = el('span', '', it.label); a.title = it.label;
+          sub.append(a, el('span', 'num', fmtTokens(it.tokens)), el('span', 'num', fmtPct(it.tokens / limit)));
           ul.appendChild(sub);
         }
         li.appendChild(ul);
       }
-      list.appendChild(li);
+      fl.appendChild(li);
     }
 
     const btn = $('compact');
     btn.disabled = running || compacting || !compactable();
-    btn.textContent = compacting ? 'Compacting…' : 'Compact now';
+    btn.textContent = compacting ? 'Compacting…' : 'Compact session';
     btn.title = running ? 'Wait for the run to end' : !compactable() ? 'Nothing to compact yet' : 'Summarise the conversation so far to free up room';
-    $('auto').textContent = ctx.autoCompact === false ? 'Auto-compact off' : `Auto-compacts at ${Math.round(threshold * 100)}%`;
+    const left = Math.round(limit * threshold) - used;
+    $('auto').textContent = ctx.autoCompact === false ? 'Auto-compact off' : left > 0 ? `${fmtRound(left)} until auto-compact` : 'Auto-compacts on the next turn';
+    $('auto').title = ctx.autoCompact === false ? 'Turn it on in Settings → Context' : `Compacts on its own at ${Math.round(threshold * 100)}% of the window`;
     $('error').hidden = !error;
     $('error').textContent = error;
     renderFoot();
-    harness.ui.setBadge(fmtPct(ratio));
   }
 
   function renderFoot() {
     if (!ctx) return;
-    const when = ctx.updatedAt ? `Updated ${ago(ctx.updatedAt)}` : 'Not measured yet';
+    const when = ctx.updatedAt ? `Last updated ${ago(ctx.updatedAt)}` : 'Not measured yet';
     const basis = ctx.basis === 'estimated' ? ' (estimated)' : '';
-    $('foot').textContent = `${when}${basis}. The numbers refresh when a turn ends.`;
+    $('foot').textContent = `${when}${basis}. Refreshes when ${running ? 'this' : 'a'} turn ends.`;
   }
 
   async function loadContext() {

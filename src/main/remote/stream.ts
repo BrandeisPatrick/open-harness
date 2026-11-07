@@ -18,7 +18,7 @@ type Delta = { type: 'text_delta' | 'thinking_delta'; text: string };
  */
 
 /** Events after which the session list (with its run status) is sent again */
-const MOVES_STATUS = new Set<AgentEvent['type']>(['run_start', 'run_end', 'session_changed', 'approval_request', 'approval_resolved', 'plan_proposed']);
+const MOVES_STATUS = new Set<AgentEvent['type']>(['run_start', 'run_end', 'session_changed', 'approval_request', 'approval_resolved', 'question_request', 'question_resolved', 'plan_proposed']);
 
 export class EventStream {
   private clients = new Set<ServerResponse>();

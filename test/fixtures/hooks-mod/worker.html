@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/@harness/harness.js"></script>
+<script>
+  // Asks before every Read (read_file); says nothing about anything else, so the next view is asked.
+  harness.hooks.on('PreToolUse', (input) => {
+    if (input.tool_name !== 'Read') return null;
+    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: 'The hooks fixture asks before every read' } };
+  });
+  harness.hooks.on('PostToolUse', async (input) => (input.tool_name === 'Read' ? { systemMessage: `Hooks fixture saw ${input.tool_name}` } : null));
+</script>

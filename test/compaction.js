@@ -357,7 +357,9 @@ function cleanCut(msgs, cut) {
   for (const f of 'defg') state.replies.push(read(`${f}.txt`));
   state.replies.push({ content: 'done reading' });
   await agent.run('Now read d, e, f and g.');
-  check('8a: the summary failed, so old tool output was shortened further, and the run went on', runEnd().reason === 'done' && notices().some((n) => /summary could not be produced.*shortened further/.test(n)) && !agent.session.compactions && agent.session.messages.filter((m) => m.role === 'tool').slice(0, -2).every((m) => m.content.length < 600), notices());
+  // The newest outputs stay whole: the last two at the last prune, which comes a read earlier or later as the tool
+  // definitions grow; everything before them is cut
+  check('8a: the summary failed, so old tool output was shortened further, and the run went on', runEnd().reason === 'done' && notices().some((n) => /summary could not be produced.*shortened further/.test(n)) && !agent.session.compactions && agent.session.messages.filter((m) => m.role === 'tool').slice(0, -3).every((m) => m.content.length < 600), notices());
   check('8a: the summary is not retried on every turn of the run', events.filter((e) => e.type === 'compact_start').length === 1 && notices().length >= 2);
   // (b) drop the oldest messages (no pruning allowed)
   fresh({ pruneToolResults: false });

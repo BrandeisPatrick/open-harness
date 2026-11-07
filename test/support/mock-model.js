@@ -73,4 +73,15 @@ function startMock() {
   });
 }
 
-module.exports = { startMock };
+let askSeq = 0;
+/**
+ * A scripted reply in which the model calls ask_user with `questions` (each { question, header, options, multiSelect },
+ * options as { label, description }); push it onto `state.replies` like any other. `extra` adds reply fields (when,
+ * delayMs, content) or an `id` for the call.
+ */
+function askUserReply(questions, extra = {}) {
+  const { id, ...rest } = extra;
+  return { content: '', ...rest, toolCalls: [{ id: id ?? `call_ask_${++askSeq}`, name: 'ask_user', args: { questions } }] };
+}
+
+module.exports = { startMock, askUserReply };

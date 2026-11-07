@@ -9,13 +9,14 @@ import { submitPlan } from './plan';
 import { terminalTools } from './terminal';
 import { createArtifact } from './artifact';
 import { updateTasks } from './tasks';
+import { askUser } from './ask-user';
 
 export type { Tool, ToolContext, ToolResult, ApprovalResult, ApproveOptions } from './types';
 
-/** The tools offered to the model. Plan mode swaps the file-changing tools for submit_plan. */
+/** The tools offered to the model. Plan mode swaps the file-changing tools for submit_plan; ask_user is in every mode. */
 export function allTools(mode: PermissionMode = 'ask'): Tool[] {
-  if (mode === 'plan') return [readFile, listDirectory, glob, grep, bash, skillTool, ...browserTools, ...terminalTools, createArtifact, updateTasks, submitPlan];
-  return [readFile, writeFile, editFile, listDirectory, glob, grep, bash, skillTool, ...browserTools, ...terminalTools, createArtifact, updateTasks];
+  if (mode === 'plan') return [readFile, listDirectory, glob, grep, bash, skillTool, ...browserTools, ...terminalTools, createArtifact, updateTasks, askUser, submitPlan];
+  return [readFile, writeFile, editFile, listDirectory, glob, grep, bash, skillTool, ...browserTools, ...terminalTools, createArtifact, updateTasks, askUser];
 }
 
 export function toSpec(tool: Tool): OpenAI.Chat.Completions.ChatCompletionTool {

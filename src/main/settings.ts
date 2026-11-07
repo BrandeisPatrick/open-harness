@@ -26,6 +26,7 @@ import { ENV_NAME, expandEnvRefs } from './env';
 import { between, bool, describe, kind, nonNegative, oneOf, positiveInt, str, timeOfDay, type Check } from './checks';
 import { BUILT_IN_PROVIDERS, providerEntrySchema, validateProviderEntry } from './provider-presets';
 import { configDir, projectConfigDir } from './paths';
+import { hooksSchema, validateHooks } from './hooks/config';
 
 type Scope = 'user' | 'project';
 
@@ -118,6 +119,11 @@ const IGNORED = new Set(['$schema']);
  * (workingDirectory, env, providers have their own rules).
  */
 export function checkSetting(p: string, value: unknown): string | null | 'unknown' {
+  if (p === 'hooks') {
+    const first = validateHooks(value).problems[0];
+    return first ? `${first.key}: ${first.message}` : null;
+  }
+  if (p === 'disableAllHooks') return bool(value);
   const [a, b, ...rest] = p.split('.');
   if (rest.length) return 'unknown';
   if (b === undefined) return a in SCALARS ? SCALARS[a](value) : 'unknown';
@@ -127,7 +133,7 @@ export function checkSetting(p: string, value: unknown): string | null | 'unknow
 
 /** Every field path checkSetting knows, in schema order. */
 export function settableFields(): string[] {
-  return [...Object.keys(SCALARS), ...Object.entries(SECTIONS).flatMap(([sec, fields]) => Object.keys(fields).map((f) => `${sec}.${f}`))];
+  return [...Object.keys(SCALARS), ...Object.entries(SECTIONS).flatMap(([sec, fields]) => Object.keys(fields).map((f) => `${sec}.${f}`)), 'hooks', 'disableAllHooks'];
 }
 
 /** The JSON Schema of settings.json, built from the checks above (docs/settings.schema.json is this, written out). */
@@ -147,6 +153,8 @@ export function settingsSchema(): Record<string, unknown> {
     propertyNames: { pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,47}$', not: { enum: [...BUILT_IN_PROVIDERS] } },
     additionalProperties: providerEntrySchema(),
   };
+  properties.hooks = hooksSchema();
+  properties.disableAllHooks = { type: 'boolean', description: 'Turn off every hook from the settings files (mods\' hooks still run).' };
   return {
     $schema: 'http://json-schema.org/draft-07/schema#',
     $id: 'https://brandeispatrick.github.io/silo-harness/settings.schema.json',
@@ -275,6 +283,19 @@ function analyse(file: string, scope: Scope, opts: { trustedHash?: string; apply
         out.values.push({ path: key, value: v });
         info.keys.push(key);
       }
+      continue;
+    }
+    if (key === 'hooks') {
+      // Read by the hooks engine itself (hooks/settings-source.ts), per session folder; here it is described and checked.
+      const block = validateHooks(value);
+      for (const pr of block.problems) bad(pr.key, pr.message);
+      info.keys.push(...block.keys);
+      if (block.commands.length) info.hookCommands = block.commands;
+      continue;
+    }
+    if (key === 'disableAllHooks') {
+      if (typeof value !== 'boolean') bad(key, `expected true or false, got ${kind(value)}`);
+      else info.keys.push(key);
       continue;
     }
     if (key === 'providers') {

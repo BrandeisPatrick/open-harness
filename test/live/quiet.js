@@ -3,11 +3,11 @@
 // Ask-mode turn with a write that is allowed and a command that is denied; a turn with one call. In Summary (the
 // default) each run of calls is one line with the expected words, the diff total and the failed and denied counts;
 // it opens and closes with the mouse and the keyboard; while the turn runs the line reads like the call in flight;
-// a waiting approval card stays in the open under the run and folds into it once decided; a single call is not
-// wrapped. Settings → General → Tool activity → Every call shows the rows as they always were (only the three reads
-// fold, as before), and Summary folds them again. Opening the session again folds it the same way, also after a
-// rewind and after /compact. Screenshots: folded (light and dark), one group open, the live line, a waiting card,
-// the Settings row.
+// a waiting approval card stays in the open under the run and goes once decided, its answer kept in the call's row;
+// a single call is one line too ("Read a file"), which opens straight to its row's details. Settings → General →
+// Tool activity → Every call shows the rows as they always were (only the three reads fold, as before), and Summary
+// folds them again. Opening the session again folds it the same way, also after a rewind and after /compact.
+// Screenshots: folded (light and dark), one group open, the live line, a waiting card, the Settings row.
 // Run: npm run build && node test/live/quiet.js [screenshot-dir]
 const fs = require('node:fs');
 const os = require('node:os');
@@ -29,10 +29,10 @@ const GROUPS = `[...document.querySelectorAll('#messages > .tool-group')].map((g
   words: g.querySelector(':scope > summary > .group-verb').textContent,
   meta: g.querySelector(':scope > summary > .group-meta').textContent.replace(/\\s+/g, ' ').trim(),
   rows: g.querySelectorAll(':scope > .group-body > .tool').length,
-  decided: g.querySelectorAll(':scope > .group-body > .approval.done').length,
+  decided: g.querySelectorAll(':scope > .group-body > .tool .tool-decision').length,
   live: g.classList.contains('live'),
 }))`;
-/** What the conversation is made of, top level: one letter per thing (u user, a reply, g group, t row, d decided approval, c card) */
+/** What the conversation is made of, top level: one letter per thing (u user, a reply, g group, t row, d decided approval line, c card) */
 const SHAPE = `[...document.querySelectorAll('#messages > *')].filter((e) => e.id !== 'empty-state' && !e.hidden).map((e) => e.matches('.msg.user') ? 'u' : e.matches('.msg.assistant') ? 'a' : e.matches('.tool-group') ? 'g' : e.matches('.tool') ? 't' : e.matches('.approval.done') ? 'd' : e.matches('.approval') ? 'c' : e.matches('.compaction') ? '=' : e.matches('.msg.system') ? 's' : '?').join('')`;
 
 (async () => {
@@ -161,24 +161,30 @@ const SHAPE = `[...document.querySelectorAll('#messages > *')].filter((e) => e.i
     await app.evaluate(`[...document.querySelectorAll('.approval')].pop().scrollIntoView({ block: 'end' })`);
     await shot('quiet-ask-waiting');
     await app.approve('allow');
-    await app.waitFor(`[...document.querySelectorAll('.approval')].filter((c) => !c.classList.contains('done')).length === 1 && !document.querySelector('#messages > .approval.done')`, 30_000, 'the command’s card, the write’s decided line folded');
-    check('once allowed, the decided line folds into the run', await app.evaluate(`[...document.querySelectorAll('#messages > .tool-group')].pop().querySelectorAll('.group-body > .approval.done').length === 1`));
+    await app.waitFor(`[...document.querySelectorAll('.approval')].filter((c) => !c.classList.contains('done')).length === 1 && !document.querySelector('.approval.done')`, 30_000, 'the command’s card, the write’s card gone');
+    check('once allowed, the card goes and the write’s row keeps the answer', await app.evaluate(`(() => { const d = [...document.querySelectorAll('#messages > .tool-group')].pop().querySelectorAll('.group-body > .tool[data-tool="write_file"] .tool-decision'); return d.length === 1 && d[0].textContent === 'Allowed once'; })()`));
     await app.approve('deny');
     await idle();
     g = await groups();
     const last = g[g.length - 1];
     check('turn 2 folds to one line', g.length === 3 && (await shape()) === 'ugagauga', { g, shape: await shape() });
     check('…saying what happened, with the created file’s lines and the denied command', last.words === 'Read a file, created a file' && last.meta === '+3 1 denied', last);
-    check('…and both decided lines are inside it', last.decided === 2 && last.rows === 3, last);
+    check('…and both answers are in its rows, with no line of their own', last.decided === 2 && last.rows === 3 && !(await app.exists('.approval')), last);
     check('the denied command did not run', !fs.readdirSync(project).includes('.git'));
 
-    // ---------- Turn 3: a single call stays the one row it is ----------
+    // ---------- Turn 3: a single call is one quiet line too ----------
     reply({ content: '', toolCalls: [call('read_file', { path: 'src/cart.js' })] });
     reply({ content: 'Yes: `total` multiplies by `qty` now.' });
     await app.send('Does cart.js use qty now?');
     await idle();
-    check('a single call is not wrapped', (await shape()) === 'ugagaugauta', await shape());
-    check('…and reads as before', (await app.evaluate(`(() => { const t = [...document.querySelectorAll('#messages > .tool')].pop(); return t.querySelector('.tool-verb').textContent + ' ' + t.querySelector('.tool-arg').textContent; })()`)) === 'Read src/cart.js');
+    check('a single call folds to one line', (await shape()) === 'ugagaugauga', await shape());
+    g = await groups();
+    check('…that says what it did', g[g.length - 1].words === 'Read a file' && g[g.length - 1].rows === 1 && g[g.length - 1].meta === '', g[g.length - 1]);
+    await app.evaluate(`[...document.querySelectorAll('#messages > .tool-group')].pop().querySelector(':scope > summary').click()`);
+    const lone = await app.evaluate(`(() => { const g = [...document.querySelectorAll('#messages > .tool-group')].pop(); const t = g.querySelector('.group-body > .tool'); return { open: g.open, row: t.querySelector('.tool-verb').textContent + ' ' + t.querySelector('.tool-arg').textContent, rowOpen: t.open, code: t.querySelector('.tool-body .code-view, .tool-body pre, .tool-body .code') !== null && t.querySelector('.tool-body').getBoundingClientRect().height > 0 }; })()`);
+    check('opened, it shows the row as it always read, open on its details', lone.open && lone.row === 'Read src/cart.js' && lone.rowOpen && lone.code, lone);
+    await shot('quiet-single-open');
+    await app.evaluate(`(() => { const g = [...document.querySelectorAll('#messages > .tool-group')].pop(); g.open = false; g.querySelector('.group-body > .tool').open = false; })()`);
     const folded = await groups();
     const foldedShape = await shape();
 
@@ -195,7 +201,7 @@ const SHAPE = `[...document.querySelectorAll('#messages > *')].filter((e) => e.i
     const all = await groups();
     const allShape = await shape();
     check('Every call: only the three reads fold, as they always did', all.length === 1 && all[0].words === 'Read 3 files' && all[0].rows === 3, all);
-    check('Every call: each other call is its own row, and the decided lines are back in the open', allShape === 'ugttttattauttdtdauta', allShape);
+    check('Every call: each other call is its own row, and the answers stay in their rows', allShape === 'ugttttattautttauta' && (await app.count('#messages > .tool .tool-decision')) === 2, allShape);
     await app.evaluate(`document.querySelector('#sp-row-toolActivity input[value="summary"]').click()`);
     await app.waitFor(`(async () => (await window.oc.getConfig()).toolActivity === 'summary')()`, 5000, 'the setting to save');
     await app.key('Escape');
@@ -240,7 +246,7 @@ const SHAPE = `[...document.querySelectorAll('#messages > *')].filter((e) => e.i
     await app.waitFor(`[...document.querySelectorAll('.msg.system')].some((e) => /Rewound/.test(e.innerText))`, 10_000, 'the rewind notice');
     await app.fill('#input', '');
     const rewound = await groups();
-    check('after a rewind the earlier runs keep their lines', JSON.stringify(lines(rewound)) === JSON.stringify(lines(beforeReopen.slice(0, 3))), rewound);
+    check('after a rewind the earlier runs keep their lines', JSON.stringify(lines(rewound)) === JSON.stringify(lines(beforeReopen.slice(0, 4))), rewound);
     await reopen();
     check('…and the session opened again folds the same', JSON.stringify(lines(await groups())) === JSON.stringify(lines(rewound)), await groups());
 

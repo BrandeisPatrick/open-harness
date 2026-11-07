@@ -217,7 +217,7 @@ What the model can do (images, tools) is detected for Ollama; for the other serv
 
 ### The other settings
 
-`permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`; the `ollama` block (`baseURL`, `model`, `numCtx`, `think`), the `portkey` block (`baseURL`, `apiKey`, `model`, `virtualKey`, `provider`, `providerApiKey`, `configId`, `contextWindow`), `dreaming` (`daily`, `time`, `mode`, `skills`, `mods`, `memory`); `env`; and in your own file `workingDirectory`, the folder the app opens in. The schema has the allowed values of each.
+`permissionMode`, `maxTurns`, `sendScreenshotsToModel`, `systemPromptExtra`, `theme`, `autoTitles`, `autoCompact`, `compactThreshold`, `pruneToolResults`, `toolSet`, `toolActivity`, `notifications`, `keepAwake`, `historyTrashDays`; the `ollama` block (`baseURL`, `model`, `numCtx`, `think`), the `portkey` block (`baseURL`, `apiKey`, `model`, `virtualKey`, `provider`, `providerApiKey`, `configId`, `contextWindow`), `dreaming` (`daily`, `time`, `mode`, `skills`, `mods`, `memory`); `env`; `hooks`, commands run before and after the agent acts, in Claude Code's format (a project's run only once you trust its file; see [hooks.md](hooks.md)), and `disableAllHooks`; and in your own file `workingDirectory`, the folder the app opens in. The schema has the allowed values of each.
 
 ## For coding agents
 

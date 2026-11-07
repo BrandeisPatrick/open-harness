@@ -44,7 +44,7 @@ function answerHtml(text: string): string {
   const m = /^(.*?)(?:,? ?(?:and )?in their own words: "([\s\S]*)")$/.exec(text);
   if (!m) return escapeHtml(text);
   const picked = m[1].replace(/,\s*$/, '').trim();
-  return `${picked ? `${escapeHtml(picked)}, ` : ''}<q>${escapeHtml(m[2])}</q>`;
+  return `${picked ? `${escapeHtml(picked)}, ` : ''}“${escapeHtml(m[2])}”`;
 }
 
 /** The body of an answered (or skipped) ask_user row: each question, then its answer. */

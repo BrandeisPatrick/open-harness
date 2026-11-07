@@ -282,7 +282,9 @@ export class HookEngine {
       if (v.failure && !v.block) out.notices.push(`${label} hook error: [${cmd}]: ${v.failure}`);
       if (v.block) {
         const viaExit = v.exitCode === 2 || !!v.failure;
-        blocks.push(viaExit ? `${label} hook error: [${cmd}]: ${v.block}` : v.block);
+        // Claude Code's wording; on Stop and SubagentStop it is feedback for the model, not an error.
+        const word = event === 'Stop' || event === 'SubagentStop' ? 'feedback' : 'error';
+        blocks.push(viaExit ? `${label} hook ${word}: [${cmd}]: ${v.block}` : v.block);
         if (!viaExit) out.jsonBlock = true;
       }
       if (v.permission && (!out.permission || rank[v.permission] > rank[out.permission])) {
@@ -299,7 +301,6 @@ export class HookEngine {
     // A hook that leaves the permission alone may still rewrite the input; one that denies takes any rewrite away.
     if (out.permission === 'deny') delete out.updatedInput;
     if (blocks.length) out.block = blocks.join('\n');
-    void event;
   }
 
   private record(c: Candidate, event: HookEvent, target: string, v: Verdict, durationMs: number, sessionId: string, raw?: RawResult): void {

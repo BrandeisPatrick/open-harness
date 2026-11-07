@@ -252,6 +252,11 @@ export interface AgentOptions {
   hooks?: HookEngine | null;
 }
 
+/** A hook's block reason for a notice: without the "<Event> hook error: [<command>]: " prefix the model reads. */
+function plainReason(s: string): string {
+  return s.replace(/^\S+ hook (?:error|feedback): \[[^\]]*\]: /gm, '');
+}
+
 /** What a PreToolUse hook decided about the approval card: skip it, or show it whatever the mode says. */
 type HookApproval = 'allow' | 'ask' | null;
 
@@ -631,7 +636,7 @@ export class Agent {
       return null;
     }
     if (active && !out.jsonBlock) return null;
-    this.emit({ type: 'error', kind: 'notice', message: `A ${event} hook sent the model back to work: ${out.block}` });
+    this.emit({ type: 'error', kind: 'notice', message: `A ${event} hook sent the model back to work: ${plainReason(out.block)}` });
     return out.block;
   }
 
@@ -671,7 +676,7 @@ export class Agent {
     const out = await this.fireHook('UserPromptSubmit', { prompt: text });
     if (!out) return { ok: true, context: [] };
     if (out.block) {
-      this.emit({ type: 'error', kind: 'notice', message: `A UserPromptSubmit hook blocked this message, so it was not sent: ${out.block}` });
+      this.emit({ type: 'error', kind: 'notice', message: `A UserPromptSubmit hook blocked this message, so it was not sent: ${plainReason(out.block)}` });
       return { ok: false, context: [] };
     }
     return { ok: true, context: out.context };
@@ -1114,7 +1119,7 @@ export class Agent {
       // PreCompact: a hook may block the summary, and what it prints is instructions for it.
       const pre = await this.fireHook('PreCompact', { trigger: reason, custom_instructions: focus ?? '' }, { match: [reason], signal });
       if (pre?.block) {
-        const message = `A PreCompact hook blocked the compaction: ${pre.block}`;
+        const message = `A PreCompact hook blocked the compaction: ${plainReason(pre.block)}`;
         this.emit({ type: 'error', kind: 'notice', message });
         if (reason === 'auto') this.autoCompactFailed = true;
         return { ok: false, error: message };
@@ -1594,7 +1599,7 @@ export class Agent {
     if (pre?.block || pre?.permission === 'deny') {
       const content = pre.block ?? `PreToolUse:${claudeName} hook denied this tool call${pre.permissionReason ? `: ${pre.permissionReason}` : '.'}`;
       this.emit({ type: 'tool_end', id: call.id, name, result: content, ok: false, durationMs: 0 });
-      this.emit({ type: 'error', kind: 'notice', message: `A PreToolUse hook blocked ${name}: ${pre.block ? content.replace(/^PreToolUse:\S+ hook error: /, '') : pre.permissionReason || 'denied'}` });
+      this.emit({ type: 'error', kind: 'notice', message: `A PreToolUse hook blocked ${name}: ${pre.block ? plainReason(content) : pre.permissionReason || 'denied'}` });
       return { content };
     }
     const hookContext = pre?.context ?? [];
@@ -1646,7 +1651,7 @@ export class Agent {
     const event = ok ? 'PostToolUse' : 'PostToolUseFailure';
     if (post?.block) {
       extra.push(post.block);
-      this.emit({ type: 'error', kind: 'notice', message: `A ${event} hook flagged ${name}: ${post.block.replace(/^\S+ hook error: /, '')}` });
+      this.emit({ type: 'error', kind: 'notice', message: `A ${event} hook flagged ${name}: ${plainReason(post.block)}` });
     }
     if (post?.context.length) extra.push(`${HOOK_NOTE_PREFIX}context: ${event}]\n${post.context.join('\n\n')}`);
     if (extra.length) result = { ...result, content: `${result.content}\n\n${extra.join('\n\n')}` };

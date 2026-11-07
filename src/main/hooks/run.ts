@@ -235,7 +235,7 @@ export function verdictFromOutput(event: HookEvent, out: HookOutput, base: Parti
     v.block = out.reason?.trim() || 'Blocked by a hook.';
   }
   if (typeof s.additionalContext === 'string' && s.additionalContext.trim()) v.context = s.additionalContext.trim();
-  v.label = v.block ? 'block' : v.permission ?? (v.stop ? 'stop' : v.context ? 'context' : '');
+  v.label = v.block ? 'block' : v.permission ?? (v.stop ? 'stop' : v.context ? 'context' : v.systemMessage ? 'message' : '');
   return v;
 }
 

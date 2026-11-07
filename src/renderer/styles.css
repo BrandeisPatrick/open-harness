@@ -695,7 +695,10 @@ img.shot { display: block; max-width: 100%; border-radius: var(--r-card); border
   background: linear-gradient(to bottom, transparent, var(--bg-100) 35%);
 }
 .status-line .spinner { margin: 0 2px 0 1px; }
-.status-text { white-space: nowrap; }
+/* One line whatever the column's width: the text gives way (ellipsised), the time, the tokens and the hint never wrap */
+.status-line > * { flex: none; white-space: nowrap; }
+.status-line > .spacer { flex: 1 1 0; min-width: 0; }
+.status-line > .status-text { flex: 0 1 auto; min-width: 24px; overflow: hidden; text-overflow: ellipsis; }
 .status-icon { display: none; color: var(--success); }
 .status-hint { display: none; }
 .status-line.idle .spinner, .status-line.idle .status-time, .status-line.idle .status-tokens, .status-line.idle .stop-hint { display: none; }
@@ -747,11 +750,11 @@ img.shot { display: block; max-width: 100%; border-radius: var(--r-card); border
   height: 24px; margin-top: 8px; padding-right: 8px; user-select: none;
 }
 .foot-btn {
-  display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 320px; height: 24px; padding: 0 6px;
-  border-radius: var(--r-control); font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-100);
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 320px; height: 24px; padding: 0 6px;
+  border-radius: var(--r-control); font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-400);
   white-space: nowrap; transition: background-color 0.12s, color 0.12s;
 }
-.foot-btn:hover, .foot-btn[aria-expanded="true"] { background: var(--hover); }
+.foot-btn:hover, .foot-btn[aria-expanded="true"] { background: var(--hover); color: var(--text-200); }
 .foot-btn:active { background: var(--pressed); }
 .foot-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .foot-sub { flex: none; color: var(--text-400); }
@@ -1165,7 +1168,7 @@ dialog.lightbox::backdrop { background: rgba(0, 0, 0, 0.78); }
 .approval .cmd.json code { white-space: pre-wrap; }
 
 /* Context meter (under the chat bar): a 12px ring, grey track and a blue arc (amber, then red, as it fills); the percentage is in its tooltip */
-.context-meter { margin-left: 2px; padding: 0 6px; color: var(--text-400); font-variant-numeric: tabular-nums; }
+.context-meter { padding: 0 6px 0 4px; color: var(--text-400); font-variant-numeric: tabular-nums; }
 .meter-ring { display: block; flex: none; }
 .meter-ring circle { fill: none; stroke-width: 2.5; }
 .meter-track { stroke: currentColor; opacity: 0.35; }

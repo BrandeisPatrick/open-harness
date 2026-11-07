@@ -11,7 +11,7 @@ Decided with the user on 2026-11-06; the version rule is in [releasing.md](relea
 | --- | --- | --- |
 | 0.5.0 | The app in white and grey, like Claude Code: neutral surfaces in both schemes, every button white or grey, blue only where it carries meaning; the warm 0.4.0 palette kept as a "Paper" theme mod. The Mods page with its own tabs (Backgrounds, Chat bar, Conversation, Themes) | released 2026-11-06 |
 | 0.6.0 | Named providers (OpenRouter, Portkey, OpenAI, Anthropic, Ollama, LM Studio, any OpenAI-compatible endpoint) set from `settings.json`, with a JSON schema, a guide written for coding agents, and a `silo` command that adds, selects and tests a provider without the window. The release also brings the new name, Silo Harness: the config and data folders move on first launch, and the old folder, file and variable names are still read | released 2026-11-06 |
-| 0.7.0 | A liquid glass look (translucent, layered materials in the style of macOS 26) for the app and for the website. Reserved: the user said it is not important yet, so it waits until 0.5.0 and 0.6.0 are out | reserved |
+| 0.7.0 | A liquid glass look (translucent, layered materials in the style of macOS 26) for the app and for the website: a bundled Glass theme mod, off by default, and the same treatment on the website. The user said it is not important, so it waited until 0.5.0 and 0.6.0 were out | building |
 
 ## Done in earlier rounds
 

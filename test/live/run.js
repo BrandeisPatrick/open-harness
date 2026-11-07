@@ -42,6 +42,7 @@ const SCRIPTS = [
   { name: 'mods-protocol', shots: 'none' },
   { name: 'looks', shots: 'env' },
   { name: 'palette' },
+  { name: 'glass' },
   { name: 'dreaming' },
   { name: 'remote-page', electron: true },
 ];

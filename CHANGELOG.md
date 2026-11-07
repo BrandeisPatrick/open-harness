@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Liquid glass
+
+The window and the website can be made of glass: translucent, layered materials in the style of macOS 26, on the app's own white and grey.
+
+- **Glass theme.** A bundled theme mod, off by default, with its switch under Settings → Mods → Themes. Turned on, the sidebar, the side pane and the rail, the top bar, the chat bar, the cards in the conversation, menus and dialogs become frosted layers: each shows what is behind it, blurred and tinted with the surface's own colour, with a hairline and a thin highlight along its top edge, and depth comes from the blur rather than from shadows. The conversation stays as it was, plain text on the page colour, with the chat bar floating over its last lines. In light and dark, on the app's neutral palette: Paper or Midnight turned on after it recolour the glass through their tokens.
+- **Behind a background.** With a background mod in use (Hyperspace's Starfield, the bundled backgrounds, your own picture) the panes are frosted over it, while the conversation keeps letting it through at the Dim you chose, as without the theme.
+- **Reduce transparency.** With it on in System Settings → Accessibility → Display, every layer is opaque, in the same colours.
+- **The website.** The project's page has the same treatment: its top bar sticks to the top as frosted glass over the page as it scrolls, and the feature cards, the install blocks and the chips are glass over a soft canvas, in both themes. Nothing moves and nothing needs scripts; without backdrop filters the same layers are opaque.
+
 ## 0.6.0
 
 Silo Harness (the new name of Open Harness) now works with whichever model service you use, and can be set up from a file or the command line, by you or by a coding agent such as Claude Code.

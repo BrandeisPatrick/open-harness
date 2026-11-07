@@ -146,6 +146,22 @@ check('nothing in the page loads from another origin', remoteLoads.length === 0,
 check('nothing in the stylesheet loads from another origin, and no web fonts', cssRemote.length === 0 && !/@font-face/.test(cssText) && !/@import/.test(cssText), cssRemote);
 check('the script makes no network request', jsRemote.length === 0, jsRemote);
 
+// ---- the glass ----
+// The top bar sticks to the top as frosted glass over the page, the feature cards and the code blocks are glass over
+// a soft canvas, the tints let the page through in both schemes, and without backdrop filters (or with Reduce
+// transparency on) the same layers are opaque. Nothing of it moves the layout or needs the script.
+const rule = (sel) => { const m = new RegExp(`(?:^|[}\\n])\\s*${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(cssText); return m ? m[1] : ''; };
+check('the top bar sticks to the top as glass: a translucent tint over a backdrop blur, with a hairline', /position:\s*sticky/.test(rule('.top')) && /top:\s*0/.test(rule('.top')) && /backdrop-filter:\s*blur/.test(rule('.top')) && /background:\s*var\(--glass-top\)/.test(rule('.top')) && /border-bottom:[^;]*var\(--glass-line\)/.test(rule('.top')), rule('.top'));
+check('the feature cards and the code blocks are glass too, with a highlight along the top edge', ['.card', '.code'].every((sel) => /backdrop-filter:\s*blur/.test(rule(sel)) && /background:\s*var\(--glass-(card|code)\)/.test(rule(sel)) && /inset 0 1px 0 var\(--glass-edge\)/.test(rule(sel))), { card: rule('.card'), code: rule('.code') });
+check('the canvas sits behind the page and takes no clicks', /body::before\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*-1[^}]*background:\s*var\(--glass-canvas\)[^}]*pointer-events:\s*none/.test(cssText));
+const tokenBlock = (sel) => { const i = cssText.indexOf(`${sel} {`); return i < 0 ? '' : cssText.slice(i, cssText.indexOf('}', i)); };
+const translucent = (block, name) => { const m = new RegExp(`${name}:\\s*rgba\\([^)]*,\\s*([\\d.]+)\\)`).exec(block); return !!m && Number(m[1]) < 1; };
+const tints = ['--glass-top', '--glass-card', '--glass-code', '--glass-chip'];
+check('the glass tints let the page through in both schemes', tints.every((t) => translucent(tokenBlock(':root'), t) && translucent(tokenBlock(':root:not([data-theme="light"])'), t) && translucent(tokenBlock(':root[data-theme="dark"]'), t)), tints.map((t) => [t, translucent(tokenBlock(':root'), t), translucent(tokenBlock(':root[data-theme="dark"]'), t)]));
+check('without backdrop filters, and with Reduce transparency on, the glass is opaque', /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)\s*\{\s*:root, :root:not\(\[data-theme="light"\]\), :root\[data-theme="dark"\]\s*\{[^}]*--glass-top: var\(--bg-100\)/.test(cssText) && /@media \(prefers-reduced-transparency: reduce\)\s*\{\s*:root, :root:not\(\[data-theme="light"\]\), :root\[data-theme="dark"\]\s*\{[^}]*--glass-top: var\(--bg-100\)/.test(cssText));
+check('every backdrop filter has its -webkit- twin', (cssText.match(/(?<!-)backdrop-filter:/g) || []).length >= 4 && (cssText.match(/(?<!-)backdrop-filter:/g) || []).length === (cssText.match(/-webkit-backdrop-filter:/g) || []).length, [(cssText.match(/(?<!-)backdrop-filter:/g) || []).length, (cssText.match(/-webkit-backdrop-filter:/g) || []).length]);
+check('the theme-colour metas follow the canvas', /<meta name="theme-color" content="#ffffff" media="\(prefers-color-scheme: light\)">/.test(html) && /<meta name="theme-color" content="#111111" media="\(prefers-color-scheme: dark\)">/.test(html));
+
 // ---- weight ----
 const bytes = [path.join(DOCS, 'index.html'), ...css.map((f) => path.join(DOCS, f)), ...js.map((f) => path.join(DOCS, f))].reduce((n, f) => n + fs.statSync(f).size, 0);
 check('the page, its stylesheet and its script weigh under 60 KB', bytes < 60 * 1024, `${(bytes / 1024).toFixed(1)} KB`);

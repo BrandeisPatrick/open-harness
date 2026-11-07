@@ -646,7 +646,7 @@ img.shot { display: block; max-width: 100%; border-radius: var(--r-card); border
 .prompt-head {
   display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px;
   /* #242424 on the dark page (Claude Code's band), #f2f2f2 on white; theme mods get theirs from their own colours */
-  background: color-mix(in srgb, var(--text-100) 5.5%, var(--bg-100)); border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--text-100) 5.5%, var(--bg-100));
 }
 .prompt-card .title { flex: 1; min-width: 0; font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 400; color: var(--text-100); overflow-wrap: anywhere; }
 .prompt-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 12px 16px 8px; }

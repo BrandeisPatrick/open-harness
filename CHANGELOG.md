@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
+
+The window and the website can be made of glass: translucent, layered materials in the style of macOS 26, on the app's own white and grey. The Glass theme is off until you turn it on.
 
 ### Liquid glass
-
-The window and the website can be made of glass: translucent, layered materials in the style of macOS 26, on the app's own white and grey.
 
 - **Glass theme.** A bundled theme mod, off by default, with its switch under Settings → Mods → Themes. Turned on, the sidebar, the side pane and the rail, the top bar, the chat bar, the cards in the conversation, menus and dialogs become frosted layers: each shows what is behind it, blurred and tinted with the surface's own colour, with a hairline and a thin highlight along its top edge, and depth comes from the blur rather than from shadows. The conversation stays as it was, plain text on the page colour, with the chat bar floating over its last lines. In light and dark, on the app's neutral palette: Paper or Midnight turned on after it recolour the glass through their tokens.
 - **Behind a background.** With a background mod in use (Hyperspace's Starfield, the bundled backgrounds, your own picture) the panes are frosted over it, while the conversation keeps letting it through at the Dim you chose, as without the theme.

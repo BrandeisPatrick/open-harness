@@ -106,7 +106,8 @@ Every agent emits through the runtime, which notes the event in the session's Li
 `onEvent` listeners (= `app.events`), then to the window as `('agent:event', ev, sessionId)`, deltas coalesced every
 30 ms per session. `send` with a non-user origin to a running session queues it like a typed message; if the run is
 stopped before delivery the message is dropped (`queue_dropped`), so the sender decides whether to resend.
-Status: `running`; `attention` 'approval' while a card waits, 'plan' after a run ended with an undecided plan;
+Status: `running`; `attention` 'approval' while an approval card waits, 'question' while an ask_user card waits,
+'plan' after a run ended with an undecided plan;
 `unread` (stored on the session) when a run ended off screen, cleared by `setForeground`. Shared resources: the
 browser pane belongs to the session on screen (a background `browser_*` call gets an error result; a background
 artifact is stored without navigating). Terminal tabs and MCP servers are shared.

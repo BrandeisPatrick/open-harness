@@ -81,7 +81,7 @@ Where this app's tool is the same thing as one of Claude Code's, a hook sees Cla
 
 | This app | `tool_name` | `tool_input` |
 | --- | --- | --- |
-| `bash` | `Bash` | `command`, `timeout` |
+| `bash` | `Bash` | `command`, `timeout`, `description` |
 | `read_file` | `Read` | `file_path` (absolute), `offset`, `limit` |
 | `write_file` | `Write` | `file_path`, `content` |
 | `edit_file` | `Edit` | `file_path`, `old_string`, `new_string`, `replace_all` |
@@ -91,6 +91,7 @@ Where this app's tool is the same thing as one of Claude Code's, a hook sees Cla
 | `update_tasks` | `TodoWrite` | `todos` (`content`, `status`, `id`) |
 | `submit_plan` | `ExitPlanMode` | `plan`, `title` |
 | `skill` | `Skill` | `skill` |
+| `ask_user` | `AskUserQuestion` | `questions` (`question`, `header`, `options` with `label` and `description`, `multiSelect`) |
 | `mcp__<server>__<tool>` | the same | the tool's arguments |
 | anything else (`terminal_run`, `browser_*`, `create_artifact`, …) | its own name | its arguments |
 

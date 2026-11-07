@@ -10,11 +10,21 @@
 | Plan | Read-only exploration ending in a plan card you approve |
 | Bypass | Everything runs |
 
-"Allow … for this session" and "Always allow … for this project" cover a program, a flagged reason, an MCP server or edits. Saved rules: Settings → Permissions. One thing asks in every mode, Bypass included: a schedule the agent wants to create or re-time, because it outlives the conversation.
+## Approval cards
+
+An action that needs your OK waits on a card, as in Claude Code: the question as its title ("Allow Silo Harness to run this command?"), then in muted text what the call does in its own words (a command's description, when the model gave one) and why it asks when the mode would not have (in Auto, "Auto mode stopped to ask: it pushes to a remote."; for a hook, the hook's reason), then the command or the change. At the bottom right: **Deny** and **Allow once ⌘↵**, with **⌄** for the wider answers, "Allow … for this session" (`A`) and "Always allow … in this project" (`P`), which cover a program, a flagged reason, an MCP server or edits. A tool's own question (a sub-session, a message to another session, a schedule) and a hook's "ask" have Allow once and Deny only.
+
+Keys while a card waits: `⌘↵` allows once (also from the chat bar while you type), `Esc` denies (instead of stopping the run), `A` and `P` pick the scopes when the chat bar is empty or the ⌄ menu is open. Once answered the card goes; the call's row keeps the answer ("Allowed once", "Allowed git for this session", "Denied") at the top of its details.
+
+Saved rules: Settings → Permissions. One thing asks in every mode, Bypass included: a schedule the agent wants to create or re-time, because it outlives the conversation.
+
+## Questions
+
+When a choice is genuinely yours (a preference, an unclear requirement, which of several approaches), the agent asks with `ask_user`, in every mode, Plan included, without an approval. The run waits on a card in the approval card's frame: the question as its title with its short header as a chip ("1 of 3" when there are several, shown one at a time with Next and Back), the 2–4 options as rows with a radio button, or a checkbox when more than one can apply, and **Other**, a field for your own words. Click anywhere on a row, or press `1`–`4`; `↑` `↓` move between rows; **Submit ⌘↵** sends the answers, **Skip** or `Esc` tells the agent "The user skipped the question." The status line says "Waiting for your answer", and the sidebar, the Dock badge and a notification say a session waits for you. The agent reads each question's header with the option you picked or what you typed. Answered, the card folds to one line, "Asked a question", with the answers inside. On the phone page a question with one answer per question is a set of buttons; anything more says to answer in the app.
 
 ## Keyboard
 
-`⌘N` new session · `⌘B` sidebar · `⌘⇧E` mods rail · `⌘⇧B` browser · `⌘⇧D` diff · `⌘⇧T` terminal · `⌘T` terminal tab · `⌘K` focus composer · `⌘F` search · `⌘,` settings · `F2` rename · `Esc` stop · `Esc Esc` rewind to your last message · `⌘↑` `⌘↓` previous prompts · `⌘⇧C` copy last reply · `⇧Tab` cycle mode · `⌘/` shortcuts.
+`⌘N` new session · `⌘B` sidebar · `⌘⇧E` mods rail · `⌘⇧B` browser · `⌘⇧D` diff · `⌘⇧T` terminal · `⌘T` terminal tab · `⌘K` focus composer · `⌘F` search · `⌘,` settings · `F2` rename · `Esc` stop · `Esc Esc` rewind to your last message · `⌘↑` `⌘↓` previous prompts · `⌘⇧C` copy last reply · `⇧Tab` cycle mode · `⌘/` shortcuts. While a card waits: `⌘↵` allow once or submit, `Esc` deny or skip, `A` `P` the wider scopes, `1`–`4` pick an answer.
 
 ## Slash commands
 
@@ -39,12 +49,13 @@ A message starting with `#` is added to the project's instructions file after a 
 | Tool | Purpose |
 | --- | --- |
 | `read_file` `write_file` `edit_file` `list_directory` `glob` `grep` | Files |
-| `bash` | Shell command in the session's folder; stopping the run stops the command and what it started |
+| `bash` | Shell command in the session's folder, with an optional short description of what it does (shown on its approval card); stopping the run stops the command and what it started |
 | `terminal_run` `terminal_read` `terminal_list` `terminal_stop` | Terminal pane tabs |
 | `browser_*` | Built-in browser: navigate, click and type by visible text, read, wait, screenshot, eval |
 | `show_image` | Put an image (a screenshot, a chart, a picture in the project) inline in the reply |
 | `create_artifact` | HTML, SVG, Markdown or code shown in the browser pane |
 | `update_tasks` | The task list card |
+| `ask_user` | Ask you one to four multiple-choice questions and wait for the answers (see Questions) |
 | `skill` | Load a skill |
 | `submit_plan` | Plan mode: hand the plan to you |
 | `schedule_create` `schedule_list` `schedule_update` `schedule_delete` | Scheduled tasks |
@@ -54,7 +65,7 @@ A message starting with `#` is added to the project's instructions file after a 
 | `history_read` `history_search` `propose_skill` `propose_memory` `propose_mod` `withdraw_proposal` | A dream's session only (see Dreaming); no other session is offered them |
 | `mcp__<server>__<tool>` | MCP server tools |
 
-In the conversation each run of two or more calls in a turn is one line that says what it did, in the order it did it ("Read 3 files, ran 2 commands, edited a file"), with the lines that edits and writes added and removed and how many calls failed or were denied on its right; click it, or focus it and press Enter, to see the rows. While the turn runs the line names the call in flight. A waiting approval card stays in the open under the line; once decided it folds in with its call. A single call stays its own row. Settings → General → Tool activity (`toolActivity`: `summary`, the default, or `all`) shows every call as its own row instead.
+In the conversation each run of calls in a turn is one quiet line that says what it did, in the order it did it ("Read 3 files, ran 2 commands, edited a file"), with the lines that edits and writes added and removed and how many calls failed or were denied on its right; click it, or focus it and press Enter, to see the rows. A single call is one line too ("Ran a command", "Read a file", "Edited a file +3 −1"), which opens straight to that call's details; a call you or a hook denied reads "Denied a command". While the turn runs the line names the call in flight. A waiting approval or question card stays in the open under the line; once answered it goes, and the call's row keeps the answer. Settings → General → Tool activity (`toolActivity`: `summary`, the default, or `all`) shows every call as its own row instead, still without a separate line for an answered card.
 
 Every tool is described to the model in every request. With a context window under 32k tokens the scheduling, session and mod tools are left out and the model is told so; Settings → Context → "Tools offered to the model" (`toolSet`: `auto`, `all`, `essential`) decides.
 

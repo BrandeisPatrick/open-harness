@@ -16,6 +16,10 @@
 - **The footer** under the chat bar names the model and the mode in muted text at 12 px; only the ring carries colour.
 - **The status line** stays on one line when the side pane is open: the text is cut with an ellipsis, the time, the token count and the esc hint stay whole.
 - **For mods**: `harness.ui.openSettings(section)` opens Settings at a section, and `harness.project.git()` (with `config:read`) returns the repository and branch of the session's folder.
+- **The approval card** looks like Claude Code's permission prompt: the question in a header band, what the command does (in the model's words, when it says) and why the card came up in muted text, the command, then Deny and **Allow once ⌘↵** at the bottom right, with ⌄ opening "Allow … for this session" (A) and "Always allow … in this project" (P). No icon tile, no stack of buttons, no key on every button. ⌘↵ allows once even while you type, and Esc denies instead of stopping the run.
+- **Auto mode** says why it stopped in a quiet line on the card ("Auto mode stopped to ask: it pushes to a remote.") rather than with an amber warning, and the mode menu's icons are neutral, as in Claude Code's menus; only Bypass keeps its red words.
+- **Questions.** The agent can ask you one to four multiple-choice questions when a choice is genuinely yours, and waits for the answers, in every mode, Plan included. The card has the approval card's frame: the question with a short header as a chip, the options as rows you click or pick with 1–4, "Other" for your own words, Skip and Submit ⌘↵; several questions come one at a time. Answered, it folds to "Asked a question" with your answers inside. The phone page shows a one-answer question as buttons. Hooks see the tool as `AskUserQuestion`.
+- **One quiet line per tool call.** With Tool activity on Summary, a single call now folds like a run of several: "Ran a command", "Read a file", "Edited a file +3 −1", and opened it shows the row with its details. An answered approval no longer leaves a separate "Allowed · …" line in either setting: the call's row keeps the answer, and a call you or a hook denied reads "Denied a command".
 
 ## 0.7.0
 

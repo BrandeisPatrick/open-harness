@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Closer to Claude Code
+
+- **The rail.** Environment shows the folder with its path, the repository and the branch when the folder is a git repository, the provider and model, and Remote control with a small switch; the mode row and Keep awake are gone from it (the mode stays in the footer, Keep awake in Settings → General). Context shows a plain title, a 4 px bar in the legend's order, coloured squares, the percentage column in strong text, a chevron row for each slice that opens, "Last updated … Refreshes when this turn ends", and "Nk until auto-compact" with a Compact session button, as Claude Code lays it out.
+- **The footer** under the chat bar names the model and the mode in muted text at 12 px; only the ring carries colour.
+- **The status line** stays on one line when the side pane is open: the text is cut with an ellipsis, the time, the token count and the esc hint stay whole.
+- **For mods**: `harness.ui.openSettings(section)` opens Settings at a section, and `harness.project.git()` (with `config:read`) returns the repository and branch of the session's folder.
+
 ## 0.7.0
 
 The window and the website can be made of glass: translucent, layered materials in the style of macOS 26, on the app's own white and grey. The Glass theme is off until you turn it on.
